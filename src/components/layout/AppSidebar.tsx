@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const mainItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -32,12 +33,14 @@ interface Props {
 
 export function AppSidebar({ collapsed }: Props) {
   const location = useLocation();
+  const { hasAccess } = useAuth();
   const [creditoOpen, setCreditoOpen] = useState(
     location.pathname.startsWith('/credito')
   );
 
   const isActive = (path: string) => location.pathname === path;
   const isCreditoActive = location.pathname.startsWith('/credito');
+  const hasCreditoAccess = hasAccess('/credito/corporativo') || hasAccess('/credito/estruturado');
 
   const linkClass = (path: string) =>
     cn(
@@ -47,18 +50,23 @@ export function AppSidebar({ collapsed }: Props) {
         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
     );
 
+  const filteredMain = mainItems.filter(item => hasAccess(item.path));
+  const filteredBottom = bottomItems.filter(item => hasAccess(item.path));
+
   if (collapsed) {
     return (
       <aside className="w-14 bg-surface-1 border-r border-border flex flex-col items-center py-4 gap-2 shrink-0">
-        {mainItems.map(item => (
+        {filteredMain.map(item => (
           <Link key={item.path} to={item.path} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
-        <Link to="/credito/corporativo" className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
-          <CreditCard className="h-4 w-4" />
-        </Link>
-        {bottomItems.map(item => (
+        {hasCreditoAccess && (
+          <Link to="/credito/corporativo" className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+            <CreditCard className="h-4 w-4" />
+          </Link>
+        )}
+        {filteredBottom.map(item => (
           <Link key={item.path} to={item.path} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
             <item.icon className="h-4 w-4" />
           </Link>
@@ -74,34 +82,37 @@ export function AppSidebar({ collapsed }: Props) {
         <p className="text-[10px] text-muted-foreground mt-0.5">Asset Management Platform</p>
       </div>
       <nav className="flex-1 px-3 space-y-0.5">
-        {mainItems.map(item => (
+        {filteredMain.map(item => (
           <Link key={item.path} to={item.path} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
             <span>{item.label}</span>
           </Link>
         ))}
-        {/* Crédito group */}
-        <button
-          onClick={() => setCreditoOpen(!creditoOpen)}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full transition-colors',
-            isCreditoActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-          )}
-        >
-          <CreditCard className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Crédito</span>
-          {creditoOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </button>
-        {creditoOpen && (
-          <div className="ml-7 space-y-0.5">
-            {creditoItems.map(item => (
-              <Link key={item.path} to={item.path} className={linkClass(item.path)}>
-                <span>{item.label}</span>
-              </Link>
-            ))}
-          </div>
+        {hasCreditoAccess && (
+          <>
+            <button
+              onClick={() => setCreditoOpen(!creditoOpen)}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full transition-colors',
+                isCreditoActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              )}
+            >
+              <CreditCard className="h-4 w-4 shrink-0" />
+              <span className="flex-1 text-left">Crédito</span>
+              {creditoOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            </button>
+            {creditoOpen && (
+              <div className="ml-7 space-y-0.5">
+                {creditoItems.filter(item => hasAccess(item.path)).map(item => (
+                  <Link key={item.path} to={item.path} className={linkClass(item.path)}>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </>
         )}
-        {bottomItems.map(item => (
+        {filteredBottom.map(item => (
           <Link key={item.path} to={item.path} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
             <span>{item.label}</span>
