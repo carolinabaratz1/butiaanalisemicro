@@ -5,10 +5,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AnaliseEmissaoProvider } from "@/contexts/AnaliseEmissaoContext";
 import DashboardPage from "./pages/DashboardPage";
 import EmpresasPage from "./pages/EmpresasPage";
+import EmpresaDetailPage from "./pages/EmpresaDetailPage";
 import AnalisesPage from "./pages/AnalisesPage";
 import PipelinePage from "./pages/PipelinePage";
+import PipelineResearchPage from "./pages/PipelineResearchPage";
 import CreditoCorporativoPage from "./pages/CreditoCorporativoPage";
 import CreditoEstruturadoPage from "./pages/CreditoEstruturadoPage";
 import AcoesPage from "./pages/AcoesPage";
@@ -22,6 +25,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+    <AnaliseEmissaoProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -31,8 +35,10 @@ const App = () => (
             <Route path="/" element={<DashboardPage />} />
             <Route path="/posicoes" element={<PosicoesPage />} />
             <Route path="/empresas" element={<EmpresasPage />} />
+            <Route path="/empresas/:cnpj" element={<EmpresaDetailPage />} />
             <Route path="/analises" element={<AnalisesPage />} />
             <Route path="/pipeline" element={<PipelinePage />} />
+            <Route path="/pipeline-de-research" element={<PipelineResearchPage />} />
             <Route path="/credito/corporativo" element={<CreditoCorporativoPage />} />
             <Route path="/credito/estruturado" element={<CreditoEstruturadoPage />} />
             <Route path="/acoes" element={<AcoesPage />} />
@@ -43,6 +49,7 @@ const App = () => (
         </AppLayout>
       </BrowserRouter>
     </TooltipProvider>
+    </AnaliseEmissaoProvider>
     </AuthProvider>
   </QueryClientProvider>
 );

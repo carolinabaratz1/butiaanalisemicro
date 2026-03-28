@@ -38,7 +38,7 @@ export interface RolePermissions {
 
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   'Gestor': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
     canWrite: true,
     canManageUsers: true,
     canViewAllDashboards: true,
@@ -47,7 +47,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: true,
   },
   'Analista': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes'],
     canWrite: true,
     canManageUsers: false,
     canViewAllDashboards: false,
@@ -56,7 +56,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
   'Risco e Compliance': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
     canWrite: false,
     canManageUsers: false,
     canViewAllDashboards: false,
@@ -65,7 +65,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
   'Consulta': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/credito/corporativo', '/credito/estruturado'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado'],
     canWrite: false,
     canManageUsers: false,
     canViewAllDashboards: false,
