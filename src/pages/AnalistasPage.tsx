@@ -1,93 +1,89 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { analistas, empresas } from '@/data/mockData';
-import { AlertTriangle, User } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { analistas } from '@/data/analistas';
+import { historicoAnalises } from '@/data/historicoAnalises';
+import { Users, UserCheck, UserX } from 'lucide-react';
 
-const tipoClass: Record<string, string> = {
-  'Crédito': 'bg-status-info/15 text-status-info border-status-info/30',
-  'Ações': 'bg-status-success/15 text-status-success border-status-success/30',
-  'Híbrido': 'bg-status-warning/15 text-status-warning border-status-warning/30',
-};
+const totalAnalistas = analistas.length;
+const ativos = analistas.filter(a => a.ativo).length;
+const exAnalistas = analistas.filter(a => !a.ativo).length;
+
+function getQtdAnalises(analistaId: string) {
+  return historicoAnalises.filter(h => h.analista_id === analistaId).length;
+}
 
 export default function AnalistasPage() {
-  // Check sectors without backup
-  const allSetores = [...new Set(empresas.map(e => e.setor))];
-  const setoresSemBackup = allSetores.filter(setor => {
-    const emps = empresas.filter(e => e.setor === setor);
-    return emps.some(e => !e.analistaBackup);
-  });
-
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-foreground">Analistas</h2>
 
-      <div className="grid grid-cols-2 gap-4">
-        {analistas.map(a => (
-          <Card key={a.id} className="bg-card border-border">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{a.nome}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <Badge variant="outline" className="text-[10px]">{a.nivel}</Badge>
-                        <Badge variant="outline" className={`text-[10px] ${tipoClass[a.tipo]}`}>{a.tipo}</Badge>
-                        <Badge variant="outline" className={`text-[10px] ${a.status === 'Ativo' ? 'text-status-success border-status-success/30' : 'text-muted-foreground'}`}>{a.status}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-1 mt-2 flex-wrap">
-                    {a.setores.map(s => (
-                      <Badge key={s} variant="secondary" className="text-[10px] bg-surface-1">{s}</Badge>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 mt-3 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Análises</p>
-                      <p className="text-foreground font-semibold text-sm">{a.numAnalises}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Taxa aprovação</p>
-                      <p className="text-foreground font-semibold text-sm">{a.taxaAprovacao}%</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Tempo médio</p>
-                      <p className="text-foreground font-semibold text-sm">{a.tempoMedio}d</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total de Analistas</p>
+              <p className="text-2xl font-bold text-foreground">{totalAnalistas}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-status-success/15 flex items-center justify-center">
+              <UserCheck className="h-5 w-5 text-status-success" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Analistas Ativos</p>
+              <p className="text-2xl font-bold text-foreground">{ativos}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center">
+              <UserX className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Ex-Analistas</p>
+              <p className="text-2xl font-bold text-foreground">{exAnalistas}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Cobertura setorial */}
+      {/* Table */}
       <Card className="bg-card border-border">
-        <CardContent className="p-4">
-          <p className="text-sm font-semibold text-foreground mb-3">Cobertura Setorial</p>
-          <div className="grid grid-cols-4 gap-2">
-            {allSetores.map(setor => {
-              const emps = empresas.filter(e => e.setor === setor);
-              const principal = emps[0] ? analistas.find(a => a.id === emps[0].analistaPrincipal)?.nome : '—';
-              const backup = emps[0] ? analistas.find(a => a.id === emps[0].analistaBackup)?.nome : null;
-              const semBackup = !backup;
-              return (
-                <div key={setor} className={`p-2.5 rounded-md bg-surface-1 border ${semBackup ? 'border-status-warning/50' : 'border-transparent'}`}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-medium text-foreground">{setor}</p>
-                    {semBackup && <AlertTriangle className="h-3 w-3 text-status-warning" />}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">Principal: {principal}</p>
-                  <p className="text-[11px] text-muted-foreground">Backup: {backup || <span className="text-status-warning">Não definido</span>}</p>
-                </div>
-              );
-            })}
-          </div>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border">
+                <TableHead className="text-[11px] h-9">Nome</TableHead>
+                <TableHead className="text-[11px] h-9">Data de Entrada</TableHead>
+                <TableHead className="text-[11px] h-9">Data de Saída</TableHead>
+                <TableHead className="text-[11px] h-9">Status</TableHead>
+                <TableHead className="text-[11px] h-9 text-right">Qtd. Análises</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {analistas.map(a => (
+                <TableRow key={a.id} className="border-border">
+                  <TableCell className="text-sm py-2 font-medium">{a.nome}</TableCell>
+                  <TableCell className="text-sm py-2 text-muted-foreground">{a.data_entrada}</TableCell>
+                  <TableCell className="text-sm py-2 text-muted-foreground">{a.data_saida || '—'}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant="outline" className={`text-[10px] ${a.ativo ? 'text-status-success border-status-success/30 bg-status-success/10' : 'text-muted-foreground border-border bg-muted/30'}`}>
+                      {a.ativo ? 'Ativo' : 'Ex-Analista'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm py-2 text-right font-semibold">{getQtdAnalises(a.id)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
