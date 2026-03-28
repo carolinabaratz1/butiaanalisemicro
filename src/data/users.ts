@@ -47,7 +47,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: true,
   },
   'Analista': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes'],
     canWrite: true,
     canManageUsers: false,
     canViewAllDashboards: false,
