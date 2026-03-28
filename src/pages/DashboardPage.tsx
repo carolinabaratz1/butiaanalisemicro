@@ -1,8 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, CheckCircle, Clock, Building2, FileCheck, AlertCircle, Briefcase, Shield } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Building2, FileCheck, AlertCircle, Briefcase, Shield, TrendingUp } from 'lucide-react';
 import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, mockPosicoes, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
+import { users } from '@/data/users';
+import { emissores } from '@/data/emissores';
+import { Link } from 'react-router-dom';
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
@@ -18,7 +23,20 @@ const statusBadge = (status: string) => {
   return <Badge variant="outline" className={`text-[11px] ${map[status] || ''}`}>{status}</Badge>;
 };
 
+function getEmissorNome(cnpj: string) {
+  return emissores.find(e => e.cnpj === cnpj)?.nomeAbreviado ?? cnpj;
+}
+function getUserNome(id: string) {
+  return users.find(u => u.id === id)?.nome ?? 'N/A';
+}
+
 export default function DashboardPage() {
+  const { currentUser } = useAuth();
+  const { analises: analisesEmissao } = useAnaliseEmissao();
+  const isAnalista = currentUser.funcao === 'Analista';
+  const isGestor = currentUser.funcao === 'Gestor';
+  const hoje = new Date().toISOString().split('T')[0];
+
   const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
   const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
   const alertasPendentes = 3;
@@ -46,6 +64,29 @@ export default function DashboardPage() {
     { tipo: 'Target expirado', empresa: 'Vale', data: '01/03/2026', severity: 'warning' as const },
   ];
 
+  // Analyst widget data
+  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser.id);
+  const minhasPendentes = minhasAnalises.filter(a => a.status === 'pendente').length;
+  const minhasEmAnalise = minhasAnalises.filter(a => a.status === 'em_analise').length;
+  const minhasConcluidas = minhasAnalises.filter(a => a.status === 'concluido').length;
+  const urgentes = minhasAnalises
+    .filter(a => a.status === 'pendente' || a.status === 'em_analise')
+    .sort((a, b) => a.prazo.localeCompare(b.prazo))
+    .slice(0, 5);
+
+  // Gestor widget data
+  const totalPendentes = analisesEmissao.filter(a => a.status === 'pendente').length;
+  const totalEmAnalise = analisesEmissao.filter(a => a.status === 'em_analise').length;
+  const totalConcluidos = analisesEmissao.filter(a => a.status === 'concluido').length;
+  const totalRejeitados = analisesEmissao.filter(a => a.status === 'rejeitado').length;
+  const vencidas = analisesEmissao.filter(a => (a.status === 'pendente' || a.status === 'em_analise') && a.prazo < hoje);
+
+  const analistasPendentes = users
+    .filter(u => u.funcao === 'Analista')
+    .map(u => ({ nome: u.nome, id: u.id, count: analisesEmissao.filter(a => a.analista_id === u.id && a.status === 'pendente').length }))
+    .filter(a => a.count > 0)
+    .sort((a, b) => b.count - a.count);
+
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-foreground">Dashboard</h2>
@@ -65,12 +106,103 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {/* Pipeline da semana */}
+      {/* Analyst Widget */}
+      {isAnalista && (
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Pipeline da Semana</CardTitle>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" /> Minhas Análises
+            </CardTitle>
           </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-warning">{minhasPendentes}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-info">{minhasEmAnalise}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-success">{minhasConcluidas}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Concluído</p>
+              </div>
+            </div>
+            {urgentes.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-foreground mb-2">Mais urgentes</p>
+                <div className="space-y-1.5">
+                  {urgentes.map(a => (
+                    <div key={a.id} className={`flex items-center justify-between p-2 rounded-md bg-surface-1 ${a.prazo < hoje ? 'border border-status-danger/50' : 'border border-transparent'}`}>
+                      <div>
+                        <p className="text-sm font-medium">{getEmissorNome(a.cnpj_emissor)}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{a.isin}</p>
+                      </div>
+                      <span className={`text-[11px] ${a.prazo < hoje ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>{a.prazo}</span>
+                    </div>
+                  ))}
+                </div>
+                <Link to="/pipeline" className="text-xs text-primary hover:underline mt-2 inline-block">Ver pipeline completo →</Link>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Gestor Widget */}
+      {isGestor && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" /> Pipeline Geral
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-warning">{totalPendentes}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-info">{totalEmAnalise}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-success">{totalConcluidos}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Concluído</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-danger">{totalRejeitados}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Rejeitado</p>
+              </div>
+            </div>
+            {vencidas.length > 0 && (
+              <div className="mb-3 p-2 rounded-md bg-status-danger/10 border border-status-danger/30">
+                <p className="text-xs text-status-danger font-semibold flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {vencidas.length} análise(s) com prazo vencido</p>
+              </div>
+            )}
+            {analistasPendentes.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-foreground mb-2">Analistas com pendências</p>
+                <div className="space-y-1">
+                  {analistasPendentes.map(a => (
+                    <div key={a.id} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{a.nome}</span>
+                      <Badge variant="outline" className="text-[10px] bg-status-warning/15 text-status-warning border-status-warning/30">{a.count} pendente(s)</Badge>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            <Link to="/pipeline" className="text-xs text-primary hover:underline mt-2 inline-block">Ver pipeline completo →</Link>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Pipeline da Semana</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {pipelineSemana.map(item => (
               <div key={item.id} className={`flex items-center justify-between p-2.5 rounded-md bg-surface-1 ${item.status === 'Atrasado' ? 'border border-status-danger/50' : 'border border-transparent'}`}>
@@ -84,11 +216,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Últimas análises aprovadas */}
         <Card className="bg-card border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Últimas Análises Aprovadas</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Últimas Análises Aprovadas</CardTitle></CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
@@ -113,11 +242,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Alertas */}
         <Card className="bg-card border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Alertas</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Alertas</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             {alertas.map((alerta, i) => (
               <div key={i} className="flex items-center gap-3 p-2.5 rounded-md bg-surface-1 border border-transparent">
