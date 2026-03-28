@@ -56,7 +56,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
   'Risco e Compliance': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
     canWrite: false,
     canManageUsers: false,
     canViewAllDashboards: false,
