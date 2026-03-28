@@ -38,7 +38,7 @@ export interface RolePermissions {
 
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   'Gestor': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes'],
     canWrite: true,
     canManageUsers: true,
     canViewAllDashboards: true,
