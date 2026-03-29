@@ -8,6 +8,8 @@ import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
 import { users } from '@/data/users';
 import { emissores } from '@/data/emissores';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
@@ -36,22 +38,54 @@ export default function DashboardPage() {
   const isAnalista = currentUser.funcao === 'Analista';
   const isGestor = currentUser.funcao === 'Gestor';
   const hoje = new Date().toISOString().split('T')[0];
+  const hojeFormatado = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+  // Query posições importadas hoje
+  const { data: posicoesHoje } = useQuery({
+    queryKey: ['posicoes-hoje'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('posicoes' as any)
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', new Date().toISOString().split('T')[0] + 'T00:00:00')
+        .lt('created_at', new Date().toISOString().split('T')[0] + 'T23:59:59.999');
+      if (error) return 0;
+      return count ?? 0;
+    },
+  });
+
+  // Query análises ativas por empresa_id para calcular "sem análise vinculada"
+  const { data: empresasComAnalise } = useQuery({
+    queryKey: ['empresas-com-analise'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises')
+        .select('empresa_id')
+        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
+      if (error) return new Set<string>();
+      return new Set((data ?? []).map(a => a.empresa_id));
+    },
+  });
+
+  const semAnalise = emissores.filter(e => !(empresasComAnalise ?? new Set()).has(e.cnpj)).length;
 
   const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
   const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
   const alertasPendentes = 3;
   const coberturaAtiva = empresas.length;
-  const ativosSemAnalise = 2;
   const alertasCreditoEstruturado = monitoramentosFIDC.filter(m => m.statusCovenants !== 'OK').length;
+
+  const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : 'Não';
+  const posicoesColor = (posicoesHoje ?? 0) > 0 ? 'text-status-success' : 'text-status-danger';
 
   const summaryCards = [
     { label: 'Análises em andamento', value: analisesEmAndamento, icon: Clock, color: 'text-status-warning' },
     { label: 'Aprovadas (mês)', value: analisesAprovadas, icon: CheckCircle, color: 'text-status-success' },
     { label: 'Alertas pendentes', value: alertasPendentes, icon: AlertTriangle, color: 'text-status-danger' },
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
-    { label: 'Posições importadas hoje', value: 'Sim — 26/03', icon: FileCheck, color: 'text-status-success' },
+    { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
     { label: 'Ativos na carteira', value: mockPosicoes.length, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: ativosSemAnalise, icon: AlertCircle, color: 'text-status-warning' },
+    { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
 
