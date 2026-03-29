@@ -38,83 +38,8 @@ const AnaliseEmissaoContext = createContext<AnaliseEmissaoContextType | null>(nu
 
 const now = () => new Date().toISOString();
 
-// Seed mock data
-const initialAnalises: AnaliseEmissao[] = [
-  {
-    id: 'ae1', isin: 'BRALGTDBS0I0', cnpj_emissor: '71.208.516/0001-74',
-    analista_id: 'u5', solicitante_id: 'u2', status: 'concluido',
-    prazo: '2026-03-15', observacoes: 'Análise de crédito da debênture ALGAC2',
-    relatorio: 'Análise concluída. A Algar Telecom apresenta perfil de crédito sólido com geração de caixa estável. Recomendamos manutenção da posição. A empresa tem demonstrado disciplina na alavancagem, mantendo o indicador Dívida Líquida/EBITDA abaixo de 2.5x.',
-    data_solicitacao: '2026-03-01T10:00:00', data_inicio: '2026-03-02T09:00:00',
-    data_conclusao: '2026-03-14T16:30:00', created_at: '2026-03-01T10:00:00', updated_at: '2026-03-14T16:30:00',
-  },
-  {
-    id: 'ae2', isin: 'BRALGTDBS0K6', cnpj_emissor: '71.208.516/0001-74',
-    analista_id: 'u6', solicitante_id: 'u2', status: 'em_analise',
-    prazo: '2026-04-05', observacoes: 'Análise da debênture ALGTA4 - verificar indexador',
-    relatorio: '', data_solicitacao: '2026-03-20T14:00:00', data_inicio: '2026-03-21T08:30:00',
-    data_conclusao: null, created_at: '2026-03-20T14:00:00', updated_at: '2026-03-21T08:30:00',
-  },
-  {
-    id: 'ae3', isin: 'BRARTRDBS0B6', cnpj_emissor: '02.919.555/0001-67',
-    analista_id: 'u7', solicitante_id: 'u3', status: 'pendente',
-    prazo: '2026-04-10', observacoes: 'Avaliar risco de concessão rodoviária',
-    relatorio: '', data_solicitacao: '2026-03-25T11:00:00', data_inicio: null,
-    data_conclusao: null, created_at: '2026-03-25T11:00:00', updated_at: '2026-03-25T11:00:00',
-  },
-  {
-    id: 'ae4', isin: 'BRASAIDBS044', cnpj_emissor: '06.057.223/0001-71',
-    analista_id: 'u8', solicitante_id: 'u1', status: 'pendente',
-    prazo: '2026-03-25', observacoes: 'Urgente - prazo curto. Analisar risco de crédito Assaí.',
-    relatorio: '', data_solicitacao: '2026-03-18T09:00:00', data_inicio: null,
-    data_conclusao: null, created_at: '2026-03-18T09:00:00', updated_at: '2026-03-18T09:00:00',
-  },
-  {
-    id: 'ae5', isin: 'BRBBDCLTRRA2', cnpj_emissor: '60.746.948/0001-12',
-    analista_id: 'u5', solicitante_id: 'u2', status: 'em_analise',
-    prazo: '2026-04-01', observacoes: 'Análise de LF Bradesco',
-    relatorio: '', data_solicitacao: '2026-03-15T10:00:00', data_inicio: '2026-03-16T09:00:00',
-    data_conclusao: null, created_at: '2026-03-15T10:00:00', updated_at: '2026-03-16T09:00:00',
-  },
-  {
-    id: 'ae6', isin: 'BRBBASLFIDT2', cnpj_emissor: '00.000.000/0001-91',
-    analista_id: 'u9', solicitante_id: 'u4', status: 'concluido',
-    prazo: '2026-03-10', observacoes: 'Análise padrão de LF Banco do Brasil',
-    relatorio: 'Banco do Brasil apresenta solidez institucional e métricas de crédito compatíveis com rating AAA. LF adequada para carteira de alta qualidade. Recomendação: manter posição.',
-    data_solicitacao: '2026-02-25T08:00:00', data_inicio: '2026-02-26T09:00:00',
-    data_conclusao: '2026-03-08T15:00:00', created_at: '2026-02-25T08:00:00', updated_at: '2026-03-08T15:00:00',
-  },
-  {
-    id: 'ae7', isin: 'BRCCRODBS0B7', cnpj_emissor: '02.846.056/0001-97',
-    analista_id: 'u7', solicitante_id: 'u2', status: 'rejeitado',
-    prazo: '2026-03-20', observacoes: 'Análise de debênture CCR',
-    relatorio: 'Análise rejeitada por falta de documentação atualizada do emissor. Necessário reavaliar após recebimento dos documentos.',
-    data_solicitacao: '2026-03-05T10:00:00', data_inicio: '2026-03-06T09:00:00',
-    data_conclusao: '2026-03-18T14:00:00', created_at: '2026-03-05T10:00:00', updated_at: '2026-03-18T14:00:00',
-  },
-  {
-    id: 'ae8', isin: 'BRSABORLFI4M2', cnpj_emissor: '43.776.517/0001-80',
-    analista_id: 'u6', solicitante_id: 'u3', status: 'concluido',
-    prazo: '2026-03-12', observacoes: 'Revisão periódica Sabesp',
-    relatorio: 'Sabesp mantém perfil de crédito AAA pós-privatização. Melhora operacional significativa observada. Dívida líquida/EBITDA em 1.8x. Recomendamos aumento de exposição.',
-    data_solicitacao: '2026-02-28T11:00:00', data_inicio: '2026-03-01T09:00:00',
-    data_conclusao: '2026-03-11T17:00:00', created_at: '2026-02-28T11:00:00', updated_at: '2026-03-11T17:00:00',
-  },
-  {
-    id: 'ae9', isin: 'BR0M1TCTF011', cnpj_emissor: '57.283.589/0001-08',
-    analista_id: 'u8', solicitante_id: 'u1', status: 'em_analise',
-    prazo: '2026-03-30', observacoes: 'FIDC AXIOS NPL - monitorar inadimplência',
-    relatorio: '', data_solicitacao: '2026-03-22T08:30:00', data_inicio: '2026-03-23T09:00:00',
-    data_conclusao: null, created_at: '2026-03-22T08:30:00', updated_at: '2026-03-23T09:00:00',
-  },
-  {
-    id: 'ae10', isin: 'BRALGEDBS045', cnpj_emissor: '12.009.135/0001-05',
-    analista_id: 'u11', solicitante_id: 'u2', status: 'pendente',
-    prazo: '2026-04-15', observacoes: 'Primeira análise de debênture Aliança Geração',
-    relatorio: '', data_solicitacao: '2026-03-27T10:00:00', data_inicio: null,
-    data_conclusao: null, created_at: '2026-03-27T10:00:00', updated_at: '2026-03-27T10:00:00',
-  },
-];
+// Start with empty pipeline
+const initialAnalises: AnaliseEmissao[] = [];
 
 export function AnaliseEmissaoProvider({ children }: { children: ReactNode }) {
   const [analises, setAnalises] = useState<AnaliseEmissao[]>(initialAnalises);
