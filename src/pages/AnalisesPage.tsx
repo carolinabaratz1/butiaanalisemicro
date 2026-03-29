@@ -38,8 +38,8 @@ const statusClass: Record<string, string> = {
 };
 
 function getEmpresaNome(id: string): string {
-  const e = emissores.find(em => em.cnpj === id || em.id?.toString() === id);
-  return e?.nome_curto || e?.razao_social || id;
+  const e = emissores.find(em => em.cnpj === id);
+  return e?.nomeAbreviado || e?.nomeCompleto || id;
 }
 
 function getAnalistaNome(id: string): string {
