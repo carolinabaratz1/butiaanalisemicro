@@ -39,9 +39,7 @@ const AnaliseEmissaoContext = createContext<AnaliseEmissaoContextType | null>(nu
 const now = () => new Date().toISOString();
 
 // Seed mock data
-const initialAnalises: AnaliseEmissao[] = [
-  {
-    id: 'ae1', isin: 'BRALGTDBS0I0', cnpj_emissor: '71.208.516/0001-74',
+const initialAnalises: AnaliseEmissao[] = [];
     analista_id: 'u5', solicitante_id: 'u2', status: 'concluido',
     prazo: '2026-03-15', observacoes: 'Análise de crédito da debênture ALGAC2',
     relatorio: 'Análise concluída. A Algar Telecom apresenta perfil de crédito sólido com geração de caixa estável. Recomendamos manutenção da posição. A empresa tem demonstrado disciplina na alavancagem, mantendo o indicador Dívida Líquida/EBITDA abaixo de 2.5x.',
