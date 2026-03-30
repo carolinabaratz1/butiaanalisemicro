@@ -77,6 +77,54 @@ export type Database = {
         }
         Relationships: []
       }
+      posicoes: {
+        Row: {
+          amount: number
+          created_at: string
+          duration_du: number | null
+          dv01: number | null
+          financial_price: number | null
+          id: string
+          implied_spread: number | null
+          isin: string | null
+          product: string
+          product_class: string
+          trading_desk_share_source: string
+          val_date: string
+          yield: number | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          duration_du?: number | null
+          dv01?: number | null
+          financial_price?: number | null
+          id?: string
+          implied_spread?: number | null
+          isin?: string | null
+          product: string
+          product_class: string
+          trading_desk_share_source: string
+          val_date: string
+          yield?: number | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          duration_du?: number | null
+          dv01?: number | null
+          financial_price?: number | null
+          id?: string
+          implied_spread?: number | null
+          isin?: string | null
+          product?: string
+          product_class?: string
+          trading_desk_share_source?: string
+          val_date?: string
+          yield?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
