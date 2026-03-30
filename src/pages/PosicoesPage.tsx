@@ -1,75 +1,305 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Download, Upload, Link2, AlertCircle, Briefcase, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
-import { mockPosicoes, empresas, type Posicao } from '@/data/mockData';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Download, Upload, Link2, Loader2 } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+import * as XLSX from 'xlsx';
 
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f43f5e'];
 
-const allFunds = [...new Set(mockPosicoes.map(p => p.tradingDeskShareSource))];
-const allProductClasses = [...new Set(mockPosicoes.map(p => p.productClass))];
+interface PosicaoRow {
+  id: string;
+  trading_desk_share_source: string;
+  val_date: string;
+  product_class: string;
+  product: string;
+  amount: number;
+  isin: string | null;
+  financial_price: number | null;
+  duration_du: number | null;
+  yield: number | null;
+  implied_spread: number | null;
+  dv01: number | null;
+  created_at: string;
+}
 
 export default function PosicoesPage() {
   const [fundFilter, setFundFilter] = useState<string>('all');
   const [classFilter, setClassFilter] = useState<string>('all');
   const [page, setPage] = useState(0);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const pageSize = 50;
 
+  const { data: posicoes = [], isLoading } = useQuery({
+    queryKey: ['posicoes'],
+    queryFn: async () => {
+      // Fetch all posicoes (paginate if needed)
+      let allData: PosicaoRow[] = [];
+      let from = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('posicoes')
+          .select('*')
+          .range(from, from + batchSize - 1)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        allData = [...allData, ...(data as PosicaoRow[])];
+        hasMore = data.length === batchSize;
+        from += batchSize;
+      }
+      return allData;
+    },
+  });
+
+  const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source))], [posicoes]);
+  const allProductClasses = useMemo(() => [...new Set(posicoes.map(p => p.product_class))], [posicoes]);
+
   const filtered = useMemo(() => {
-    return mockPosicoes.filter(p => {
-      return (fundFilter === 'all' || p.tradingDeskShareSource === fundFilter)
-        && (classFilter === 'all' || p.productClass === classFilter);
+    return posicoes.filter(p => {
+      return (fundFilter === 'all' || p.trading_desk_share_source === fundFilter)
+        && (classFilter === 'all' || p.product_class === classFilter);
     });
-  }, [fundFilter, classFilter]);
+  }, [posicoes, fundFilter, classFilter]);
 
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filtered.length / pageSize);
 
-  // Analytics
-  const totalAtivos = mockPosicoes.length;
+  const totalAtivos = posicoes.length;
   const totalFundos = allFunds.length;
   const totalTipos = allProductClasses.length;
 
   const byClass = allProductClasses.map(pc => ({
     name: pc,
-    value: mockPosicoes.filter(p => p.productClass === pc).length,
+    value: posicoes.filter(p => p.product_class === pc).length,
   }));
 
   const byFund = allFunds.map(f => ({
     name: f.length > 25 ? f.substring(0, 25) + '…' : f,
     fullName: f,
-    value: mockPosicoes.filter(p => p.tradingDeskShareSource === f).length,
+    value: posicoes.filter(p => p.trading_desk_share_source === f).length,
   }));
 
-  // Check if product matches an empresa
-  const hasLink = (p: Posicao) => {
-    return empresas.some(e => {
-      const tickers = ['PETR4', 'VALE3', 'AMER3'];
-      return tickers.includes(p.product);
-    });
+  const latestDate = useMemo(() => {
+    if (posicoes.length === 0) return null;
+    const dates = posicoes.map(p => p.val_date).filter(Boolean);
+    return dates.sort().reverse()[0] || null;
+  }, [posicoes]);
+
+  const fmtNum = (v: number | null) => v === null ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
+  const fmtPct = (v: number | null) => v === null ? '—' : (Number(v) * 100).toFixed(2) + '%';
+  const fmtDate = (d: string | null) => {
+    if (!d) return '—';
+    const parts = d.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return d;
   };
 
-  const fmtNum = (v: number | null) => v === null ? '—' : v.toLocaleString('pt-BR', { maximumFractionDigits: 6 });
-  const fmtPct = (v: number | null) => v === null ? '—' : (v * 100).toFixed(2) + '%';
+  // ── Import ──
+  const handleImport = async () => {
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      toast({ title: 'Selecione um arquivo', variant: 'destructive' });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+      if (rows.length === 0) {
+        toast({ title: 'Arquivo vazio', description: 'Nenhuma linha encontrada.', variant: 'destructive' });
+        setImporting(false);
+        return;
+      }
+
+      // Map columns – accept various header names
+      const colMap: Record<string, string> = {};
+      const firstRow = rows[0];
+      const keys = Object.keys(firstRow);
+      const find = (candidates: string[]) => keys.find(k => candidates.some(c => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(c)));
+
+      colMap.trading_desk_share_source = find(['tradingdesk', 'sharesource', 'fundo', 'fund']) || keys[0];
+      colMap.val_date = find(['valdate', 'data', 'date']) || keys[1];
+      colMap.product_class = find(['productclass', 'class', 'tipo', 'classe']) || keys[2];
+      colMap.product = find(['product', 'produto', 'ativo']) || keys[3];
+      colMap.amount = find(['amount', 'quantidade', 'qtd']) || keys[4];
+      colMap.isin = find(['isin']) || '';
+      colMap.financial_price = find(['financialprice', 'price', 'preco', 'pu']) || '';
+      colMap.duration_du = find(['duration', 'duracao']) || '';
+      colMap.yield = find(['yield', 'taxa']) || '';
+      colMap.implied_spread = find(['spread', 'impliedspread']) || '';
+      colMap.dv01 = find(['dv01']) || '';
+
+      // Determine the val_date from first valid row for delete
+      const firstValDate = rows[0][colMap.val_date];
+      let valDateStr = '';
+      if (firstValDate) {
+        if (typeof firstValDate === 'number') {
+          // Excel serial date
+          const d = XLSX.SSF.parse_date_code(firstValDate);
+          valDateStr = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+        } else {
+          valDateStr = String(firstValDate);
+        }
+      }
+
+      // Delete existing posicoes for same val_date (replace strategy)
+      if (valDateStr) {
+        await supabase.from('posicoes').delete().eq('val_date', valDateStr);
+      }
+
+      // Prepare insert rows
+      const toNum = (v: any): number | null => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = Number(v);
+        return isNaN(n) ? null : n;
+      };
+
+      const toDateStr = (v: any): string => {
+        if (!v) return '';
+        if (typeof v === 'number') {
+          const d = XLSX.SSF.parse_date_code(v);
+          return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+        }
+        return String(v);
+      };
+
+      const insertRows = rows.map(r => ({
+        trading_desk_share_source: String(r[colMap.trading_desk_share_source] || ''),
+        val_date: toDateStr(r[colMap.val_date]),
+        product_class: String(r[colMap.product_class] || ''),
+        product: String(r[colMap.product] || ''),
+        amount: toNum(r[colMap.amount]) ?? 0,
+        isin: colMap.isin ? String(r[colMap.isin] || '') || null : null,
+        financial_price: colMap.financial_price ? toNum(r[colMap.financial_price]) : null,
+        duration_du: colMap.duration_du ? toNum(r[colMap.duration_du]) : null,
+        yield: colMap.yield ? toNum(r[colMap.yield]) : null,
+        implied_spread: colMap.implied_spread ? toNum(r[colMap.implied_spread]) : null,
+        dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
+      }));
+
+      // Insert in batches of 500
+      const batchSize = 500;
+      for (let i = 0; i < insertRows.length; i += batchSize) {
+        const batch = insertRows.slice(i, i + batchSize);
+        const { error } = await supabase.from('posicoes').insert(batch);
+        if (error) throw error;
+      }
+
+      toast({ title: 'Importação concluída', description: `${insertRows.length} posições importadas com sucesso.` });
+      queryClient.invalidateQueries({ queryKey: ['posicoes'] });
+      queryClient.invalidateQueries({ queryKey: ['posicoes-hoje'] });
+      setImportOpen(false);
+      if (fileRef.current) fileRef.current.value = '';
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: 'Erro na importação', description: err.message || 'Erro desconhecido', variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // ── Export ──
+  const handleExport = () => {
+    if (filtered.length === 0) {
+      toast({ title: 'Sem dados', description: 'Nenhuma posição para exportar.', variant: 'destructive' });
+      return;
+    }
+    setExporting(true);
+    try {
+      const exportData = filtered.map(p => ({
+        'Fundo': p.trading_desk_share_source,
+        'Data Ref': p.val_date,
+        'Tipo': p.product_class,
+        'Produto': p.product,
+        'ISIN': p.isin || '',
+        'Quantidade': Number(p.amount),
+        'PU (R$)': p.financial_price !== null ? Number(p.financial_price) : '',
+        'Duration': p.duration_du !== null ? Number(p.duration_du) : '',
+        'Yield': p.yield !== null ? Number(p.yield) : '',
+        'Spread': p.implied_spread !== null ? Number(p.implied_spread) : '',
+        'DV01': p.dv01 !== null ? Number(p.dv01) : '',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Posições');
+
+      // Auto column widths
+      const colWidths = Object.keys(exportData[0]).map(key => ({
+        wch: Math.max(key.length, ...exportData.map(r => String((r as any)[key]).length).slice(0, 100)) + 2,
+      }));
+      ws['!cols'] = colWidths;
+
+      XLSX.writeFile(wb, `posicoes_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast({ title: 'Exportação concluída', description: `${filtered.length} registros exportados.` });
+    } catch (err: any) {
+      toast({ title: 'Erro na exportação', description: err.message, variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-foreground">Posições</h2>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5" /> Importar posições
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border">
-            <Download className="h-3.5 w-3.5" /> Exportar .xlsx
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={handleExport} disabled={exporting || filtered.length === 0}>
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Exportar .xlsx
           </Button>
         </div>
       </div>
+
+      {/* Import Modal */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importar Posições</DialogTitle>
+            <DialogDescription>
+              Selecione um arquivo .xlsx ou .csv com as posições. As posições existentes para a mesma data de referência serão substituídas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="block w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+            />
+            <p className="text-xs text-muted-foreground">
+              Colunas esperadas: TradingDeskShareSource, ValDate, ProductClass, Product, Amount, ISIN, FinancialPrice, DurationDU, Yield, ImpliedSpread, DV01
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importing}>Cancelar</Button>
+            <Button onClick={handleImport} disabled={importing}>
+              {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              {importing ? 'Importando...' : 'Importar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="tabela">
         <TabsList className="bg-surface-1 border border-border">
@@ -79,14 +309,14 @@ export default function PosicoesPage() {
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
           <div className="flex gap-3">
-            <Select value={fundFilter} onValueChange={setFundFilter}>
+            <Select value={fundFilter} onValueChange={v => { setFundFilter(v); setPage(0); }}>
               <SelectTrigger className="w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os fundos</SelectItem>
                 {allFunds.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={classFilter} onValueChange={setClassFilter}>
+            <Select value={classFilter} onValueChange={v => { setClassFilter(v); setPage(0); }}>
               <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os tipos</SelectItem>
@@ -94,67 +324,81 @@ export default function PosicoesPage() {
               </SelectContent>
             </Select>
             <div className="flex items-center text-xs text-muted-foreground ml-auto">
-              Data ref: <span className="text-foreground font-medium ml-1">26/03/2026</span>
+              Data ref: <span className="text-foreground font-medium ml-1">{latestDate ? fmtDate(latestDate) : '—'}</span>
             </div>
           </div>
 
-          <Card className="bg-card border-border">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-border">
-                    <TableHead className="text-[11px] h-9">Fundo</TableHead>
-                    <TableHead className="text-[11px] h-9">Tipo</TableHead>
-                    <TableHead className="text-[11px] h-9">Produto</TableHead>
-                    <TableHead className="text-[11px] h-9">ISIN</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">Qtd</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">PU (R$)</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">Duration</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">Yield</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">Spread</TableHead>
-                    <TableHead className="text-[11px] h-9 text-right">DV01</TableHead>
-                    <TableHead className="text-[11px] h-9 w-8"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paged.map((p, i) => {
-                    const isDimmed = p.dv01 === null;
-                    const linked = hasLink(p);
-                    return (
-                      <TableRow key={i} className={`border-border ${isDimmed ? 'text-muted-foreground/60' : ''}`}>
-                        <TableCell className="text-[11px] py-1.5 max-w-[200px] truncate">{p.tradingDeskShareSource}</TableCell>
-                        <TableCell className="text-[11px] py-1.5">{p.productClass}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 font-mono font-medium">{p.product}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 font-mono text-muted-foreground">{p.isin || '—'}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{p.amount.toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.financialPrice)}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.durationDU)}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtPct(p.yield)}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtPct(p.impliedSpread)}</TableCell>
-                        <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.dv01)}</TableCell>
-                        <TableCell className="py-1.5">
-                          {linked ? (
-                            <Link2 className="h-3 w-3 text-status-info" />
-                          ) : ['Equity', 'Debenture'].includes(p.productClass) ? (
-                            <Badge variant="outline" className="text-[8px] px-1 py-0 text-status-warning border-status-warning/30">Sem análise</Badge>
-                          ) : null}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{filtered.length} registros</span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)} className="h-7 text-xs border-border">Anterior</Button>
-                <span className="flex items-center px-2">{page + 1} / {totalPages}</span>
-                <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="h-7 text-xs border-border">Próxima</Button>
-              </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">Carregando posições...</span>
             </div>
+          ) : posicoes.length === 0 ? (
+            <Card className="bg-card border-border">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <Upload className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">Nenhuma posição importada</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Clique em "Importar posições" para carregar os dados</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card className="bg-card border-border">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border">
+                        <TableHead className="text-[11px] h-9">Fundo</TableHead>
+                        <TableHead className="text-[11px] h-9">Tipo</TableHead>
+                        <TableHead className="text-[11px] h-9">Produto</TableHead>
+                        <TableHead className="text-[11px] h-9">ISIN</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">Qtd</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">PU (R$)</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">Duration</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">Yield</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">Spread</TableHead>
+                        <TableHead className="text-[11px] h-9 text-right">DV01</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paged.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">
+                            Nenhum resultado para os filtros selecionados
+                          </TableCell>
+                        </TableRow>
+                      ) : paged.map((p) => {
+                        const isDimmed = p.dv01 === null;
+                        return (
+                          <TableRow key={p.id} className={`border-border ${isDimmed ? 'text-muted-foreground/60' : ''}`}>
+                            <TableCell className="text-[11px] py-1.5 max-w-[200px] truncate">{p.trading_desk_share_source}</TableCell>
+                            <TableCell className="text-[11px] py-1.5">{p.product_class}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 font-mono font-medium">{p.product}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 font-mono text-muted-foreground">{p.isin || '—'}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{Number(p.amount).toLocaleString('pt-BR')}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.financial_price)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.duration_du)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtPct(p.yield)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtPct(p.implied_spread)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.dv01)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{filtered.length} registros</span>
+                  <div className="flex gap-1">
+                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)} className="h-7 text-xs border-border">Anterior</Button>
+                    <span className="flex items-center px-2">{page + 1} / {totalPages}</span>
+                    <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="h-7 text-xs border-border">Próxima</Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
@@ -174,39 +418,47 @@ export default function PosicoesPage() {
             </CardContent></Card>
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Data referência</p>
-              <p className="text-xl font-bold text-foreground mt-1">26/03</p>
+              <p className="text-xl font-bold text-foreground mt-1">{latestDate ? fmtDate(latestDate) : '—'}</p>
             </CardContent></Card>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {posicoes.length === 0 ? (
             <Card className="bg-card border-border">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Tipo</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie data={byClass} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                      {byClass.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <p className="text-sm text-muted-foreground">Importe posições para visualizar os gráficos</p>
               </CardContent>
             </Card>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Tipo</CardTitle></CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={byClass} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        {byClass.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Posição por Fundo</CardTitle></CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={byFund} layout="vertical" margin={{ left: 10 }}>
-                    <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
-                    <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} />
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Posição por Fundo</CardTitle></CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={byFund} layout="vertical" margin={{ left: 10 }}>
+                      <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} />
+                      <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
+                      <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
