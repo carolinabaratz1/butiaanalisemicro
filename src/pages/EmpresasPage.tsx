@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -6,20 +6,36 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Search, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
-import { emissores, type Emissor } from '@/data/emissores';
+import { emissores } from '@/data/emissores';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function EmpresasPage() {
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState('all');
   const [setorFilter, setSetorFilter] = useState('all');
   const { permissions } = useAuth();
-  const { getAnalisesAtivas, temPrazoVencido } = useAnaliseEmissao();
+  const { temPrazoVencido } = useAnaliseEmissao();
+
+  // Fetch active analysis counts from Supabase
+  const { data: analisesCounts = {} } = useQuery({
+    queryKey: ['analises-ativas-count'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises')
+        .select('empresa_id, status')
+        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      (data || []).forEach(row => {
+        counts[row.empresa_id] = (counts[row.empresa_id] || 0) + 1;
+      });
+      return counts;
+    },
+  });
 
   const tipos = [...new Set(emissores.map(e => e.tipo))];
   const setores = [...new Set(emissores.map(e => e.setorButia).filter(Boolean))].sort();
@@ -75,7 +91,7 @@ export default function EmpresasPage() {
             </TableHeader>
             <TableBody>
               {filtered.slice(0, 50).map(e => {
-                const ativas = getAnalisesAtivas(e.cnpj);
+                const ativas = analisesCounts[e.cnpj] || 0;
                 const vencido = temPrazoVencido(e.cnpj);
                 return (
                   <TableRow key={e.cnpj} className="border-border">
@@ -86,9 +102,12 @@ export default function EmpresasPage() {
                     <TableCell className="text-sm py-2">{e.ratingAtual || '—'}</TableCell>
                     <TableCell className="py-2">
                       <div className="flex items-center gap-1.5">
-                        {ativas > 0 && <Badge variant="outline" className="text-[10px] bg-status-info/15 text-status-info border-status-info/30">{ativas}</Badge>}
+                        {ativas > 0 ? (
+                          <Badge variant="outline" className="text-[10px] bg-status-info/15 text-status-info border-status-info/30">{ativas}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] bg-muted/30 text-muted-foreground border-border">0</Badge>
+                        )}
                         {vencido && <AlertTriangle className="h-3.5 w-3.5 text-status-danger" />}
-                        {ativas === 0 && !vencido && <span className="text-xs text-muted-foreground">—</span>}
                       </div>
                     </TableCell>
                     <TableCell className="py-2 text-right">
