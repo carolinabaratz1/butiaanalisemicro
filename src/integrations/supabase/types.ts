@@ -28,8 +28,13 @@ export type Database = {
           empresa_id: string
           gatilhos: string | null
           id: string
+          isin: string | null
           justificativa: string | null
+          observacoes: string | null
+          prazo: string | null
+          relatorio: string | null
           riscos: string | null
+          solicitante_id: string | null
           status: string
           tipo: string
           updated_at: string
@@ -48,8 +53,13 @@ export type Database = {
           empresa_id: string
           gatilhos?: string | null
           id?: string
+          isin?: string | null
           justificativa?: string | null
+          observacoes?: string | null
+          prazo?: string | null
+          relatorio?: string | null
           riscos?: string | null
+          solicitante_id?: string | null
           status: string
           tipo: string
           updated_at?: string
@@ -68,8 +78,13 @@ export type Database = {
           empresa_id?: string
           gatilhos?: string | null
           id?: string
+          isin?: string | null
           justificativa?: string | null
+          observacoes?: string | null
+          prazo?: string | null
+          relatorio?: string | null
           riscos?: string | null
+          solicitante_id?: string | null
           status?: string
           tipo?: string
           updated_at?: string
