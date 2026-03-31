@@ -212,7 +212,7 @@ export default function PipelineResearchPage() {
     if (!entregarModal || !relatorio.trim()) return;
     updateStatus.mutate({
       id: entregarModal,
-      status: 'Concluído',
+      status: 'Concluída',
       extras: { relatorio, data_conclusao: new Date().toISOString().split('T')[0] },
     });
     setEntregarModal(null);
