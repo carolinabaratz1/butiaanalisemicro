@@ -103,8 +103,12 @@ export default function PosicoesPage() {
   const fmtPct = (v: number | null) => v === null ? '—' : (Number(v) * 100).toFixed(2) + '%';
   const fmtDate = (d: string | null) => {
     if (!d) return '—';
-    const parts = d.split('-');
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    // Handle YYYY-MM-DD
+    const dashParts = d.split('-');
+    if (dashParts.length === 3 && dashParts[0].length === 4) return `${dashParts[2]}/${dashParts[1]}/${dashParts[0]}`;
+    // Handle MM/DD/YYYY → DD/MM/YYYY
+    const slashParts = d.split('/');
+    if (slashParts.length === 3 && slashParts[2].length === 4) return `${slashParts[1]}/${slashParts[0]}/${slashParts[2]}`;
     return d;
   };
 

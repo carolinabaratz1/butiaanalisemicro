@@ -66,25 +66,44 @@ export default function DashboardPage() {
     },
   });
 
-  // Query análises ativas por empresa_id para calcular "sem análise vinculada"
-  const { data: empresasComAnalise } = useQuery({
-    queryKey: ['empresas-com-analise'],
+  // Query total de empresas
+  const { data: totalEmpresas } = useQuery({
+    queryKey: ['empresas-total'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('analises')
-        .select('empresa_id')
-        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
-      if (error) return new Set<string>();
-      return new Set((data ?? []).map(a => a.empresa_id));
+      const { count, error } = await supabase
+        .from('empresas')
+        .select('*', { count: 'exact', head: true });
+      if (error) return 0;
+      return count ?? 0;
     },
   });
 
-  const semAnalise = emissores.filter(e => !(empresasComAnalise ?? new Set()).has(e.cnpj)).length;
+  // Query análises ativas por empresa_id para calcular "sem análise vinculada"
+  const { data: semAnalise } = useQuery({
+    queryKey: ['empresas-sem-analise'],
+    queryFn: async () => {
+      // Get all empresas CNPJs
+      const { data: allEmpresas, error: empError } = await supabase
+        .from('empresas')
+        .select('cnpj');
+      if (empError || !allEmpresas) return 0;
+
+      // Get empresa_ids with active analyses
+      const { data: analisesAtivas, error: anError } = await supabase
+        .from('analises')
+        .select('empresa_id')
+        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
+      if (anError) return 0;
+
+      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
+      return allEmpresas.filter(e => !comAnalise.has(e.cnpj)).length;
+    },
+  });
 
   const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
   const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
   const alertasPendentes = 3;
-  const coberturaAtiva = empresas.length;
+  const coberturaAtiva = totalEmpresas ?? 0;
   const alertasCreditoEstruturado = monitoramentosFIDC.filter(m => m.statusCovenants !== 'OK').length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : 'Não';
@@ -97,7 +116,7 @@ export default function DashboardPage() {
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
     { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
+    { label: 'Sem análise vinculada', value: semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
 
