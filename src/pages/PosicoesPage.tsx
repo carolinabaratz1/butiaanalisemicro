@@ -34,6 +34,7 @@ interface PosicaoRow {
 export default function PosicoesPage() {
   const [fundFilter, setFundFilter] = useState<string>('all');
   const [classFilter, setClassFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('latest');
   const [page, setPage] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -42,10 +43,26 @@ export default function PosicoesPage() {
   const queryClient = useQueryClient();
   const pageSize = 50;
 
-  const { data: posicoes = [], isLoading } = useQuery({
-    queryKey: ['posicoes'],
+  // Fetch all distinct val_dates
+  const { data: availableDates = [] } = useQuery({
+    queryKey: ['posicoes-dates'],
     queryFn: async () => {
-      // Fetch all posicoes (paginate if needed)
+      const { data, error } = await supabase
+        .from('posicoes')
+        .select('val_date')
+        .order('val_date', { ascending: false });
+      if (error) throw error;
+      const unique = [...new Set((data as any[]).map(d => d.val_date))].filter(Boolean);
+      return unique as string[];
+    },
+  });
+
+  const selectedDate = dateFilter === 'latest' ? (availableDates[0] || null) : dateFilter;
+
+  const { data: posicoes = [], isLoading } = useQuery({
+    queryKey: ['posicoes', selectedDate],
+    queryFn: async () => {
+      if (!selectedDate) return [];
       let allData: PosicaoRow[] = [];
       let from = 0;
       const batchSize = 1000;
@@ -54,6 +71,7 @@ export default function PosicoesPage() {
         const { data, error } = await supabase
           .from('posicoes')
           .select('*')
+          .eq('val_date', selectedDate)
           .range(from, from + batchSize - 1)
           .order('created_at', { ascending: false });
         if (error) throw error;
@@ -63,6 +81,7 @@ export default function PosicoesPage() {
       }
       return allData;
     },
+    enabled: !!selectedDate,
   });
 
   const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source))], [posicoes]);
@@ -93,11 +112,7 @@ export default function PosicoesPage() {
     value: posicoes.filter(p => p.trading_desk_share_source === f).length,
   }));
 
-  const latestDate = useMemo(() => {
-    if (posicoes.length === 0) return null;
-    const dates = posicoes.map(p => p.val_date).filter(Boolean);
-    return dates.sort().reverse()[0] || null;
-  }, [posicoes]);
+  const latestDate = selectedDate;
 
   const fmtNum = (v: number | null) => v === null ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
   const fmtPct = (v: number | null) => v === null ? '—' : (Number(v) * 100).toFixed(2) + '%';
@@ -209,7 +224,9 @@ export default function PosicoesPage() {
 
       toast({ title: 'Importação concluída', description: `${insertRows.length} posições importadas com sucesso.` });
       queryClient.invalidateQueries({ queryKey: ['posicoes'] });
+      queryClient.invalidateQueries({ queryKey: ['posicoes-dates'] });
       queryClient.invalidateQueries({ queryKey: ['posicoes-hoje'] });
+      queryClient.invalidateQueries({ queryKey: ['posicoes-total-latest'] });
       setImportOpen(false);
       if (fileRef.current) fileRef.current.value = '';
     } catch (err: any) {
@@ -325,6 +342,13 @@ export default function PosicoesPage() {
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os tipos</SelectItem>
                 {allProductClasses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={dateFilter} onValueChange={v => { setDateFilter(v); setPage(0); }}>
+              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="latest">Mais recente</SelectItem>
+                {availableDates.map(d => <SelectItem key={d} value={d}>{fmtDate(d)}</SelectItem>)}
               </SelectContent>
             </Select>
             <div className="flex items-center text-xs text-muted-foreground ml-auto">
