@@ -40,27 +40,41 @@ export default function DashboardPage() {
   const hoje = new Date().toISOString().split('T')[0];
   const hojeFormatado = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-  // Query posições importadas hoje
+  // Query posições importadas hoje (by created_at)
   const { data: posicoesHoje } = useQuery({
     queryKey: ['posicoes-hoje'],
     queryFn: async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
       const { count, error } = await supabase
         .from('posicoes' as any)
         .select('*', { count: 'exact', head: true })
-        .gte('created_at', new Date().toISOString().split('T')[0] + 'T00:00:00')
-        .lt('created_at', new Date().toISOString().split('T')[0] + 'T23:59:59.999');
+        .gte('created_at', todayStart.toISOString())
+        .lte('created_at', todayEnd.toISOString());
       if (error) return 0;
       return count ?? 0;
     },
   });
 
-  // Query total de ativos na carteira
+  // Query total de ativos na carteira (latest val_date only)
   const { data: totalPosicoes } = useQuery({
-    queryKey: ['posicoes-total'],
+    queryKey: ['posicoes-total-latest'],
     queryFn: async () => {
+      // First get the max val_date
+      const { data: latest, error: latestErr } = await supabase
+        .from('posicoes' as any)
+        .select('val_date')
+        .order('val_date', { ascending: false })
+        .limit(1);
+      if (latestErr || !latest || latest.length === 0) return 0;
+      const maxDate = (latest[0] as any).val_date;
+      // Count rows with that val_date
       const { count, error } = await supabase
         .from('posicoes' as any)
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('val_date', maxDate);
       if (error) return 0;
       return count ?? 0;
     },
