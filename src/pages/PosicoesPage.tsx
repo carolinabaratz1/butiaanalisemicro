@@ -342,6 +342,13 @@ export default function PosicoesPage() {
                 {allProductClasses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={dateFilter} onValueChange={v => { setDateFilter(v); setPage(0); }}>
+              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="latest">Mais recente</SelectItem>
+                {availableDates.map(d => <SelectItem key={d} value={d}>{fmtDate(d)}</SelectItem>)}
+              </SelectContent>
+            </Select>
             <div className="flex items-center text-xs text-muted-foreground ml-auto">
               Data ref: <span className="text-foreground font-medium ml-1">{latestDate ? fmtDate(latestDate) : '—'}</span>
             </div>
