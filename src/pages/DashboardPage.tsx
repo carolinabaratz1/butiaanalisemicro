@@ -80,44 +80,63 @@ export default function DashboardPage() {
     },
   });
 
-  // Query total de empresas
-  const { data: totalEmpresas } = useQuery({
-    queryKey: ['empresas-total'],
+  // Query empresas com posição ativa (latest val_date) + sem análise vinculada
+  const { data: portfolioStats } = useQuery({
+    queryKey: ['portfolio-cobertura'],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from('empresas')
-        .select('*', { count: 'exact', head: true });
-      if (error) return 0;
-      return count ?? 0;
+      // Get latest val_date
+      const { data: latestRow } = await supabase
+        .from('posicoes' as any)
+        .select('val_date')
+        .order('val_date', { ascending: false })
+        .limit(1);
+      if (!latestRow || latestRow.length === 0) return { cobertura: 0, semAnalise: 0 };
+      const maxDate = (latestRow[0] as any).val_date;
+
+      // Get distinct product names from latest date (these represent companies in portfolio)
+      const { data: posRows } = await supabase
+        .from('posicoes' as any)
+        .select('product')
+        .eq('val_date', maxDate);
+      const productosUnicos = [...new Set((posRows ?? []).map((r: any) => r.product))];
+      const cobertura = productosUnicos.length;
+
+      // Get empresa_ids with active analyses
+      const { data: analisesAtivas } = await supabase
+        .from('analises')
+        .select('empresa_id')
+        .not('status', 'in', '("Concluído","Rejeitado")');
+      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
+
+      // Count portfolio companies without active analysis — match by product name against empresas
+      const { data: allEmpresas } = await supabase.from('empresas').select('cnpj, nome');
+      const empresasNaCarteira = (allEmpresas ?? []).filter(e => productosUnicos.some((p: string) => p.toLowerCase().includes(e.nome.toLowerCase()) || e.nome.toLowerCase().includes(p.toLowerCase())));
+      const semAnalise = empresasNaCarteira.filter(e => !comAnalise.has(e.cnpj)).length;
+
+      return { cobertura, semAnalise };
     },
   });
 
-  // Query análises ativas por empresa_id para calcular "sem análise vinculada"
-  const { data: semAnalise } = useQuery({
-    queryKey: ['empresas-sem-analise'],
+  // Pipeline Geral — count from analises table by status
+  const { data: pipelineCounts } = useQuery({
+    queryKey: ['analises-pipeline-counts'],
     queryFn: async () => {
-      // Get all empresas CNPJs
-      const { data: allEmpresas, error: empError } = await supabase
-        .from('empresas')
-        .select('cnpj');
-      if (empError || !allEmpresas) return 0;
-
-      // Get empresa_ids with active analyses
-      const { data: analisesAtivas, error: anError } = await supabase
-        .from('analises')
-        .select('empresa_id')
-        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
-      if (anError) return 0;
-
-      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
-      return allEmpresas.filter(e => !comAnalise.has(e.cnpj)).length;
+      const { data, error } = await supabase.from('analises').select('status');
+      if (error) return { pendente: 0, emAnalise: 0, concluido: 0, rejeitado: 0 };
+      const rows = data ?? [];
+      return {
+        pendente: rows.filter(r => r.status === 'Pendente').length,
+        emAnalise: rows.filter(r => r.status === 'Em Análise').length,
+        concluido: rows.filter(r => r.status === 'Concluído').length,
+        rejeitado: rows.filter(r => r.status === 'Rejeitado').length,
+      };
     },
   });
 
   const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
   const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
   const alertasPendentes = 3;
-  const coberturaAtiva = totalEmpresas ?? 0;
+  const coberturaAtiva = portfolioStats?.cobertura ?? 0;
   const alertasCreditoEstruturado = monitoramentosFIDC.filter(m => m.statusCovenants !== 'OK').length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : 'Não';
@@ -130,7 +149,7 @@ export default function DashboardPage() {
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
     { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
+    { label: 'Sem análise vinculada', value: portfolioStats?.semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
 
@@ -153,11 +172,11 @@ export default function DashboardPage() {
     .sort((a, b) => a.prazo.localeCompare(b.prazo))
     .slice(0, 5);
 
-  // Gestor widget data
-  const totalPendentes = analisesEmissao.filter(a => a.status === 'pendente').length;
-  const totalEmAnalise = analisesEmissao.filter(a => a.status === 'em_analise').length;
-  const totalConcluidos = analisesEmissao.filter(a => a.status === 'concluido').length;
-  const totalRejeitados = analisesEmissao.filter(a => a.status === 'rejeitado').length;
+  // Gestor widget data — from Supabase
+  const totalPendentes = pipelineCounts?.pendente ?? 0;
+  const totalEmAnalise2 = pipelineCounts?.emAnalise ?? 0;
+  const totalConcluidos = pipelineCounts?.concluido ?? 0;
+  const totalRejeitados = pipelineCounts?.rejeitado ?? 0;
   const vencidas = analisesEmissao.filter(a => (a.status === 'pendente' || a.status === 'em_analise') && a.prazo < hoje);
 
   const analistasPendentes = users
@@ -244,7 +263,7 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-status-info">{totalEmAnalise}</p>
+                <p className="text-xl font-bold text-status-info">{totalEmAnalise2}</p>
                 <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
               </div>
               <div className="text-center">
