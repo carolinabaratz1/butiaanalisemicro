@@ -252,7 +252,7 @@ export default function PipelineResearchPage() {
     }
 
     // Validate: if dropping to Concluído, require relatorio
-    if (targetStatus === 'Concluído') {
+    if (targetStatus === 'Concluída') {
       setEntregarModal(draggedId);
       setDraggedId(null);
       return;
