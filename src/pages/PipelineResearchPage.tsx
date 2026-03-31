@@ -53,6 +53,14 @@ const tipoAnaliseColors: Record<string, string> = {
   'Ações': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };
 
+function fmtDateBR(d: string | null | undefined): string {
+  if (!d) return '—';
+  const clean = d.split('T')[0];
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return clean;
+}
+
 export default function PipelineResearchPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -373,9 +381,9 @@ export default function PipelineResearchPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className={`text-[10px] ${prazoVencido ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>
-                              {item.prazo ? `Prazo: ${item.prazo}` : ''}
+                              {item.prazo ? `Prazo: ${fmtDateBR(item.prazo)}` : ''}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">{item.created_at?.split('T')[0]}</span>
+                            <span className="text-[10px] text-muted-foreground">{fmtDateBR(item.created_at)}</span>
                           </div>
 
                           {/* Quick actions */}
@@ -439,7 +447,7 @@ export default function PipelineResearchPage() {
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
                     <Badge variant="outline" className="text-[10px] mt-0.5">{drawerAnalise.status}</Badge>
                   </div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{drawerAnalise.prazo || '—'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? (users.find(u => u.id === drawerAnalise.solicitante_id)?.nome || drawerAnalise.solicitante_id) : '—'}</p></div>
                 </div>
@@ -492,7 +500,7 @@ export default function PipelineResearchPage() {
                   {historico.map(h => (
                     <div key={h.id} className="p-2 rounded-md bg-surface-1 mb-2 space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-muted-foreground">{h.data_conclusao?.split('T')[0]}</span>
+                        <span className="text-[11px] text-muted-foreground">{fmtDateBR(h.data_conclusao)}</span>
                         <Badge variant="outline" className="text-[9px]">{h.status}</Badge>
                       </div>
                       <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel)}</p>
