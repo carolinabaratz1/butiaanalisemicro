@@ -80,37 +80,56 @@ export default function DashboardPage() {
     },
   });
 
-  // Query total de empresas
-  const { data: totalEmpresas } = useQuery({
-    queryKey: ['empresas-total'],
+  // Query empresas com posição ativa (latest val_date) + sem análise vinculada
+  const { data: portfolioStats } = useQuery({
+    queryKey: ['portfolio-cobertura'],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from('empresas')
-        .select('*', { count: 'exact', head: true });
-      if (error) return 0;
-      return count ?? 0;
+      // Get latest val_date
+      const { data: latestRow } = await supabase
+        .from('posicoes' as any)
+        .select('val_date')
+        .order('val_date', { ascending: false })
+        .limit(1);
+      if (!latestRow || latestRow.length === 0) return { cobertura: 0, semAnalise: 0 };
+      const maxDate = (latestRow[0] as any).val_date;
+
+      // Get distinct product names from latest date (these represent companies in portfolio)
+      const { data: posRows } = await supabase
+        .from('posicoes' as any)
+        .select('product')
+        .eq('val_date', maxDate);
+      const productosUnicos = [...new Set((posRows ?? []).map((r: any) => r.product))];
+      const cobertura = productosUnicos.length;
+
+      // Get empresa_ids with active analyses
+      const { data: analisesAtivas } = await supabase
+        .from('analises')
+        .select('empresa_id')
+        .not('status', 'in', '("Concluído","Rejeitado")');
+      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
+
+      // Count portfolio companies without active analysis — match by product name against empresas
+      const { data: allEmpresas } = await supabase.from('empresas').select('cnpj, nome');
+      const empresasNaCarteira = (allEmpresas ?? []).filter(e => productosUnicos.some((p: string) => p.toLowerCase().includes(e.nome.toLowerCase()) || e.nome.toLowerCase().includes(p.toLowerCase())));
+      const semAnalise = empresasNaCarteira.filter(e => !comAnalise.has(e.cnpj)).length;
+
+      return { cobertura, semAnalise };
     },
   });
 
-  // Query análises ativas por empresa_id para calcular "sem análise vinculada"
-  const { data: semAnalise } = useQuery({
-    queryKey: ['empresas-sem-analise'],
+  // Pipeline Geral — count from analises table by status
+  const { data: pipelineCounts } = useQuery({
+    queryKey: ['analises-pipeline-counts'],
     queryFn: async () => {
-      // Get all empresas CNPJs
-      const { data: allEmpresas, error: empError } = await supabase
-        .from('empresas')
-        .select('cnpj');
-      if (empError || !allEmpresas) return 0;
-
-      // Get empresa_ids with active analyses
-      const { data: analisesAtivas, error: anError } = await supabase
-        .from('analises')
-        .select('empresa_id')
-        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
-      if (anError) return 0;
-
-      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
-      return allEmpresas.filter(e => !comAnalise.has(e.cnpj)).length;
+      const { data, error } = await supabase.from('analises').select('status');
+      if (error) return { pendente: 0, emAnalise: 0, concluido: 0, rejeitado: 0 };
+      const rows = data ?? [];
+      return {
+        pendente: rows.filter(r => r.status === 'Pendente').length,
+        emAnalise: rows.filter(r => r.status === 'Em Análise').length,
+        concluido: rows.filter(r => r.status === 'Concluído').length,
+        rejeitado: rows.filter(r => r.status === 'Rejeitado').length,
+      };
     },
   });
 
