@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertTriangle, CheckCircle, Clock, Building2, FileCheck, AlertCircle, Briefcase, Shield, TrendingUp } from 'lucide-react';
-import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, mockPosicoes, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
+import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
 import { users } from '@/data/users';
