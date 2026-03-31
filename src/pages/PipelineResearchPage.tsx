@@ -447,7 +447,7 @@ export default function PipelineResearchPage() {
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
                     <Badge variant="outline" className="text-[10px] mt-0.5">{drawerAnalise.status}</Badge>
                   </div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{drawerAnalise.prazo || '—'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? (users.find(u => u.id === drawerAnalise.solicitante_id)?.nome || drawerAnalise.solicitante_id) : '—'}</p></div>
                 </div>
