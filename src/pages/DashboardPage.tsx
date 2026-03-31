@@ -54,6 +54,18 @@ export default function DashboardPage() {
     },
   });
 
+  // Query total de ativos na carteira
+  const { data: totalPosicoes } = useQuery({
+    queryKey: ['posicoes-total'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('posicoes' as any)
+        .select('*', { count: 'exact', head: true });
+      if (error) return 0;
+      return count ?? 0;
+    },
+  });
+
   // Query análises ativas por empresa_id para calcular "sem análise vinculada"
   const { data: empresasComAnalise } = useQuery({
     queryKey: ['empresas-com-analise'],
