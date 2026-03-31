@@ -9,7 +9,6 @@ import { Eye, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { analistas } from '@/data/analistas';
-import { emissores } from '@/data/emissores';
 
 interface AnaliseRow {
   id: string;
@@ -31,15 +30,33 @@ interface AnaliseRow {
 }
 
 const statusClass: Record<string, string> = {
-  'Em análise': 'bg-status-info/15 text-status-info border-status-info/30',
-  'Em revisão': 'bg-status-warning/15 text-status-warning border-status-warning/30',
-  'Aprovado': 'bg-status-success/15 text-status-success border-status-success/30',
-  'Reprovado': 'bg-status-danger/15 text-status-danger border-status-danger/30',
+  'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
+  'Em Análise': 'bg-status-info/15 text-status-info border-status-info/30',
+  'Concluída': 'bg-muted/30 text-muted-foreground border-border',
+  'Aprovada': 'bg-status-success/15 text-status-success border-status-success/30',
+  'Reprovada': 'bg-status-danger/15 text-status-danger border-status-danger/30',
+  'Vencida': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
 };
 
-function getEmpresaNome(id: string): string {
-  const e = emissores.find(em => em.cnpj === id);
-  return e?.nomeAbreviado || e?.nomeCompleto || id;
+function fmtDateBR(d: string | null | undefined): string {
+  if (!d) return '—';
+  const clean = d.split('T')[0];
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return clean;
+}
+
+function isVencida(status: string, dataConclusao: string | null): boolean {
+  if (status !== 'Aprovada' || !dataConclusao) return false;
+  const conclusao = new Date(dataConclusao.split('T')[0]);
+  const umAnoAtras = new Date();
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+  return conclusao < umAnoAtras;
+}
+
+function getDisplayStatus(status: string, dataConclusao: string | null): string {
+  if (isVencida(status, dataConclusao)) return 'Vencida';
+  return status;
 }
 
 function getAnalistaNome(id: string): string {
@@ -54,6 +71,21 @@ export default function AnalisesPage() {
   const [analistaFilter, setAnalistaFilter] = useState('all');
   const [selected, setSelected] = useState<AnaliseRow | null>(null);
 
+  // Fetch empresas from Supabase for name resolution
+  const { data: empresas = [] } = useQuery({
+    queryKey: ['empresas-lookup'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('empresas').select('cnpj, nome');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  function getEmpresaNome(id: string): string {
+    const e = empresas.find(em => em.cnpj === id);
+    return e?.nome || id;
+  }
+
   const { data: analises = [], isLoading } = useQuery({
     queryKey: ['analises'],
     queryFn: async () => {
@@ -67,7 +99,8 @@ export default function AnalisesPage() {
   });
 
   const filtered = analises.filter(a => {
-    return (statusFilter === 'all' || a.status === statusFilter)
+    const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+    return (statusFilter === 'all' || displayStatus === statusFilter)
       && (tipoFilter === 'all' || a.tipo === tipoFilter)
       && (analistaFilter === 'all' || a.analista_responsavel === analistaFilter);
   });
@@ -95,18 +128,20 @@ export default function AnalisesPage() {
           <SelectTrigger className="w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos status</SelectItem>
-            <SelectItem value="Em análise">Em análise</SelectItem>
-            <SelectItem value="Em revisão">Em revisão</SelectItem>
-            <SelectItem value="Aprovado">Aprovado</SelectItem>
-            <SelectItem value="Reprovado">Reprovado</SelectItem>
+            <SelectItem value="Pendente">Pendente</SelectItem>
+            <SelectItem value="Em Análise">Em Análise</SelectItem>
+            <SelectItem value="Concluída">Concluída</SelectItem>
+            <SelectItem value="Aprovada">Aprovada</SelectItem>
+            <SelectItem value="Reprovada">Reprovada</SelectItem>
+            <SelectItem value="Vencida">Vencida</SelectItem>
           </SelectContent>
         </Select>
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
           <SelectTrigger className="w-32 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos tipos</SelectItem>
-            <SelectItem value="Crédito">Crédito</SelectItem>
-            <SelectItem value="Ação">Ação</SelectItem>
+            <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
+            <SelectItem value="Ações">Ações</SelectItem>
           </SelectContent>
         </Select>
         <Select value={analistaFilter} onValueChange={setAnalistaFilter}>
@@ -141,23 +176,26 @@ export default function AnalisesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(a => (
-                  <TableRow key={a.id} className="border-border">
-                    <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
-                    <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                    <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel)}</TableCell>
-                    <TableCell className="text-sm py-2 text-muted-foreground">{a.data_inicio}</TableCell>
-                    <TableCell className="text-sm py-2 text-muted-foreground">{a.data_conclusao || '—'}</TableCell>
-                    <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[a.status] || ''}`}>{a.status}</Badge></TableCell>
-                    <TableCell className="text-sm py-2">{a.decisao || '—'}</TableCell>
-                    <TableCell className="text-sm py-2 text-muted-foreground">v{a.versao}</TableCell>
-                    <TableCell className="py-2">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelected(a)}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filtered.map(a => {
+                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+                  return (
+                    <TableRow key={a.id} className="border-border">
+                      <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
+                      <TableCell className="text-sm py-2">{a.tipo}</TableCell>
+                      <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel)}</TableCell>
+                      <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_inicio)}</TableCell>
+                      <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_conclusao)}</TableCell>
+                      <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></TableCell>
+                      <TableCell className="text-sm py-2">{a.decisao || '—'}</TableCell>
+                      <TableCell className="text-sm py-2 text-muted-foreground">v{a.versao}</TableCell>
+                      <TableCell className="py-2">
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelected(a)}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -166,42 +204,50 @@ export default function AnalisesPage() {
 
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="max-w-2xl bg-card border-border max-h-[85vh] overflow-y-auto">
-          {selected && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{getEmpresaNome(selected.empresa_id)} — Análise v{selected.versao}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div><span className="text-muted-foreground text-xs">Tipo:</span> <span>{selected.tipo}</span></div>
-                  <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusClass[selected.status] || ''}`}>{selected.status}</Badge></div>
-                  <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel)}</span></div>
-                  <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '')}</span></div>
-                  <div><span className="text-muted-foreground text-xs">Decisão:</span> <span>{selected.decisao || '—'}</span></div>
-                  <div><span className="text-muted-foreground text-xs">Convicção:</span> <span>{selected.conviccao || '—'}</span></div>
-                  {selected.aprovado_por && <div><span className="text-muted-foreground text-xs">Aprovado por:</span> <span>{selected.aprovado_por}</span></div>}
-                  {selected.data_aprovacao && <div><span className="text-muted-foreground text-xs">Data aprovação:</span> <span>{selected.data_aprovacao}</span></div>}
-                </div>
-                <div><p className="text-xs text-muted-foreground mb-1">Riscos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.riscos || '—'}</p></div>
-                <div><p className="text-xs text-muted-foreground mb-1">Gatilhos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.gatilhos || '—'}</p></div>
-                <div><p className="text-xs text-muted-foreground mb-1">Justificativa:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.justificativa || '—'}</p></div>
-                {versions.length > 1 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
-                    <div className="space-y-1">
-                      {versions.map(v => (
-                        <div key={v.id} className="flex items-center gap-3 text-xs p-2 bg-surface-1 rounded">
-                          <span className="font-medium">v{v.versao}</span>
-                          <Badge variant="outline" className={`text-[9px] ${statusClass[v.status] || ''}`}>{v.status}</Badge>
-                          <span className="text-muted-foreground">{v.data_inicio}</span>
-                        </div>
-                      ))}
-                    </div>
+          {selected && (() => {
+            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao);
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{getEmpresaNome(selected.empresa_id)} — Análise v{selected.versao}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><span className="text-muted-foreground text-xs">Tipo:</span> <span>{selected.tipo}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel)}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '')}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Início:</span> <span>{fmtDateBR(selected.data_inicio)}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Conclusão:</span> <span>{fmtDateBR(selected.data_conclusao)}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Decisão:</span> <span>{selected.decisao || '—'}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Convicção:</span> <span>{selected.conviccao || '—'}</span></div>
+                    {selected.aprovado_por && <div><span className="text-muted-foreground text-xs">Aprovado por:</span> <span>{selected.aprovado_por}</span></div>}
+                    {selected.data_aprovacao && <div><span className="text-muted-foreground text-xs">Data aprovação:</span> <span>{fmtDateBR(selected.data_aprovacao)}</span></div>}
                   </div>
-                )}
-              </div>
-            </>
-          )}
+                  <div><p className="text-xs text-muted-foreground mb-1">Riscos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.riscos || '—'}</p></div>
+                  <div><p className="text-xs text-muted-foreground mb-1">Gatilhos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.gatilhos || '—'}</p></div>
+                  <div><p className="text-xs text-muted-foreground mb-1">Justificativa:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.justificativa || '—'}</p></div>
+                  {versions.length > 1 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
+                      <div className="space-y-1">
+                        {versions.map(v => {
+                          const vStatus = getDisplayStatus(v.status, v.data_conclusao);
+                          return (
+                            <div key={v.id} className="flex items-center gap-3 text-xs p-2 bg-surface-1 rounded">
+                              <span className="font-medium">v{v.versao}</span>
+                              <Badge variant="outline" className={`text-[9px] ${statusClass[vStatus] || ''}`}>{vStatus}</Badge>
+                              <span className="text-muted-foreground">{fmtDateBR(v.data_inicio)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

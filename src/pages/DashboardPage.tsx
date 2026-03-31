@@ -121,14 +121,26 @@ export default function DashboardPage() {
   const { data: pipelineCounts } = useQuery({
     queryKey: ['analises-pipeline-counts'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('analises').select('status');
-      if (error) return { pendente: 0, emAnalise: 0, concluido: 0, rejeitado: 0 };
+      const { data, error } = await supabase.from('analises').select('status, data_conclusao');
+      if (error) return { pendente: 0, emAnalise: 0, concluida: 0, aprovada: 0, reprovada: 0, vencida: 0 };
       const rows = data ?? [];
+      const umAnoAtras = new Date();
+      umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+      let vencidaCount = 0;
+      let aprovadaCount = 0;
+      rows.forEach(r => {
+        if (r.status === 'Aprovada' && r.data_conclusao) {
+          const dt = new Date(r.data_conclusao.split('T')[0]);
+          if (dt < umAnoAtras) { vencidaCount++; } else { aprovadaCount++; }
+        } else if (r.status === 'Aprovada') { aprovadaCount++; }
+      });
       return {
         pendente: rows.filter(r => r.status === 'Pendente').length,
         emAnalise: rows.filter(r => r.status === 'Em Análise').length,
-        concluido: rows.filter(r => r.status === 'Concluído').length,
-        rejeitado: rows.filter(r => r.status === 'Rejeitado').length,
+        concluida: rows.filter(r => r.status === 'Concluída').length,
+        aprovada: aprovadaCount,
+        reprovada: rows.filter(r => r.status === 'Reprovada').length,
+        vencida: vencidaCount + rows.filter(r => r.status === 'Vencida').length,
       };
     },
   });
