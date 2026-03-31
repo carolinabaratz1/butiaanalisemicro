@@ -224,7 +224,9 @@ export default function PosicoesPage() {
 
       toast({ title: 'Importação concluída', description: `${insertRows.length} posições importadas com sucesso.` });
       queryClient.invalidateQueries({ queryKey: ['posicoes'] });
+      queryClient.invalidateQueries({ queryKey: ['posicoes-dates'] });
       queryClient.invalidateQueries({ queryKey: ['posicoes-hoje'] });
+      queryClient.invalidateQueries({ queryKey: ['posicoes-total-latest'] });
       setImportOpen(false);
       if (fileRef.current) fileRef.current.value = '';
     } catch (err: any) {
