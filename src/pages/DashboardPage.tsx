@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertTriangle, CheckCircle, Clock, Building2, FileCheck, AlertCircle, Briefcase, Shield, TrendingUp } from 'lucide-react';
-import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, mockPosicoes, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
+import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
 import { users } from '@/data/users';
@@ -54,6 +54,18 @@ export default function DashboardPage() {
     },
   });
 
+  // Query total de ativos na carteira
+  const { data: totalPosicoes } = useQuery({
+    queryKey: ['posicoes-total'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('posicoes' as any)
+        .select('*', { count: 'exact', head: true });
+      if (error) return 0;
+      return count ?? 0;
+    },
+  });
+
   // Query análises ativas por empresa_id para calcular "sem análise vinculada"
   const { data: empresasComAnalise } = useQuery({
     queryKey: ['empresas-com-analise'],
@@ -84,7 +96,7 @@ export default function DashboardPage() {
     { label: 'Alertas pendentes', value: alertasPendentes, icon: AlertTriangle, color: 'text-status-danger' },
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
-    { label: 'Ativos na carteira', value: mockPosicoes.length, icon: Briefcase, color: 'text-foreground' },
+    { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
     { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
