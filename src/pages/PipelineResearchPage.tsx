@@ -246,19 +246,27 @@ export default function PipelineResearchPage() {
     setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
   };
 
+  const entregarAnalise = useMemo(() => {
+    if (!entregarModal) return null;
+    return analisesComStatus.find(a => a.id === entregarModal) || null;
+  }, [entregarModal, analisesComStatus]);
+
+  const isAcoes = entregarAnalise?.tipo === 'Ações';
+
   const handleEntregar = () => {
-    if (!entregarModal || !relatorio.trim() || !recomendacao) return;
+    if (!entregarModal || !relatorio.trim()) return;
+    if (isAcoes && !recomendacao) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
       extras: {
         relatorio,
         data_conclusao: new Date().toISOString().split('T')[0],
-        recomendacao,
-        preco_min: precoMin ? parseFloat(precoMin) : null,
-        preco_medio: precoMedio ? parseFloat(precoMedio) : null,
-        preco_maximo: precoMaximo ? parseFloat(precoMaximo) : null,
-        data_alvo: dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
+        recomendacao: isAcoes ? recomendacao : null,
+        preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
+        preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
+        preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
+        data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
     setEntregarModal(null);
