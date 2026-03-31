@@ -97,6 +97,23 @@ export default function PosicoesPage() {
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filtered.length / pageSize);
 
+  const totalAtivos = posicoes.length;
+  const totalFundos = allFunds.length;
+  const totalTipos = allProductClasses.length;
+
+  const byClass = allProductClasses.map(pc => ({
+    name: pc,
+    value: posicoes.filter(p => p.product_class === pc).length,
+  }));
+
+  const byFund = allFunds.map(f => ({
+    name: f.length > 25 ? f.substring(0, 25) + '…' : f,
+    fullName: f,
+    value: posicoes.filter(p => p.trading_desk_share_source === f).length,
+  }));
+
+  const latestDate = selectedDate;
+
   const fmtNum = (v: number | null) => v === null ? '—' : Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
   const fmtPct = (v: number | null) => v === null ? '—' : (Number(v) * 100).toFixed(2) + '%';
   const fmtDate = (d: string | null) => {
