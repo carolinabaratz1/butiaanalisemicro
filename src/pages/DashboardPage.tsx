@@ -187,8 +187,10 @@ export default function DashboardPage() {
   // Gestor widget data — from Supabase
   const totalPendentes = pipelineCounts?.pendente ?? 0;
   const totalEmAnalise2 = pipelineCounts?.emAnalise ?? 0;
-  const totalConcluidos = pipelineCounts?.concluido ?? 0;
-  const totalRejeitados = pipelineCounts?.rejeitado ?? 0;
+  const totalConcluidas = pipelineCounts?.concluida ?? 0;
+  const totalAprovadas = pipelineCounts?.aprovada ?? 0;
+  const totalReprovadas = pipelineCounts?.reprovada ?? 0;
+  const totalVencidas = pipelineCounts?.vencida ?? 0;
   const vencidas = analisesEmissao.filter(a => (a.status === 'pendente' || a.status === 'em_analise') && a.prazo < hoje);
 
   const analistasPendentes = users
