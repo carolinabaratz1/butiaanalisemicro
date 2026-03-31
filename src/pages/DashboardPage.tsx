@@ -172,11 +172,11 @@ export default function DashboardPage() {
     .sort((a, b) => a.prazo.localeCompare(b.prazo))
     .slice(0, 5);
 
-  // Gestor widget data
-  const totalPendentes = analisesEmissao.filter(a => a.status === 'pendente').length;
-  const totalEmAnalise = analisesEmissao.filter(a => a.status === 'em_analise').length;
-  const totalConcluidos = analisesEmissao.filter(a => a.status === 'concluido').length;
-  const totalRejeitados = analisesEmissao.filter(a => a.status === 'rejeitado').length;
+  // Gestor widget data — from Supabase
+  const totalPendentes = pipelineCounts?.pendente ?? 0;
+  const totalEmAnalise2 = pipelineCounts?.emAnalise ?? 0;
+  const totalConcluidos = pipelineCounts?.concluido ?? 0;
+  const totalRejeitados = pipelineCounts?.rejeitado ?? 0;
   const vencidas = analisesEmissao.filter(a => (a.status === 'pendente' || a.status === 'em_analise') && a.prazo < hoje);
 
   const analistasPendentes = users
