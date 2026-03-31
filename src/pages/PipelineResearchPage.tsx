@@ -246,19 +246,27 @@ export default function PipelineResearchPage() {
     setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
   };
 
+  const entregarAnalise = useMemo(() => {
+    if (!entregarModal) return null;
+    return analisesComStatus.find(a => a.id === entregarModal) || null;
+  }, [entregarModal, analisesComStatus]);
+
+  const isAcoes = entregarAnalise?.tipo === 'Ações';
+
   const handleEntregar = () => {
-    if (!entregarModal || !relatorio.trim() || !recomendacao) return;
+    if (!entregarModal || !relatorio.trim()) return;
+    if (isAcoes && !recomendacao) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
       extras: {
         relatorio,
         data_conclusao: new Date().toISOString().split('T')[0],
-        recomendacao,
-        preco_min: precoMin ? parseFloat(precoMin) : null,
-        preco_medio: precoMedio ? parseFloat(precoMedio) : null,
-        preco_maximo: precoMaximo ? parseFloat(precoMaximo) : null,
-        data_alvo: dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
+        recomendacao: isAcoes ? recomendacao : null,
+        preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
+        preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
+        preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
+        data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
     setEntregarModal(null);
@@ -324,6 +332,27 @@ export default function PipelineResearchPage() {
     if (!item || item.displayStatus === targetStatus) {
       setDraggedId(null);
       return;
+    }
+
+    // Analyst restrictions: can only do Pendente→Em Análise, Em Análise→Concluída, Em Análise→Pendente
+    if (isAnalista) {
+      const from = item.displayStatus;
+      const allowed =
+        (from === 'Pendente' && targetStatus === 'Em Análise') ||
+        (from === 'Em Análise' && targetStatus === 'Concluída') ||
+        (from === 'Em Análise' && targetStatus === 'Pendente');
+      if (!allowed) {
+        toast({ title: 'Ação não permitida', description: 'Analistas só podem iniciar, entregar ou devolver análises.', variant: 'destructive' });
+        setDraggedId(null);
+        return;
+      }
+      // Em Análise → Pendente opens rejection modal
+      if (from === 'Em Análise' && targetStatus === 'Pendente') {
+        setRejeitarAnalistaModal(draggedId);
+        setJustificativaRejeicao('');
+        setDraggedId(null);
+        return;
+      }
     }
 
     if (targetStatus === 'Concluída') {
@@ -742,54 +771,62 @@ export default function PipelineResearchPage() {
       <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Entregar Análise</DialogTitle>
-            <DialogDescription>Preencha o relatório, recomendação e preços sugeridos para concluir.</DialogDescription>
+            <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id)}` : ''}</DialogTitle>
+            <DialogDescription>
+              {isAcoes
+                ? 'Preencha o relatório, recomendação e preços sugeridos para concluir.'
+                : 'Preencha o relatório para concluir a análise.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Relatório (obrigatório)</Label>
               <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
             </div>
-            <div>
-              <Label className="text-xs">Recomendação (obrigatório)</Label>
-              <Select value={recomendacao} onValueChange={setRecomendacao}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="Buy">Buy</SelectItem>
-                  <SelectItem value="Hold">Hold</SelectItem>
-                  <SelectItem value="Sell">Sell</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <Label className="text-xs">Preço Mín.</Label>
-                <Input type="number" step="0.01" value={precoMin} onChange={e => setPrecoMin(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
-              </div>
-              <div>
-                <Label className="text-xs">Preço Médio</Label>
-                <Input type="number" step="0.01" value={precoMedio} onChange={e => setPrecoMedio(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
-              </div>
-              <div>
-                <Label className="text-xs">Preço Máx.</Label>
-                <Input type="number" step="0.01" value={precoMaximo} onChange={e => setPrecoMaximo(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs">Data-Alvo</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataAlvo && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                    {dataAlvo ? format(dataAlvo, 'dd/MM/yyyy') : 'Selecionar data'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dataAlvo} onSelect={setDataAlvo} className="p-3 pointer-events-auto" />
-                </PopoverContent>
-              </Popover>
-            </div>
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !recomendacao || updateStatus.isPending}>
+            {isAcoes && (
+              <>
+                <div>
+                  <Label className="text-xs">Recomendação (obrigatório)</Label>
+                  <Select value={recomendacao} onValueChange={setRecomendacao}>
+                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="Buy">Buy</SelectItem>
+                      <SelectItem value="Hold">Hold</SelectItem>
+                      <SelectItem value="Sell">Sell</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label className="text-xs">Preço Mín.</Label>
+                    <Input type="number" step="0.01" value={precoMin} onChange={e => setPrecoMin(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Preço Médio</Label>
+                    <Input type="number" step="0.01" value={precoMedio} onChange={e => setPrecoMedio(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Preço Máx.</Label>
+                    <Input type="number" step="0.01" value={precoMaximo} onChange={e => setPrecoMaximo(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Data-Alvo</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataAlvo && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {dataAlvo ? format(dataAlvo, 'dd/MM/yyyy') : 'Selecionar data'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dataAlvo} onSelect={setDataAlvo} className="p-3 pointer-events-auto" />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </>
+            )}
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || (isAcoes && !recomendacao) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
             </Button>
