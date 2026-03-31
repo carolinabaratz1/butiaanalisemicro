@@ -271,7 +271,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-4 mb-4">
+            <div className="flex gap-4 mb-4 flex-wrap">
               <div className="text-center">
                 <p className="text-xl font-bold text-status-warning">{totalPendentes}</p>
                 <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
@@ -281,12 +281,20 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-status-success">{totalConcluidos}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Concluído</p>
+                <p className="text-xl font-bold text-muted-foreground">{totalConcluidas}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Concluída</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-status-danger">{totalRejeitados}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Rejeitado</p>
+                <p className="text-xl font-bold text-status-success">{totalAprovadas}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Aprovada</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-status-danger">{totalReprovadas}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Reprovada</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold text-orange-400">{totalVencidas}</p>
+                <p className="text-[10px] text-muted-foreground uppercase">Vencida</p>
               </div>
             </div>
             {vencidas.length > 0 && (

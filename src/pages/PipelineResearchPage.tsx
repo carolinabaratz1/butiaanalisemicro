@@ -272,7 +272,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analises.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.status === 'Concluído' || a.status === 'Rejeitado'))
+    ? analises.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.status === 'Concluída' || a.status === 'Aprovada' || a.status === 'Reprovada' || a.status === 'Vencida'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
