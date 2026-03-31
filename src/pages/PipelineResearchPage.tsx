@@ -12,7 +12,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { emissores, emissoes } from '@/data/emissores';
@@ -55,12 +55,31 @@ const tipoAnaliseColors: Record<string, string> = {
   'Ações': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };
 
+const recomendacaoColors: Record<string, string> = {
+  'Buy': 'bg-status-success/15 text-status-success border-status-success/30',
+  'Hold': 'bg-status-warning/15 text-status-warning border-status-warning/30',
+  'Sell': 'bg-status-danger/15 text-status-danger border-status-danger/30',
+};
+
 function fmtDateBR(d: string | null | undefined): string {
   if (!d) return '—';
   const clean = d.split('T')[0];
   const parts = clean.split('-');
   if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return clean;
+}
+
+function isVencida(status: string, dataConclusao: string | null): boolean {
+  if (status !== 'Aprovada' || !dataConclusao) return false;
+  const conclusao = new Date(dataConclusao.split('T')[0]);
+  const umAnoAtras = new Date();
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+  return conclusao < umAnoAtras;
+}
+
+function getDisplayStatus(status: string, dataConclusao: string | null): AnaliseStatus {
+  if (isVencida(status, dataConclusao)) return 'Vencida';
+  return status as AnaliseStatus;
 }
 
 export default function PipelineResearchPage() {
@@ -84,6 +103,21 @@ export default function PipelineResearchPage() {
   const [novoAnalistaId, setNovoAnalistaId] = useState('');
   const [novoPrazo, setNovoPrazo] = useState<Date>();
   const [novoObs, setNovoObs] = useState('');
+
+  // Entrega (conclusão) extra fields
+  const [recomendacao, setRecomendacao] = useState('');
+  const [precoMin, setPrecoMin] = useState('');
+  const [precoMedio, setPrecoMedio] = useState('');
+  const [precoMaximo, setPrecoMaximo] = useState('');
+  const [dataAlvo, setDataAlvo] = useState<Date>();
+
+  // Rejeição pelo analista (Em Análise → Pendente)
+  const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
+  const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
+
+  // Comitê modal (Aprovada / Reprovada)
+  const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
+  const [dataComite, setDataComite] = useState<Date>();
 
   const isGestor = currentUser.funcao === 'Gestor';
   const isRC = currentUser.funcao === 'Risco e Compliance';
@@ -114,17 +148,13 @@ export default function PipelineResearchPage() {
         .from('posicoes')
         .select('product');
       if (error) throw error;
-      // Return unique product identifiers
       return [...new Set((data || []).map(p => p.product))];
     },
   });
 
-  // Check if an empresa_id (CNPJ) has active positions
   const temPosicaoAtiva = useCallback((cnpj: string) => {
-    // Check if any emissor name or CNPJ matches products in posicoes
     const emissor = emissores.find(e => e.cnpj === cnpj);
     if (!emissor) return false;
-    // Check by nomeAbreviado partial match or CNPJ in products
     return empresasComPosicao.some(product =>
       product.toLowerCase().includes(emissor.nomeAbreviado.toLowerCase().split(' ')[0].toLowerCase()) ||
       product.includes(cnpj)
@@ -157,9 +187,17 @@ export default function PipelineResearchPage() {
     onError: (err: any) => toast({ title: 'Erro ao criar análise', description: err.message, variant: 'destructive' }),
   });
 
+  // ── Apply display status (Vencida) ──
+  const analisesComStatus = useMemo(() => {
+    return analises.map(a => ({
+      ...a,
+      displayStatus: getDisplayStatus(a.status, a.data_conclusao),
+    }));
+  }, [analises]);
+
   // ── Filters ──
   const filtered = useMemo(() => {
-    let items = [...analises];
+    let items = [...analisesComStatus];
 
     if (isAnalista) {
       items = items.filter(a => a.analista_responsavel === currentUser.id);
@@ -168,7 +206,7 @@ export default function PipelineResearchPage() {
       items = items.filter(a => a.analista_responsavel === analistaFilter);
     }
     if (prazoFilter === 'vencido') {
-      items = items.filter(a => a.prazo && a.prazo < hoje && (a.status === 'Pendente' || a.status === 'Em Análise'));
+      items = items.filter(a => a.prazo && a.prazo < hoje && (a.displayStatus === 'Pendente' || a.displayStatus === 'Em Análise'));
     } else if (prazoFilter === 'semana') {
       const end = new Date(); end.setDate(end.getDate() + 7);
       const endStr = format(end, 'yyyy-MM-dd');
@@ -188,7 +226,7 @@ export default function PipelineResearchPage() {
     }
 
     return items;
-  }, [analises, isAnalista, currentUser.id, analistaFilter, prazoFilter, search, hoje]);
+  }, [analisesComStatus, isAnalista, currentUser.id, analistaFilter, prazoFilter, search, hoje]);
 
   // ── Handlers ──
   const handleCriar = () => {
@@ -209,14 +247,51 @@ export default function PipelineResearchPage() {
   };
 
   const handleEntregar = () => {
-    if (!entregarModal || !relatorio.trim()) return;
+    if (!entregarModal || !relatorio.trim() || !recomendacao) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
-      extras: { relatorio, data_conclusao: new Date().toISOString().split('T')[0] },
+      extras: {
+        relatorio,
+        data_conclusao: new Date().toISOString().split('T')[0],
+        recomendacao,
+        preco_min: precoMin ? parseFloat(precoMin) : null,
+        preco_medio: precoMedio ? parseFloat(precoMedio) : null,
+        preco_maximo: precoMaximo ? parseFloat(precoMaximo) : null,
+        data_alvo: dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
+      },
     });
     setEntregarModal(null);
-    setRelatorio('');
+    setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
+    setDrawerAnalise(null);
+  };
+
+  const handleRejeitarAnalista = () => {
+    if (!rejeitarAnalistaModal || !justificativaRejeicao.trim()) return;
+    updateStatus.mutate({
+      id: rejeitarAnalistaModal,
+      status: 'Pendente',
+      extras: {
+        justificativa_rejeicao: justificativaRejeicao,
+        data_inicio: null,
+      },
+    });
+    setRejeitarAnalistaModal(null);
+    setJustificativaRejeicao('');
+    setDrawerAnalise(null);
+  };
+
+  const handleComite = () => {
+    if (!comiteModal || !dataComite) return;
+    updateStatus.mutate({
+      id: comiteModal.id,
+      status: comiteModal.targetStatus,
+      extras: {
+        data_comite: format(dataComite, 'yyyy-MM-dd'),
+      },
+    });
+    setComiteModal(null);
+    setDataComite(undefined);
     setDrawerAnalise(null);
   };
 
@@ -245,15 +320,20 @@ export default function PipelineResearchPage() {
   const handleDrop = (e: React.DragEvent, targetStatus: AnaliseStatus) => {
     e.preventDefault();
     if (!draggedId) return;
-    const item = analises.find(a => a.id === draggedId);
-    if (!item || item.status === targetStatus) {
+    const item = analisesComStatus.find(a => a.id === draggedId);
+    if (!item || item.displayStatus === targetStatus) {
       setDraggedId(null);
       return;
     }
 
-    // Validate: if dropping to Concluído, require relatorio
     if (targetStatus === 'Concluída') {
       setEntregarModal(draggedId);
+      setDraggedId(null);
+      return;
+    }
+
+    if (targetStatus === 'Aprovada' || targetStatus === 'Reprovada') {
+      setComiteModal({ id: draggedId, targetStatus });
       setDraggedId(null);
       return;
     }
@@ -262,9 +342,6 @@ export default function PipelineResearchPage() {
     if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
-    if (targetStatus === 'Reprovada') {
-      extras.data_conclusao = new Date().toISOString().split('T')[0];
-    }
 
     updateStatus.mutate({ id: draggedId, status: targetStatus, extras });
     setDraggedId(null);
@@ -272,7 +349,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analises.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.status === 'Concluída' || a.status === 'Aprovada' || a.status === 'Reprovada' || a.status === 'Vencida'))
+    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
@@ -322,7 +399,7 @@ export default function PipelineResearchPage() {
       ) : (
         <div className="grid grid-cols-6 gap-3">
           {columns.map(col => {
-            const items = filtered.filter(a => a.status === col.key);
+            const items = filtered.filter(a => a.displayStatus === col.key);
             return (
               <div
                 key={col.key}
@@ -339,7 +416,7 @@ export default function PipelineResearchPage() {
                   draggedId && "border-2 border-dashed border-primary/30 bg-primary/5"
                 )}>
                   {items.map(item => {
-                    const prazoVencido = item.prazo && item.prazo < hoje && (item.status === 'Pendente' || item.status === 'Em Análise');
+                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
                     const posAtiva = temPosicaoAtiva(item.empresa_id);
                     const isMyAnalise = item.analista_responsavel === currentUser.id;
 
@@ -359,11 +436,16 @@ export default function PipelineResearchPage() {
                           <div className="flex items-center justify-between gap-1">
                             <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
                           </div>
-                          {/* Tipo badge */}
+                          {/* Tipo + recomendacao badges */}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
                               <Badge variant="outline" className={`text-[9px] ${tipoAnaliseColors[item.tipo] || 'bg-muted/30 text-muted-foreground'}`}>
                                 {item.tipo}
+                              </Badge>
+                            )}
+                            {(item as any).recomendacao && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`}>
+                                {(item as any).recomendacao}
                               </Badge>
                             )}
                             {posAtiva && (
@@ -390,19 +472,34 @@ export default function PipelineResearchPage() {
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
-                            {isAnalista && isMyAnalise && item.status === 'Pendente' && (
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } })}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
-                            {isAnalista && isMyAnalise && item.status === 'Em Análise' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
-                                <CheckCircle className="h-2.5 w-2.5" /> Entregar
-                              </Button>
-                            )}
-                            {isGestor && (item.status === 'Pendente' || item.status === 'Em Análise') && (
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Rejeitado', extras: { data_conclusao: new Date().toISOString().split('T')[0] } })}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
+                                  <CheckCircle className="h-2.5 w-2.5" /> Entregar
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setRejeitarAnalistaModal(item.id); setJustificativaRejeicao(''); }}>
+                                  <X className="h-2.5 w-2.5" /> Devolver
+                                </Button>
+                              </>
+                            )}
+                            {isGestor && item.displayStatus === 'Concluída' && (
+                              <>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
+                                  <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                                  <ThumbsDown className="h-2.5 w-2.5" /> Reprovar
+                                </Button>
+                              </>
+                            )}
+                            {isGestor && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
+                              <>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
                                 </Button>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReatribuirModal(item.id); setNovoAnalista(item.analista_responsavel); }}>
@@ -410,8 +507,8 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.status === 'Rejeitado' || item.status === 'Concluído') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente' })}>
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida') && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
                             )}
@@ -447,12 +544,55 @@ export default function PipelineResearchPage() {
                     <Badge variant="outline" className={`text-[10px] mt-0.5 ${tipoAnaliseColors[drawerAnalise.tipo] || ''}`}>{drawerAnalise.tipo}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
-                    <Badge variant="outline" className="text-[10px] mt-0.5">{drawerAnalise.status}</Badge>
+                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao)}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? (users.find(u => u.id === drawerAnalise.solicitante_id)?.nome || drawerAnalise.solicitante_id) : '—'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Início</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_inicio)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Conclusão</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_conclusao)}</p></div>
                 </div>
+
+                {/* Recomendação + Preços */}
+                {drawerAnalise.recomendacao && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
+                      <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[drawerAnalise.recomendacao] || ''}`}>
+                        {drawerAnalise.recomendacao}
+                      </Badge>
+                    </div>
+                    {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-surface-1 p-2 rounded text-center">
+                          <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
+                        </div>
+                        <div className="bg-surface-1 p-2 rounded text-center">
+                          <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
+                        </div>
+                        <div className="bg-surface-1 p-2 rounded text-center">
+                          <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
+                        </div>
+                      </div>
+                    )}
+                    {drawerAnalise.data_alvo && (
+                      <div><p className="text-[10px] text-muted-foreground uppercase">Data-Alvo</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_alvo)}</p></div>
+                    )}
+                  </div>
+                )}
+
+                {/* Data do Comitê */}
+                {drawerAnalise.data_comite && (
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Data do Comitê</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_comite)}</p></div>
+                )}
+
+                {/* Justificativa de rejeição */}
+                {drawerAnalise.justificativa_rejeicao && (
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Justificativa de Devolução</p><p className="text-xs mt-1 text-status-danger">{drawerAnalise.justificativa_rejeicao}</p></div>
+                )}
 
                 {drawerAnalise.observacoes && (
                   <div><p className="text-[10px] text-muted-foreground uppercase">Observações</p><p className="text-xs mt-1">{drawerAnalise.observacoes}</p></div>
@@ -477,17 +617,32 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {isAnalista && drawerAnalise.analista_responsavel === currentUser.id && drawerAnalise.status === 'Em Análise' && (
-                    <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
-                      <CheckCircle className="h-3 w-3" /> Entregar Análise
-                    </Button>
+                    <>
+                      <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
+                        <CheckCircle className="h-3 w-3" /> Entregar Análise
+                      </Button>
+                      <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setRejeitarAnalistaModal(drawerAnalise.id); setJustificativaRejeicao(''); }}>
+                        <X className="h-3 w-3" /> Devolver
+                      </Button>
+                    </>
+                  )}
+                  {isGestor && drawerAnalise.status === 'Concluída' && (
+                    <>
+                      <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
+                        <ThumbsUp className="h-3 w-3" /> Aprovar
+                      </Button>
+                      <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                        <ThumbsDown className="h-3 w-3" /> Reprovar
+                      </Button>
+                    </>
                   )}
                   {isGestor && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
-                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Rejeitado', extras: { data_conclusao: new Date().toISOString().split('T')[0] } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Rejeitado' || drawerAnalise.status === 'Concluído') && (
-                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente' }); setDrawerAnalise(null); }}>
+                  {isGestor && (drawerAnalise.status === 'Reprovada' || getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao) === 'Vencida') && (
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
                   )}
@@ -503,9 +658,12 @@ export default function PipelineResearchPage() {
                     <div key={h.id} className="p-2 rounded-md bg-surface-1 mb-2 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] text-muted-foreground">{fmtDateBR(h.data_conclusao)}</span>
-                        <Badge variant="outline" className="text-[9px]">{h.status}</Badge>
+                        <Badge variant="outline" className="text-[9px]">{h.displayStatus}</Badge>
                       </div>
                       <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel)}</p>
+                      {(h as any).recomendacao && (
+                        <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(h as any).recomendacao] || ''}`}>{(h as any).recomendacao}</Badge>
+                      )}
                       {h.relatorio && <p className="text-[11px] text-muted-foreground">{String(h.relatorio).slice(0, 200)}{String(h.relatorio).length > 200 ? '...' : ''}</p>}
                     </div>
                   ))}
@@ -580,21 +738,116 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Entregar Modal */}
-      <Dialog open={!!entregarModal} onOpenChange={() => setEntregarModal(null)}>
-        <DialogContent className="max-w-md bg-card border-border">
+      {/* Entregar Modal (Conclusão) */}
+      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
+        <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle>Entregar Análise</DialogTitle>
-            <DialogDescription>O relatório é obrigatório para concluir a análise.</DialogDescription>
+            <DialogDescription>Preencha o relatório, recomendação e preços sugeridos para concluir.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Relatório (obrigatório)</Label>
-              <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={6} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
+              <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
             </div>
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || updateStatus.isPending}>
+            <div>
+              <Label className="text-xs">Recomendação (obrigatório)</Label>
+              <Select value={recomendacao} onValueChange={setRecomendacao}>
+                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="Buy">Buy</SelectItem>
+                  <SelectItem value="Hold">Hold</SelectItem>
+                  <SelectItem value="Sell">Sell</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <Label className="text-xs">Preço Mín.</Label>
+                <Input type="number" step="0.01" value={precoMin} onChange={e => setPrecoMin(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+              </div>
+              <div>
+                <Label className="text-xs">Preço Médio</Label>
+                <Input type="number" step="0.01" value={precoMedio} onChange={e => setPrecoMedio(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+              </div>
+              <div>
+                <Label className="text-xs">Preço Máx.</Label>
+                <Input type="number" step="0.01" value={precoMaximo} onChange={e => setPrecoMaximo(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Data-Alvo</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataAlvo && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {dataAlvo ? format(dataAlvo, 'dd/MM/yyyy') : 'Selecionar data'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dataAlvo} onSelect={setDataAlvo} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !recomendacao || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejeição pelo Analista Modal (Em Análise → Pendente) */}
+      <Dialog open={!!rejeitarAnalistaModal} onOpenChange={() => { setRejeitarAnalistaModal(null); setJustificativaRejeicao(''); }}>
+        <DialogContent className="max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Devolver Análise</DialogTitle>
+            <DialogDescription>Informe a justificativa para devolver esta análise. Ela voltará ao status Pendente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Justificativa (obrigatória)</Label>
+              <Textarea value={justificativaRejeicao} onChange={e => setJustificativaRejeicao(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
+            </div>
+            <Button size="sm" className="w-full" variant="destructive" onClick={handleRejeitarAnalista} disabled={!justificativaRejeicao.trim() || updateStatus.isPending}>
+              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Devolução
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Comitê Modal (Aprovar / Reprovar) */}
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); }}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
+            <DialogDescription>Informe a data do Comitê de Investimentos em que a decisão foi tomada.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Data do Comitê (obrigatória)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {dataComite ? format(dataComite, 'dd/MM/yyyy') : 'Selecionar data'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dataComite} onSelect={setDataComite} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              size="sm"
+              className="w-full"
+              variant={comiteModal?.targetStatus === 'Aprovada' ? 'default' : 'destructive'}
+              onClick={handleComite}
+              disabled={!dataComite || updateStatus.isPending}
+            >
+              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}
             </Button>
           </div>
         </DialogContent>

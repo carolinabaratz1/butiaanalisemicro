@@ -21,7 +21,9 @@ export type Database = {
           aprovado_por: string | null
           conviccao: string | null
           created_at: string
+          data_alvo: string | null
           data_aprovacao: string | null
+          data_comite: string | null
           data_conclusao: string | null
           data_inicio: string
           decisao: string | null
@@ -30,8 +32,13 @@ export type Database = {
           id: string
           isin: string | null
           justificativa: string | null
+          justificativa_rejeicao: string | null
           observacoes: string | null
           prazo: string | null
+          preco_maximo: number | null
+          preco_medio: number | null
+          preco_min: number | null
+          recomendacao: string | null
           relatorio: string | null
           riscos: string | null
           solicitante_id: string | null
@@ -46,7 +53,9 @@ export type Database = {
           aprovado_por?: string | null
           conviccao?: string | null
           created_at?: string
+          data_alvo?: string | null
           data_aprovacao?: string | null
+          data_comite?: string | null
           data_conclusao?: string | null
           data_inicio: string
           decisao?: string | null
@@ -55,8 +64,13 @@ export type Database = {
           id?: string
           isin?: string | null
           justificativa?: string | null
+          justificativa_rejeicao?: string | null
           observacoes?: string | null
           prazo?: string | null
+          preco_maximo?: number | null
+          preco_medio?: number | null
+          preco_min?: number | null
+          recomendacao?: string | null
           relatorio?: string | null
           riscos?: string | null
           solicitante_id?: string | null
@@ -71,7 +85,9 @@ export type Database = {
           aprovado_por?: string | null
           conviccao?: string | null
           created_at?: string
+          data_alvo?: string | null
           data_aprovacao?: string | null
+          data_comite?: string | null
           data_conclusao?: string | null
           data_inicio?: string
           decisao?: string | null
@@ -80,8 +96,13 @@ export type Database = {
           id?: string
           isin?: string | null
           justificativa?: string | null
+          justificativa_rejeicao?: string | null
           observacoes?: string | null
           prazo?: string | null
+          preco_maximo?: number | null
+          preco_medio?: number | null
+          preco_min?: number | null
+          recomendacao?: string | null
           relatorio?: string | null
           riscos?: string | null
           solicitante_id?: string | null
