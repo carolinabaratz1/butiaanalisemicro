@@ -263,7 +263,7 @@ export default function DashboardPage() {
                 <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-status-info">{totalEmAnalise}</p>
+                <p className="text-xl font-bold text-status-info">{totalEmAnalise2}</p>
                 <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
               </div>
               <div className="text-center">
