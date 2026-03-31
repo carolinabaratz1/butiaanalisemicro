@@ -96,7 +96,7 @@ export default function DashboardPage() {
     { label: 'Alertas pendentes', value: alertasPendentes, icon: AlertTriangle, color: 'text-status-danger' },
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
-    { label: 'Ativos na carteira', value: mockPosicoes.length, icon: Briefcase, color: 'text-foreground' },
+    { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
     { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
