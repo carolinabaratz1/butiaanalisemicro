@@ -262,7 +262,7 @@ export default function PipelineResearchPage() {
     if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
-    if (targetStatus === 'Rejeitado') {
+    if (targetStatus === 'Reprovada') {
       extras.data_conclusao = new Date().toISOString().split('T')[0];
     }
 
