@@ -10,25 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { analistas } from '@/data/analistas';
 
-interface AnaliseRow {
-  id: string;
-  empresa_id: string;
-  tipo: string;
-  analista_responsavel: string;
-  analista_secundario: string | null;
-  data_inicio: string;
-  data_conclusao: string | null;
-  status: string;
-  decisao: string | null;
-  conviccao: string | null;
-  riscos: string;
-  gatilhos: string;
-  justificativa: string;
-  versao: number;
-  aprovado_por: string | null;
-  data_aprovacao: string | null;
-}
-
 const statusClass: Record<string, string> = {
   'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
   'Em Análise': 'bg-status-info/15 text-status-info border-status-info/30',
@@ -36,6 +17,12 @@ const statusClass: Record<string, string> = {
   'Aprovada': 'bg-status-success/15 text-status-success border-status-success/30',
   'Reprovada': 'bg-status-danger/15 text-status-danger border-status-danger/30',
   'Vencida': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+};
+
+const recomendacaoColors: Record<string, string> = {
+  'Buy': 'bg-status-success/15 text-status-success border-status-success/30',
+  'Hold': 'bg-status-warning/15 text-status-warning border-status-warning/30',
+  'Sell': 'bg-status-danger/15 text-status-danger border-status-danger/30',
 };
 
 function fmtDateBR(d: string | null | undefined): string {
@@ -69,9 +56,8 @@ export default function AnalisesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
   const [analistaFilter, setAnalistaFilter] = useState('all');
-  const [selected, setSelected] = useState<AnaliseRow | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
 
-  // Fetch empresas from Supabase for name resolution
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-lookup'],
     queryFn: async () => {
@@ -94,7 +80,7 @@ export default function AnalisesPage() {
         .select('*')
         .order('data_inicio', { ascending: false });
       if (error) throw error;
-      return (data || []) as AnaliseRow[];
+      return data || [];
     },
   });
 
@@ -170,7 +156,8 @@ export default function AnalisesPage() {
                   <TableHead className="text-[11px] h-9">Início</TableHead>
                   <TableHead className="text-[11px] h-9">Conclusão</TableHead>
                   <TableHead className="text-[11px] h-9">Status</TableHead>
-                  <TableHead className="text-[11px] h-9">Decisão</TableHead>
+                  <TableHead className="text-[11px] h-9">Recomendação</TableHead>
+                  <TableHead className="text-[11px] h-9">Comitê</TableHead>
                   <TableHead className="text-[11px] h-9">Versão</TableHead>
                   <TableHead className="text-[11px] h-9 w-10"></TableHead>
                 </TableRow>
@@ -186,7 +173,12 @@ export default function AnalisesPage() {
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_inicio)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_conclusao)}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></TableCell>
-                      <TableCell className="text-sm py-2">{a.decisao || '—'}</TableCell>
+                      <TableCell className="py-2">
+                        {a.recomendacao ? (
+                          <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[a.recomendacao] || ''}`}>{a.recomendacao}</Badge>
+                        ) : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_comite)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">v{a.versao}</TableCell>
                       <TableCell className="py-2">
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelected(a)}>
@@ -221,12 +213,49 @@ export default function AnalisesPage() {
                     <div><span className="text-muted-foreground text-xs">Conclusão:</span> <span>{fmtDateBR(selected.data_conclusao)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Decisão:</span> <span>{selected.decisao || '—'}</span></div>
                     <div><span className="text-muted-foreground text-xs">Convicção:</span> <span>{selected.conviccao || '—'}</span></div>
+                    {selected.data_comite && <div><span className="text-muted-foreground text-xs">Data do Comitê:</span> <span>{fmtDateBR(selected.data_comite)}</span></div>}
                     {selected.aprovado_por && <div><span className="text-muted-foreground text-xs">Aprovado por:</span> <span>{selected.aprovado_por}</span></div>}
                     {selected.data_aprovacao && <div><span className="text-muted-foreground text-xs">Data aprovação:</span> <span>{fmtDateBR(selected.data_aprovacao)}</span></div>}
                   </div>
+
+                  {/* Recomendação + Preços */}
+                  {selected.recomendacao && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground text-xs">Recomendação:</span>
+                        <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[selected.recomendacao] || ''}`}>{selected.recomendacao}</Badge>
+                      </div>
+                      {(selected.preco_min || selected.preco_medio || selected.preco_maximo) && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Preço Mín.</p>
+                            <p className="text-sm font-medium">{selected.preco_min ? `R$ ${Number(selected.preco_min).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Preço Médio</p>
+                            <p className="text-sm font-medium">{selected.preco_medio ? `R$ ${Number(selected.preco_medio).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Preço Máx.</p>
+                            <p className="text-sm font-medium">{selected.preco_maximo ? `R$ ${Number(selected.preco_maximo).toFixed(2)}` : '—'}</p>
+                          </div>
+                        </div>
+                      )}
+                      {selected.data_alvo && (
+                        <div><span className="text-muted-foreground text-xs">Data-Alvo:</span> <span>{fmtDateBR(selected.data_alvo)}</span></div>
+                      )}
+                    </div>
+                  )}
+
+                  {selected.justificativa_rejeicao && (
+                    <div><p className="text-xs text-muted-foreground mb-1">Justificativa de Devolução:</p><p className="text-sm bg-surface-1 p-2 rounded text-status-danger">{selected.justificativa_rejeicao}</p></div>
+                  )}
                   <div><p className="text-xs text-muted-foreground mb-1">Riscos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.riscos || '—'}</p></div>
                   <div><p className="text-xs text-muted-foreground mb-1">Gatilhos:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.gatilhos || '—'}</p></div>
                   <div><p className="text-xs text-muted-foreground mb-1">Justificativa:</p><p className="text-sm bg-surface-1 p-2 rounded">{selected.justificativa || '—'}</p></div>
+                  {selected.relatorio && (
+                    <div><p className="text-xs text-muted-foreground mb-1">Relatório:</p><p className="text-sm bg-surface-1 p-2 rounded whitespace-pre-wrap">{selected.relatorio}</p></div>
+                  )}
                   {versions.length > 1 && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
@@ -238,6 +267,7 @@ export default function AnalisesPage() {
                               <span className="font-medium">v{v.versao}</span>
                               <Badge variant="outline" className={`text-[9px] ${statusClass[vStatus] || ''}`}>{vStatus}</Badge>
                               <span className="text-muted-foreground">{fmtDateBR(v.data_inicio)}</span>
+                              {v.recomendacao && <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[v.recomendacao] || ''}`}>{v.recomendacao}</Badge>}
                             </div>
                           );
                         })}
