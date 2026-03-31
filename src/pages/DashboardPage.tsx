@@ -115,7 +115,7 @@ export default function DashboardPage() {
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
     { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
+    { label: 'Sem análise vinculada', value: semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
 
