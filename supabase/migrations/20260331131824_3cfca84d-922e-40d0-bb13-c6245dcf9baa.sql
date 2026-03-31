@@ -1,0 +1,2 @@
+ALTER TABLE public.analises DROP CONSTRAINT IF EXISTS analises_status_check;
+ALTER TABLE public.analises ADD CONSTRAINT analises_status_check CHECK (status IN ('Pendente', 'Em Análise', 'Concluído', 'Rejeitado'));
