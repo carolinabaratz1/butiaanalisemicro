@@ -53,6 +53,14 @@ const tipoAnaliseColors: Record<string, string> = {
   'Ações': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };
 
+function fmtDateBR(d: string | null | undefined): string {
+  if (!d) return '—';
+  const clean = d.split('T')[0];
+  const parts = clean.split('-');
+  if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return clean;
+}
+
 export default function PipelineResearchPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
