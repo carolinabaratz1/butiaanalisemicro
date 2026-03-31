@@ -92,6 +92,39 @@ export type Database = {
         }
         Relationships: []
       }
+      empresas: {
+        Row: {
+          cnpj: string
+          created_at: string
+          id: string
+          nome: string
+          rating: string | null
+          setor: string | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          id?: string
+          nome: string
+          rating?: string | null
+          setor?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          rating?: string | null
+          setor?: string | null
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       posicoes: {
         Row: {
           amount: number
