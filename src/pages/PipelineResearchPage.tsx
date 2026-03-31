@@ -326,6 +326,27 @@ export default function PipelineResearchPage() {
       return;
     }
 
+    // Analyst restrictions: can only do Pendente→Em Análise, Em Análise→Concluída, Em Análise→Pendente
+    if (isAnalista) {
+      const from = item.displayStatus;
+      const allowed =
+        (from === 'Pendente' && targetStatus === 'Em Análise') ||
+        (from === 'Em Análise' && targetStatus === 'Concluída') ||
+        (from === 'Em Análise' && targetStatus === 'Pendente');
+      if (!allowed) {
+        toast({ title: 'Ação não permitida', description: 'Analistas só podem iniciar, entregar ou devolver análises.', variant: 'destructive' });
+        setDraggedId(null);
+        return;
+      }
+      // Em Análise → Pendente opens rejection modal
+      if (from === 'Em Análise' && targetStatus === 'Pendente') {
+        setRejeitarAnalistaModal(draggedId);
+        setJustificativaRejeicao('');
+        setDraggedId(null);
+        return;
+      }
+    }
+
     if (targetStatus === 'Concluída') {
       setEntregarModal(draggedId);
       setDraggedId(null);
