@@ -23,13 +23,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluído' | 'Rejeitado';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
   { key: 'Em Análise', label: 'Em Análise', color: 'text-status-info' },
-  { key: 'Concluído', label: 'Concluído', color: 'text-status-success' },
-  { key: 'Rejeitado', label: 'Rejeitado', color: 'text-status-danger' },
+  { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
+  { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
+  { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
+  { key: 'Vencida', label: 'Vencida', color: 'text-orange-400' },
 ];
 
 function getEmissorNome(cnpj: string) {
@@ -210,7 +212,7 @@ export default function PipelineResearchPage() {
     if (!entregarModal || !relatorio.trim()) return;
     updateStatus.mutate({
       id: entregarModal,
-      status: 'Concluído',
+      status: 'Concluída',
       extras: { relatorio, data_conclusao: new Date().toISOString().split('T')[0] },
     });
     setEntregarModal(null);
@@ -250,7 +252,7 @@ export default function PipelineResearchPage() {
     }
 
     // Validate: if dropping to Concluído, require relatorio
-    if (targetStatus === 'Concluído') {
+    if (targetStatus === 'Concluída') {
       setEntregarModal(draggedId);
       setDraggedId(null);
       return;
@@ -260,7 +262,7 @@ export default function PipelineResearchPage() {
     if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
-    if (targetStatus === 'Rejeitado') {
+    if (targetStatus === 'Reprovada') {
       extras.data_conclusao = new Date().toISOString().split('T')[0];
     }
 
@@ -270,7 +272,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analises.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.status === 'Concluído' || a.status === 'Rejeitado'))
+    ? analises.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.status === 'Concluída' || a.status === 'Aprovada' || a.status === 'Reprovada' || a.status === 'Vencida'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
@@ -318,7 +320,7 @@ export default function PipelineResearchPage() {
           <span className="ml-2 text-sm text-muted-foreground">Carregando pipeline...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-6 gap-3">
           {columns.map(col => {
             const items = filtered.filter(a => a.status === col.key);
             return (
