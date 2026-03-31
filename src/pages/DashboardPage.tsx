@@ -6,6 +6,7 @@ import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, ins
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
 import { users } from '@/data/users';
+import { emissores } from '@/data/emissores';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
