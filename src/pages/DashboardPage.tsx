@@ -136,7 +136,7 @@ export default function DashboardPage() {
   const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
   const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
   const alertasPendentes = 3;
-  const coberturaAtiva = totalEmpresas ?? 0;
+  const coberturaAtiva = portfolioStats?.cobertura ?? 0;
   const alertasCreditoEstruturado = monitoramentosFIDC.filter(m => m.statusCovenants !== 'OK').length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : 'Não';
@@ -149,7 +149,7 @@ export default function DashboardPage() {
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
     { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
+    { label: 'Sem análise vinculada', value: portfolioStats?.semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
     { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
   ];
 
