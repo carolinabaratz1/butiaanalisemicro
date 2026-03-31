@@ -381,9 +381,9 @@ export default function PipelineResearchPage() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className={`text-[10px] ${prazoVencido ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>
-                              {item.prazo ? `Prazo: ${item.prazo}` : ''}
+                              {item.prazo ? `Prazo: ${fmtDateBR(item.prazo)}` : ''}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">{item.created_at?.split('T')[0]}</span>
+                            <span className="text-[10px] text-muted-foreground">{fmtDateBR(item.created_at)}</span>
                           </div>
 
                           {/* Quick actions */}
