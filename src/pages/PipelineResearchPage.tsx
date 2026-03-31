@@ -500,7 +500,7 @@ export default function PipelineResearchPage() {
                   {historico.map(h => (
                     <div key={h.id} className="p-2 rounded-md bg-surface-1 mb-2 space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-muted-foreground">{h.data_conclusao?.split('T')[0]}</span>
+                        <span className="text-[11px] text-muted-foreground">{fmtDateBR(h.data_conclusao)}</span>
                         <Badge variant="outline" className="text-[9px]">{h.status}</Badge>
                       </div>
                       <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel)}</p>
