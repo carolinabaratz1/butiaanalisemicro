@@ -236,6 +236,7 @@ export type Database = {
           email: string
           funcao: string
           id: string
+          must_change_password: boolean
           nome: string
           status: string
         }
@@ -244,6 +245,7 @@ export type Database = {
           email: string
           funcao?: string
           id: string
+          must_change_password?: boolean
           nome: string
           status?: string
         }
@@ -252,6 +254,7 @@ export type Database = {
           email?: string
           funcao?: string
           id?: string
+          must_change_password?: boolean
           nome?: string
           status?: string
         }
