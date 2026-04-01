@@ -281,8 +281,8 @@ export default function PosicoesPage() {
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
-    return biFiltered.filter(p => p.analiseStatus === drillStatus);
-  }, [biFiltered, drillStatus]);
+    return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
+  }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
