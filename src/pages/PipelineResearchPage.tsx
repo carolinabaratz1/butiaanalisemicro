@@ -125,9 +125,9 @@ export default function PipelineResearchPage() {
   const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
 
-  const isGestor = currentUser.funcao === 'Gestor';
-  const isRC = currentUser.funcao === 'Risco e Compliance';
-  const isAnalista = currentUser.funcao === 'Analista';
+  const isGestor = currentUser?.funcao === 'Gestor';
+  const isRC = currentUser?.funcao === 'Risco e Compliance';
+  const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isRC;
 
   const analistasAtivos = catalogoAnalistas.filter(a => a.ativo);
