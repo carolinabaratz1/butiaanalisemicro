@@ -1,4 +1,4 @@
-export type UserRole = 'Gestor' | 'Analista' | 'Risco e Compliance' | 'Consulta';
+export type UserRole = 'Gestor' | 'Coordenação/Especialista' | 'Analista' | 'Risco e Compliance' | 'Consulta';
 
 export interface User {
   id: string;
