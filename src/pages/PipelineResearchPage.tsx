@@ -78,8 +78,13 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null): AnaliseStatus {
-  if (isVencida(status, dataConclusao)) return 'Vencida';
+function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean): AnaliseStatus {
+  if (isVencida(status, dataConclusao)) {
+    if (empresaId && temPosicaoFn) {
+      return temPosicaoFn(empresaId) ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
+    }
+    return 'Vencida s/ Alocação';
+  }
   return status as AnaliseStatus;
 }
 
