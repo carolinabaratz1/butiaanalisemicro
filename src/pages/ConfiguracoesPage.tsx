@@ -45,6 +45,9 @@ export default function ConfiguracoesPage() {
   const [newUser, setNewUser] = useState({ nome: '', email: '', senha: '', funcao: 'Analista' });
   const [creating, setCreating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ userId: string; userName: string; action: 'deactivate' | 'reactivate' } | null>(null);
+  const [resetDialog, setResetDialog] = useState<{ userId: string; userName: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const fetchUsers = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome');
