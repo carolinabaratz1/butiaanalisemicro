@@ -1,49 +1,49 @@
 
 
-## Plano: Adicionar exclusão de análise + Corrigir função Reabrir
+## Plano: Reabrir com histórico + Melhorar UX de exclusão
 
-### Problema 1: Exclusão não existe
-Não há botão nem lógica para excluir análises. Além disso, a tabela `analises` não possui política RLS para DELETE — qualquer tentativa falharia silenciosamente.
+### Problema 1: Reabrir apaga o histórico
+Atualmente, "Reabrir" limpa os campos da análise existente, perdendo o histórico. O correto é **manter a análise original** (como registro histórico) e **criar uma nova análise** para a mesma empresa, incrementando a versão.
 
-### Problema 2: Reabrir não funciona
-A mutação `updateStatus` envia `data_inicio: null, data_conclusao: null, data_comite: null` no update. O problema é que o Supabase ignora campos `null` em updates quando a coluna já tem valor — preciso garantir que o update está enviando corretamente. Vou investigar se o `.update()` do Supabase está tratando `null` vs `undefined` corretamente e se o status está sendo atualizado.
+### Problema 2: Lixeira aparente nos cards
+O ícone de lixeira está visível diretamente nos cards, poluindo a interface. Deve ser mais discreto e acessível apenas ao Gestor.
 
-### Mudanças
+### Mudanças em `src/pages/PipelineResearchPage.tsx`
 
-**1. Migration: adicionar política DELETE na tabela `analises`**
+**1. Reabrir → criar nova análise + manter original**
 
-```sql
-CREATE POLICY "Authenticated users can delete analises"
-ON public.analises FOR DELETE TO authenticated USING (true);
-```
-
-Restrito a usuários autenticados. O controle fino (só Gestor pode excluir) será feito no frontend.
-
-**2. Adicionar mutação `deleteAnalise` em `PipelineResearchPage.tsx`**
+Ao clicar "Reabrir" em uma análise Reprovada/Vencida:
+- A análise original permanece inalterada no banco (registro histórico)
+- Uma nova análise é criada via `insert` com os mesmos dados base (`empresa_id`, `tipo`, `analista_responsavel`, `isin`), status `Pendente`, `data_inicio` = hoje, e `versao` incrementada
+- Toast confirma: "Nova análise v{N} criada"
 
 ```typescript
-const deleteAnalise = useMutation({
-  mutationFn: async (id: string) => {
-    const { error } = await supabase.from('analises').delete().eq('id', id);
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
-    toast({ title: 'Análise excluída' });
-  },
+// Pseudocódigo
+const original = analises.find(a => a.id === id);
+const novaVersao = (original.versao || 1) + 1;
+await supabase.from('analises').insert({
+  empresa_id: original.empresa_id,
+  tipo: original.tipo,
+  analista_responsavel: original.analista_responsavel,
+  isin: original.isin,
+  status: 'Pendente',
+  data_inicio: hoje,
+  versao: novaVersao,
+  solicitante_id: currentUser.id,
 });
 ```
 
-**3. Adicionar botão "Excluir" nos cards**
-- Visível apenas para Gestor
-- Com confirmação via `AlertDialog` antes de excluir
-- Disponível em todos os status (com ícone de lixeira)
+**2. Mover excluir para menu contextual (três pontos)**
 
-**4. Corrigir função Reabrir**
-- Investigar e corrigir o update para garantir que os campos `data_inicio`, `data_conclusao` e `data_comite` sejam efetivamente limpos (null)
-- Garantir invalidação correta do cache após mutação
+- Remover o ícone de `Trash2` visível nos cards
+- Adicionar um `DropdownMenu` com ícone `MoreVertical` (⋮) no canto do card, visível apenas para **Gestor**
+- Dentro do menu: opção "Excluir" com ícone de lixeira e cor vermelha
+- Manter o `AlertDialog` de confirmação existente
 
-### Arquivos modificados
-- 1 migration SQL (política DELETE)
-- `src/pages/PipelineResearchPage.tsx` (delete mutation + botão + fix reabrir)
+**3. Exibir versão no card**
+
+- Quando `versao > 1`, mostrar badge "v{N}" no card para indicar que é uma reanálise
+
+### Arquivo modificado
+- `src/pages/PipelineResearchPage.tsx`
 
