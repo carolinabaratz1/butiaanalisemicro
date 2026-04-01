@@ -23,6 +23,7 @@ interface ProfileUser {
 
 const roleColors: Record<string, string> = {
   'Gestor': 'bg-green-500/20 text-green-400 border-green-500/30',
+  'Coordenação/Especialista': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   'Analista': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   'Risco e Compliance': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   'Consulta': 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30',
@@ -30,6 +31,7 @@ const roleColors: Record<string, string> = {
 
 const roleIcons: Record<string, typeof Shield> = {
   'Gestor': UserCog,
+  'Coordenação/Especialista': UserCog,
   'Analista': Pencil,
   'Risco e Compliance': Shield,
   'Consulta': Eye,
