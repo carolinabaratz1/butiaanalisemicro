@@ -11,6 +11,7 @@ interface AnalistaProfile {
   email: string;
   status: string;
   created_at: string;
+  funcao: string;
 }
 
 export default function AnalistasPage() {
@@ -23,8 +24,8 @@ export default function AnalistasPage() {
       // Fetch analysts from profiles
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, nome, email, status, created_at')
-        .eq('funcao', 'Analista')
+        .select('id, nome, email, status, created_at, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .order('nome');
 
       if (profiles) setAnalistas(profiles);
@@ -106,6 +107,7 @@ export default function AnalistasPage() {
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="text-[11px] h-9">Nome</TableHead>
+                <TableHead className="text-[11px] h-9">Função</TableHead>
                 <TableHead className="text-[11px] h-9">E-mail</TableHead>
                 <TableHead className="text-[11px] h-9">Data de Entrada</TableHead>
                 <TableHead className="text-[11px] h-9">Status</TableHead>
@@ -116,6 +118,11 @@ export default function AnalistasPage() {
               {analistas.map(a => (
                 <TableRow key={a.id} className={`border-border ${a.status !== 'Ativo' ? 'opacity-50' : ''}`}>
                   <TableCell className="text-sm py-2 font-medium">{a.nome}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant="outline" className={`text-[10px] ${a.funcao === 'Coordenação/Especialista' ? 'text-primary border-primary/30 bg-primary/10' : 'text-muted-foreground border-border bg-muted/30'}`}>
+                      {a.funcao === 'Coordenação/Especialista' ? 'Coord./Espec.' : 'Analista'}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-sm py-2 text-muted-foreground">{a.email}</TableCell>
                   <TableCell className="text-sm py-2 text-muted-foreground">
                     {new Date(a.created_at).toLocaleDateString('pt-BR')}
@@ -130,7 +137,7 @@ export default function AnalistasPage() {
               ))}
               {analistas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum analista cadastrado
                   </TableCell>
                 </TableRow>
