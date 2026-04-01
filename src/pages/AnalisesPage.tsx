@@ -109,7 +109,7 @@ export default function AnalisesPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-foreground">Análises</h2>
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
