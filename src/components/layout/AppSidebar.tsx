@@ -29,9 +29,10 @@ const bottomItems = [
 interface Props {
   collapsed: boolean;
   onToggle: () => void;
+  onNavigate?: () => void;
 }
 
-export function AppSidebar({ collapsed }: Props) {
+export function AppSidebar({ collapsed, onNavigate }: Props) {
   const location = useLocation();
   const { hasAccess } = useAuth();
   const [creditoOpen, setCreditoOpen] = useState(
@@ -53,21 +54,23 @@ export function AppSidebar({ collapsed }: Props) {
   const filteredMain = mainItems.filter(item => hasAccess(item.path));
   const filteredBottom = bottomItems.filter(item => hasAccess(item.path));
 
+  const handleNav = () => onNavigate?.();
+
   if (collapsed) {
     return (
       <aside className="w-14 bg-surface-1 border-r border-border flex flex-col items-center py-4 gap-2 shrink-0">
         {filteredMain.map(item => (
-          <Link key={item.path} to={item.path} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
         {hasCreditoAccess && (
-          <Link to="/credito/corporativo" className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link to="/credito/corporativo" onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
             <CreditCard className="h-4 w-4" />
           </Link>
         )}
         {filteredBottom.map(item => (
-          <Link key={item.path} to={item.path} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
@@ -83,7 +86,7 @@ export function AppSidebar({ collapsed }: Props) {
       </div>
       <nav className="flex-1 px-3 space-y-0.5">
         {filteredMain.map(item => (
-          <Link key={item.path} to={item.path} className={linkClass(item.path)}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
             <span>{item.label}</span>
           </Link>
@@ -104,7 +107,7 @@ export function AppSidebar({ collapsed }: Props) {
             {creditoOpen && (
               <div className="ml-7 space-y-0.5">
                 {creditoItems.filter(item => hasAccess(item.path)).map(item => (
-                  <Link key={item.path} to={item.path} className={linkClass(item.path)}>
+                  <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
                     <span>{item.label}</span>
                   </Link>
                 ))}
@@ -113,7 +116,7 @@ export function AppSidebar({ collapsed }: Props) {
           </>
         )}
         {filteredBottom.map(item => (
-          <Link key={item.path} to={item.path} className={linkClass(item.path)}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
             <span>{item.label}</span>
           </Link>
