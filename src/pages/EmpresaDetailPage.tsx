@@ -43,11 +43,9 @@ function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) 
 export default function EmpresaDetailPage() {
   const { cnpj } = useParams<{ cnpj: string }>();
   const decodedCnpj = decodeURIComponent(cnpj || '');
-  const emissor = emissores.find(e => e.cnpj === decodedCnpj);
   const { currentUser } = useAuth();
   const { analises, criarAnalise, iniciarAnalise, concluirAnalise, getAnalisesByIsin } = useAnaliseEmissao();
 
-  const [emissoesList, setEmissoesList] = useState<Emissao[]>(emissoes.filter(e => e.cnpjEmissor === decodedCnpj));
   const [solicitarModal, setSolicitarModal] = useState<string | null>(null);
   const [novaEmissaoModal, setNovaEmissaoModal] = useState(false);
   const [entregarModal, setEntregarModal] = useState<string | null>(null);
@@ -58,6 +56,33 @@ export default function EmpresaDetailPage() {
   const [novoIsin, setNovoIsin] = useState('');
   const [novoTicker, setNovoTicker] = useState('');
   const [novoValDate, setNovoValDate] = useState<Date>();
+
+  // ── Fetch empresa from DB ──
+  const { data: emissor, isLoading: loadingEmpresa } = useQuery({
+    queryKey: ['empresa-detail', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('cnpj', decodedCnpj)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // ── Fetch emissoes from DB ──
+  const { data: emissoesList = [] } = useQuery({
+    queryKey: ['emissoes-by-cnpj', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emissoes')
+        .select('*')
+        .eq('cnpj_emissor', decodedCnpj);
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const { data: analistasUsuarios = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
@@ -80,6 +105,15 @@ export default function EmpresaDetailPage() {
   const historicoPorCnpj = historicoAnalises
     .filter(h => h.cnpj === decodedCnpj)
     .sort((a, b) => b.data.localeCompare(a.data));
+
+  if (loadingEmpresa) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Carregando...</span>
+      </div>
+    );
+  }
 
   if (!emissor) {
     return (
