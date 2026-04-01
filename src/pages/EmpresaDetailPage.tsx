@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
-import { historicoAnalises } from '@/data/historicoAnalises';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
