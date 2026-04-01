@@ -36,8 +36,9 @@ const resultadoConfig: Record<string, string> = {
   'Aprovada com Restrição': 'bg-status-warning/15 text-status-warning border-status-warning/30',
 };
 
-function getUserNome(id: string) {
-  return users.find(u => u.id === id)?.nome ?? 'N/A';
+function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) {
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  return p?.nome ?? id;
 }
 
 export default function EmpresaDetailPage() {
