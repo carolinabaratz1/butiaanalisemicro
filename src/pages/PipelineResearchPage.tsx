@@ -34,11 +34,11 @@ const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
 
-function getEmissorNome(cnpj: string) {
-  return emissores.find(e => e.cnpj === cnpj)?.nomeAbreviado ?? cnpj;
+function getEmissorNome(cnpj: string, empresasMap: Map<string, string>) {
+  return empresasMap.get(cnpj) ?? cnpj;
 }
-function getEmissaoTicker(isin: string) {
-  return emissoes.find(e => e.isin === isin)?.ticker ?? '';
+function getEmissaoTicker(isin: string, emissoesTickers: Map<string, string>) {
+  return emissoesTickers.get(isin) ?? '';
 }
 function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []) {
   const p = profiles.find(p => p.id === id || p.nome === id);
