@@ -229,7 +229,7 @@ export default function EmpresasPage() {
                               }}
                             />
                             <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updateRatingMutation.mutate({ id: e.id, rating: editRatingValue })}>
-                              <Check className="h-3 w-3 text-green-500" />
+                              <Check className="h-3 w-3 text-primary" />
                             </Button>
                             <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingRatingId(null)}>
                               <X className="h-3 w-3 text-destructive" />
