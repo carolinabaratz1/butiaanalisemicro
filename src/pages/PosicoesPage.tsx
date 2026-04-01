@@ -268,18 +268,21 @@ export default function PosicoesPage() {
   };
 
   // ── BI Metrics ──
+  // Posições que requerem análise (exclui Termo)
+  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
+
   const biMetrics = useMemo(() => {
-    const aprovadas = biFiltered.filter(p => p.analiseStatus === 'Aprovada').length;
-    const vencidas = biFiltered.filter(p => p.analiseStatus === 'Vencida').length;
-    const semAnalise = biFiltered.filter(p => p.analiseStatus === 'Sem Análise').length;
-    const cobertura = biFiltered.length > 0 ? ((aprovadas / biFiltered.length) * 100).toFixed(1) : '0';
+    const aprovadas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada').length;
+    const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
+    const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
+    const cobertura = biFilteredForAnalysis.length > 0 ? ((aprovadas / biFilteredForAnalysis.length) * 100).toFixed(1) : '0';
     return { aprovadas, vencidas, semAnalise, cobertura };
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
-    return biFiltered.filter(p => p.analiseStatus === drillStatus);
-  }, [biFiltered, drillStatus]);
+    return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
+  }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
@@ -326,18 +329,18 @@ export default function PosicoesPage() {
   // Analysis status distribution
   const analiseStatusData = useMemo(() => {
     const counts: Record<string, number> = {};
-    biFiltered.forEach(p => {
+    biFilteredForAnalysis.forEach(p => {
       const st = p.analiseStatus || 'Sem Análise';
       counts[st] = (counts[st] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   // Coverage by fund (stacked bar)
   const coverageByFund = useMemo(() => {
-    const funds = [...new Set(biFiltered.map(p => p.trading_desk_share_source))];
+    const funds = [...new Set(biFilteredForAnalysis.map(p => p.trading_desk_share_source))];
     return funds.map(f => {
-      const items = biFiltered.filter(p => p.trading_desk_share_source === f);
+      const items = biFilteredForAnalysis.filter(p => p.trading_desk_share_source === f);
       return {
         name: f.length > 20 ? f.substring(0, 20) + '…' : f,
         fullName: f,
@@ -347,7 +350,7 @@ export default function PosicoesPage() {
         Outras: items.filter(p => !['Aprovada', 'Vencida', 'Sem Análise'].includes(p.analiseStatus || '')).length,
       };
     });
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   // Rating distribution
   const ratingData = useMemo(() => {
