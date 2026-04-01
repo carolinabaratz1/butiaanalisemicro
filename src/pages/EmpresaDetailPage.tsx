@@ -102,7 +102,7 @@ export default function EmpresaDetailPage() {
       isin: solicitarModal,
       cnpj_emissor: decodedCnpj,
       analista_id: analistaSel,
-      solicitante_id: currentUser.id,
+      solicitante_id: currentUser?.id || '',
       status: 'pendente',
       prazo: format(prazoDate, 'yyyy-MM-dd'),
       observacoes,
