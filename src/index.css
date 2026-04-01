@@ -6,48 +6,112 @@
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 95%;
-    --card: 240 6% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 6% 10%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 217 91% 60%;
+    /* === TEMA CLARO (identidade Butiá) === */
+    --background: 0 0% 98%;
+    --foreground: 215 50% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 50% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 50% 15%;
+
+    --primary: 215 60% 30%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 4% 16%;
-    --accent-foreground: 0 0% 95%;
+
+    --secondary: 215 30% 94%;
+    --secondary-foreground: 215 60% 24%;
+
+    --muted: 215 20% 95%;
+    --muted-foreground: 215 25% 45%;
+
+    --accent: 215 30% 90%;
+    --accent-foreground: 215 60% 24%;
+
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 20%;
-    --input: 240 4% 20%;
-    --ring: 217 91% 60%;
+
+    --border: 215 20% 88%;
+    --input: 215 20% 90%;
+    --ring: 215 60% 30%;
     --radius: 0.5rem;
 
-    --sidebar-background: 240 6% 7%;
-    --sidebar-foreground: 240 5% 65%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4% 12%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 240 4% 15%;
-    --sidebar-ring: 217 91% 60%;
+    /* Sidebar — Navy Butiá */
+    --sidebar-background: 215 60% 24%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 215 60% 24%;
+    --sidebar-accent: 215 60% 30%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 215 60% 20%;
+    --sidebar-ring: 0 0% 100%;
+    --sidebar-muted: 215 40% 70%;
 
     /* Semantic status colors */
+    --status-success: 142 71% 35%;
+    --status-warning: 38 92% 50%;
+    --status-danger: 0 84% 60%;
+    --status-info: 215 60% 30%;
+    --status-muted: 215 20% 55%;
+
+    /* Surface variations (light) */
+    --surface-0: 0 0% 98%;
+    --surface-1: 0 0% 100%;
+    --surface-2: 215 20% 97%;
+    --surface-3: 215 20% 92%;
+  }
+
+  .dark {
+    /* === TEMA ESCURO === */
+    --background: 220 25% 8%;
+    --foreground: 215 15% 92%;
+
+    --card: 220 25% 11%;
+    --card-foreground: 215 15% 92%;
+    --popover: 220 25% 11%;
+    --popover-foreground: 215 15% 92%;
+
+    --primary: 215 65% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 25% 16%;
+    --secondary-foreground: 215 15% 90%;
+
+    --muted: 220 25% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 220 25% 16%;
+    --accent-foreground: 215 15% 90%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 25% 16%;
+    --input: 220 25% 14%;
+    --ring: 215 65% 55%;
+
+    /* Sidebar dark */
+    --sidebar-background: 220 30% 6%;
+    --sidebar-foreground: 215 15% 90%;
+    --sidebar-primary: 215 65% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 25% 14%;
+    --sidebar-accent-foreground: 215 15% 95%;
+    --sidebar-border: 220 25% 12%;
+    --sidebar-ring: 215 65% 55%;
+    --sidebar-muted: 215 20% 50%;
+
+    /* Status */
     --status-success: 142 71% 45%;
     --status-warning: 48 96% 53%;
     --status-danger: 0 84% 60%;
     --status-info: 217 91% 60%;
     --status-muted: 240 4% 46%;
 
-    /* Surface variations */
-    --surface-0: 240 10% 3.9%;
-    --surface-1: 240 6% 7%;
-    --surface-2: 240 6% 10%;
-    --surface-3: 240 4% 16%;
+    /* Surfaces dark */
+    --surface-0: 220 25% 8%;
+    --surface-1: 220 30% 6%;
+    --surface-2: 220 25% 11%;
+    --surface-3: 220 25% 16%;
   }
 }
 

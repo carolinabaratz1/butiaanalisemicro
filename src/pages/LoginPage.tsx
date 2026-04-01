@@ -3,8 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LogIn, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { AlertCircle } from 'lucide-react';
+import { ButiaLogo } from '@/components/ui/ButiaLogo';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -30,13 +31,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm bg-surface-2 border-border">
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <LogIn className="h-5 w-5 text-primary" />
+      <Card className="w-full max-w-sm border-border">
+        <CardHeader className="text-center space-y-4 pb-2">
+          <div className="flex justify-center">
+            <ButiaLogo variant="full" theme="light" size="lg" />
           </div>
-          <CardTitle className="text-lg font-semibold text-foreground">ResearchDesk</CardTitle>
-          <p className="text-xs text-muted-foreground">Butia Investimentos</p>
+          <p className="text-xs text-muted-foreground font-medium tracking-widest uppercase">
+            Research Platform
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -49,7 +51,6 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-surface-1 border-border"
               />
             </div>
             <div className="space-y-2">
@@ -61,7 +62,6 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-surface-1 border-border"
               />
             </div>
             {error && (

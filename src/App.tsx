@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AnaliseEmissaoProvider } from "@/contexts/AnaliseEmissaoContext";
+import { ButiaLogo } from "@/components/ui/ButiaLogo";
+import { useTheme } from "@/hooks/useTheme";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import EmpresasPage from "./pages/EmpresasPage";
@@ -22,15 +24,21 @@ import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
+function LoadingScreen() {
+  const { theme } = useTheme();
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-background">
+      <ButiaLogo variant="full" theme={theme === "dark" ? "dark" : "light"} size="lg" />
+      <p className="text-sm text-muted-foreground">Carregando plataforma...</p>
+    </div>
+  );
+}
+
 function ProtectedRoutes() {
   const { session, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">Carregando...</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!session) {
@@ -61,11 +69,7 @@ function AppRoutes() {
   const { session, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">Carregando...</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -76,11 +80,17 @@ function AppRoutes() {
   );
 }
 
+function ThemeInit() {
+  useTheme(); // initializes theme class on <html>
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
     <AnaliseEmissaoProvider>
     <TooltipProvider>
+      <ThemeInit />
       <Toaster />
       <Sonner />
       <BrowserRouter>

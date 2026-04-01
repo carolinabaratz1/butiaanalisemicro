@@ -59,6 +59,7 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+          muted: "hsl(var(--sidebar-muted))",
         },
         status: {
           success: "hsl(var(--status-success))",
@@ -72,6 +73,13 @@ export default {
           1: "hsl(var(--surface-1))",
           2: "hsl(var(--surface-2))",
           3: "hsl(var(--surface-3))",
+        },
+        butia: {
+          navy: "#1B3864",
+          "navy-light": "#2A5298",
+          "navy-dark": "#0F2040",
+          "blue-mid": "#1B4A8A",
+          "blue-pale": "#E8EEF7",
         },
       },
       borderRadius: {
