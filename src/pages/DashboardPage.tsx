@@ -298,7 +298,7 @@ export default function DashboardPage() {
                   <TableRow key={a.id} className="border-border">
                     <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
                     <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                    <TableCell className="text-sm py-2">{a.analista_responsavel}</TableCell>
+                    <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
                     <TableCell className="text-sm py-2">{a.data_conclusao ? new Date(a.data_conclusao.split('T')[0]).toLocaleDateString('pt-BR') : '-'}</TableCell>
                   </TableRow>
                 ))}
