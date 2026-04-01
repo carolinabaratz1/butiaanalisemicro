@@ -137,7 +137,7 @@ export default function AnalistasPage() {
               ))}
               {analistas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum analista cadastrado
                   </TableCell>
                 </TableRow>
