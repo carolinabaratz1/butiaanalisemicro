@@ -238,10 +238,10 @@ export default function PipelineResearchPage() {
     let items = [...analisesComStatus];
 
     if (isAnalista) {
-      items = items.filter(a => a.analista_responsavel === currentUser?.id);
+      items = items.filter(a => a.analista_responsavel.trim() === currentUser?.id);
     }
     if (analistaFilter !== 'all') {
-      items = items.filter(a => a.analista_responsavel === analistaFilter);
+      items = items.filter(a => a.analista_responsavel.trim() === analistaFilter.trim());
     }
     if (prazoFilter === 'vencido') {
       items = items.filter(a => a.prazo && a.prazo < hoje && (a.displayStatus === 'Pendente' || a.displayStatus === 'Em Análise'));
