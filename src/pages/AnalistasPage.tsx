@@ -107,6 +107,7 @@ export default function AnalistasPage() {
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="text-[11px] h-9">Nome</TableHead>
+                <TableHead className="text-[11px] h-9">Função</TableHead>
                 <TableHead className="text-[11px] h-9">E-mail</TableHead>
                 <TableHead className="text-[11px] h-9">Data de Entrada</TableHead>
                 <TableHead className="text-[11px] h-9">Status</TableHead>
