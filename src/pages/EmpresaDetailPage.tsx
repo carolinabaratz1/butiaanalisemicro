@@ -166,11 +166,17 @@ export default function EmpresaDetailPage() {
     setRelatorio('');
   };
 
-  const handleNovaEmissao = () => {
+  const handleNovaEmissao = async () => {
     if (!novoIsin || !novoTicker || !novoValDate) return;
-    const exists = emissoesList.find(e => e.isin === novoIsin);
-    if (!exists) {
-      setEmissoesList(prev => [...prev, { isin: novoIsin, ticker: novoTicker, valDate: format(novoValDate, 'yyyy-MM-dd'), cnpjEmissor: decodedCnpj }]);
+    const { error } = await supabase.from('emissoes').upsert({
+      isin: novoIsin,
+      ticker: novoTicker,
+      val_date: format(novoValDate, 'yyyy-MM-dd'),
+      cnpj_emissor: decodedCnpj,
+    }, { onConflict: 'isin' });
+    if (!error) {
+      // Refetch emissoes
+      window.location.reload();
     }
     setNovaEmissaoModal(false);
     setNovoIsin('');
@@ -185,19 +191,19 @@ export default function EmpresaDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">{emissor.nomeAbreviado}</h2>
-          <p className="text-xs text-muted-foreground">{emissor.nomeCompleto} · {emissor.cnpj}</p>
+          <h2 className="text-lg font-semibold text-foreground">{emissor.nome}</h2>
+          <p className="text-xs text-muted-foreground">{emissor.cnpj}</p>
         </div>
-        <Badge variant="outline" className="ml-auto text-[10px]">{emissor.tipo}</Badge>
+        <Badge variant="outline" className="ml-auto text-[10px]">{emissor.tipo || '—'}</Badge>
       </div>
 
       {/* Info card */}
       <Card className="bg-card border-border">
         <CardContent className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setorButia || emissor.setorGics || '—'}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupoEconomico}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.ratingAtual || '—'} {emissor.agenciaAtual ? `(${emissor.agenciaAtual})` : ''}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Última Análise</p><p className="text-sm font-medium">{emissor.dataAnalise || '—'} {emissor.resultadoAnalise ? `· ${emissor.resultadoAnalise}` : ''}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setor || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupo_economico || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.rating || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Tipo</p><p className="text-sm font-medium">{emissor.tipo || '—'}</p></div>
         </CardContent>
       </Card>
 
