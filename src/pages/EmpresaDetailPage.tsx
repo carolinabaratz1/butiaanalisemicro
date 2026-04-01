@@ -16,11 +16,11 @@ import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { emissores, emissoes, type Emissao } from '@/data/emissores';
-import { users } from '@/data/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
 import { historicoAnalises } from '@/data/historicoAnalises';
-import { analistas as catalogoAnalistas } from '@/data/analistas';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
@@ -36,8 +36,9 @@ const resultadoConfig: Record<string, string> = {
   'Aprovada com Restrição': 'bg-status-warning/15 text-status-warning border-status-warning/30',
 };
 
-function getUserNome(id: string) {
-  return users.find(u => u.id === id)?.nome ?? 'N/A';
+function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) {
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  return p?.nome ?? id;
 }
 
 export default function EmpresaDetailPage() {
@@ -59,7 +60,18 @@ export default function EmpresaDetailPage() {
   const [novoTicker, setNovoTicker] = useState('');
   const [novoValDate, setNovoValDate] = useState<Date>();
 
-  const analistasUsuarios = users.filter(u => u.funcao === 'Analista' && u.status === 'Ativo');
+  const { data: analistasUsuarios = [] } = useQuery({
+    queryKey: ['profiles-analistas-ativos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
+        .eq('status', 'Ativo');
+      if (error) throw error;
+      return data || [];
+    },
+  });
   const isGestor = currentUser?.funcao === 'Gestor';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
   const isAnalista = currentUser?.funcao === 'Analista';
@@ -250,8 +262,8 @@ export default function EmpresaDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {historicoPorCnpj.map(h => {
-                    const analistaCatalogo = catalogoAnalistas.find(a => a.id === h.analista_id);
-                    const analistaAtivo = analistaCatalogo?.ativo ?? false;
+                    const matchedProfile = analistasUsuarios.find(a => a.id === h.analista_id || a.nome === h.analista_nome);
+                    const analistaAtivo = !!matchedProfile;
                     return (
                       <TableRow key={h.id} className="border-border">
                         <TableCell className="text-sm py-2 text-muted-foreground">{h.data}</TableCell>
@@ -290,7 +302,7 @@ export default function EmpresaDetailPage() {
               <Select value={analistaSel} onValueChange={setAnalistaSel}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar analista" /></SelectTrigger>
                 <SelectContent className="bg-card border-border">
-                  {analistasUsuarios.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+                  {analistasUsuarios.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

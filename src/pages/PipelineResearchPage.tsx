@@ -16,8 +16,6 @@ import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundC
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { emissores, emissoes } from '@/data/emissores';
-import { analistas as catalogoAnalistas } from '@/data/analistas';
-import { users } from '@/data/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,13 +39,13 @@ function getEmissorNome(cnpj: string) {
 function getEmissaoTicker(isin: string) {
   return emissoes.find(e => e.isin === isin)?.ticker ?? '';
 }
-function getAnalistaNome(id: string) {
-  const a = catalogoAnalistas.find(a => a.id === id);
-  if (a) return a.nome;
-  return users.find(u => u.id === id)?.nome ?? id;
+function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []) {
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  if (p) return p.nome;
+  return id;
 }
-function getAnalistaInitials(id: string) {
-  const nome = getAnalistaNome(id);
+function getAnalistaInitials(id: string, profiles: { id: string; nome: string }[] = []) {
+  const nome = getAnalistaNome(id, profiles);
   return nome.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
 
@@ -131,7 +129,32 @@ export default function PipelineResearchPage() {
   const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isCoord || isRC;
 
-  const analistasAtivos = catalogoAnalistas.filter(a => a.ativo);
+  // ── Fetch active analysts/coordinators from profiles ──
+  const { data: analistasAtivos = [] } = useQuery({
+    queryKey: ['profiles-analistas-ativos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
+        .eq('status', 'Ativo');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // ── Fetch all profiles for name lookups (solicitante, etc.) ──
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const hoje = new Date().toISOString().split('T')[0];
 
   // ── Fetch analises from Supabase ──
@@ -416,7 +439,7 @@ export default function PipelineResearchPage() {
             <SelectTrigger className="w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
             <SelectContent className="bg-card border-border max-h-60">
               <SelectItem value="all">Todos os analistas</SelectItem>
-              {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+              {analistasAtivos.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
@@ -500,9 +523,9 @@ export default function PipelineResearchPage() {
                           )}
                           <div className="flex items-center gap-2">
                             <div className="h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
-                              {getAnalistaInitials(item.analista_responsavel)}
+                              {getAnalistaInitials(item.analista_responsavel, allProfiles)}
                             </div>
-                            <span className="text-[11px] text-muted-foreground truncate">{getAnalistaNome(item.analista_responsavel)}</span>
+                            <span className="text-[11px] text-muted-foreground truncate">{getAnalistaNome(item.analista_responsavel, allProfiles)}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className={`text-[10px] ${prazoVencido ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>
@@ -588,8 +611,8 @@ export default function PipelineResearchPage() {
                     <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva)}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? (users.find(u => u.id === drawerAnalise.solicitante_id)?.nome || drawerAnalise.solicitante_id) : '—'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel, allProfiles)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? getAnalistaNome(drawerAnalise.solicitante_id, allProfiles) : '—'}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Início</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_inicio)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Conclusão</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_conclusao)}</p></div>
                 </div>
@@ -701,7 +724,7 @@ export default function PipelineResearchPage() {
                         <span className="text-[11px] text-muted-foreground">{fmtDateBR(h.data_conclusao)}</span>
                         <Badge variant="outline" className="text-[9px]">{h.displayStatus}</Badge>
                       </div>
-                      <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel)}</p>
+                      <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel, allProfiles)}</p>
                       {(h as any).recomendacao && (
                         <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(h as any).recomendacao] || ''}`}>{(h as any).recomendacao}</Badge>
                       )}
@@ -749,7 +772,7 @@ export default function PipelineResearchPage() {
               <Select value={novoAnalistaId} onValueChange={setNovoAnalistaId}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar analista" /></SelectTrigger>
                 <SelectContent className="bg-card border-border max-h-60">
-                  {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+                  {analistasAtivos.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -913,7 +936,7 @@ export default function PipelineResearchPage() {
             <Select value={novoAnalista} onValueChange={setNovoAnalista}>
               <SelectTrigger className="h-8 text-sm bg-surface-1 border-border"><SelectValue /></SelectTrigger>
               <SelectContent className="bg-card border-border max-h-60">
-                {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+                {analistasAtivos.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
               </SelectContent>
             </Select>
             <Button size="sm" className="w-full" onClick={handleReatribuir}>Confirmar</Button>
