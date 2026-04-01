@@ -6,14 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Download, Upload, Link2, Loader2 } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Download, Upload, Loader2, TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle2, XCircle, Clock, FileQuestion } from 'lucide-react';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f43f5e'];
+const STATUS_COLORS: Record<string, string> = {
+  'Aprovada': '#22c55e',
+  'Vencida': '#eab308',
+  'Reprovada': '#ef4444',
+  'Em Análise': '#3b82f6',
+  'Pendente': '#8b5cf6',
+  'Sem Análise': '#64748b',
+};
 
 interface PosicaoRow {
   id: string;
@@ -31,10 +39,24 @@ interface PosicaoRow {
   created_at: string;
 }
 
+interface EnrichedPosition extends PosicaoRow {
+  cnpj?: string;
+  empresaNome?: string;
+  empresaRating?: string | null;
+  analiseStatus?: string;
+  analiseRecomendacao?: string | null;
+  analisePrecoMin?: number | null;
+  analisePrecoMedio?: number | null;
+  analisePrecoMax?: number | null;
+  analiseDataConclusao?: string | null;
+}
+
 export default function PosicoesPage() {
   const [fundFilter, setFundFilter] = useState<string>('all');
   const [classFilter, setClassFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('latest');
+  const [biFundFilter, setBiFundFilter] = useState<string>('all');
+  const [biClassFilter, setBiClassFilter] = useState<string>('all');
   const [page, setPage] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -84,6 +106,123 @@ export default function PosicoesPage() {
     enabled: !!selectedDate,
   });
 
+  // BI queries: emissoes, empresas, analises
+  const { data: emissoes = [] } = useQuery({
+    queryKey: ['emissoes-all'],
+    queryFn: async () => {
+      let all: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase.from('emissoes').select('isin, cnpj_emissor, ticker').range(from, from + 999);
+        if (error) throw error;
+        all = [...all, ...data];
+        hasMore = data.length === 1000;
+        from += 1000;
+      }
+      return all as { isin: string; cnpj_emissor: string; ticker: string | null }[];
+    },
+  });
+
+  const { data: empresas = [] } = useQuery({
+    queryKey: ['empresas-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('empresas').select('cnpj, nome, rating, setor');
+      if (error) throw error;
+      return data as { cnpj: string; nome: string; rating: string | null; setor: string | null }[];
+    },
+  });
+
+  const { data: analises = [] } = useQuery({
+    queryKey: ['analises-all'],
+    queryFn: async () => {
+      let all: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase.from('analises').select('empresa_id, status, tipo, recomendacao, preco_min, preco_medio, preco_maximo, data_conclusao, data_inicio').range(from, from + 999);
+        if (error) throw error;
+        all = [...all, ...data];
+        hasMore = data.length === 1000;
+        from += 1000;
+      }
+      return all as { empresa_id: string; status: string; tipo: string; recomendacao: string | null; preco_min: number | null; preco_medio: number | null; preco_maximo: number | null; data_conclusao: string | null; data_inicio: string }[];
+    },
+  });
+
+  // Lookup maps
+  const isinToCnpj = useMemo(() => {
+    const map: Record<string, string> = {};
+    emissoes.forEach(e => { map[e.isin] = e.cnpj_emissor; });
+    return map;
+  }, [emissoes]);
+
+  const cnpjToEmpresa = useMemo(() => {
+    const map: Record<string, { nome: string; rating: string | null; setor: string | null }> = {};
+    empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor }; });
+    return map;
+  }, [empresas]);
+
+  // Latest analysis per empresa_id (cnpj)
+  const latestAnaliseByEmpresa = useMemo(() => {
+    const map: Record<string, typeof analises[0]> = {};
+    const now = new Date();
+    // Sort by data_inicio desc to get latest first
+    const sorted = [...analises].sort((a, b) => (b.data_inicio || '').localeCompare(a.data_inicio || ''));
+    sorted.forEach(a => {
+      if (!map[a.empresa_id]) {
+        map[a.empresa_id] = a;
+      }
+    });
+    return map;
+  }, [analises]);
+
+  const getAnaliseStatus = (analise: typeof analises[0] | undefined): string => {
+    if (!analise) return 'Sem Análise';
+    if (analise.status === 'Aprovada') {
+      if (analise.data_conclusao) {
+        const conclusao = new Date(analise.data_conclusao);
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        if (conclusao < oneYearAgo) return 'Vencida';
+      }
+      return 'Aprovada';
+    }
+    if (analise.status === 'Reprovada') return 'Reprovada';
+    if (analise.status === 'Em Análise' || analise.status === 'em_andamento') return 'Em Análise';
+    if (analise.status === 'Pendente' || analise.status === 'pendente') return 'Pendente';
+    return analise.status;
+  };
+
+  // Enriched positions
+  const enriched = useMemo<EnrichedPosition[]>(() => {
+    return posicoes.map(p => {
+      const cnpj = p.isin ? isinToCnpj[p.isin] : undefined;
+      const empresa = cnpj ? cnpjToEmpresa[cnpj] : undefined;
+      const analise = cnpj ? latestAnaliseByEmpresa[cnpj] : undefined;
+      return {
+        ...p,
+        cnpj,
+        empresaNome: empresa?.nome,
+        empresaRating: empresa?.rating,
+        analiseStatus: getAnaliseStatus(analise),
+        analiseRecomendacao: analise?.recomendacao || null,
+        analisePrecoMin: analise?.preco_min ?? null,
+        analisePrecoMedio: analise?.preco_medio ?? null,
+        analisePrecoMax: analise?.preco_maximo ?? null,
+        analiseDataConclusao: analise?.data_conclusao || null,
+      };
+    });
+  }, [posicoes, isinToCnpj, cnpjToEmpresa, latestAnaliseByEmpresa]);
+
+  // BI filtered
+  const biFiltered = useMemo(() => {
+    return enriched.filter(p => {
+      return (biFundFilter === 'all' || p.trading_desk_share_source === biFundFilter)
+        && (biClassFilter === 'all' || p.product_class === biClassFilter);
+    });
+  }, [enriched, biFundFilter, biClassFilter]);
+
   const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source))], [posicoes]);
   const allProductClasses = useMemo(() => [...new Set(posicoes.map(p => p.product_class))], [posicoes]);
 
@@ -118,14 +257,104 @@ export default function PosicoesPage() {
   const fmtPct = (v: number | null) => v === null ? '—' : (Number(v) * 100).toFixed(2) + '%';
   const fmtDate = (d: string | null) => {
     if (!d) return '—';
-    // Handle YYYY-MM-DD
     const dashParts = d.split('-');
     if (dashParts.length === 3 && dashParts[0].length === 4) return `${dashParts[2]}/${dashParts[1]}/${dashParts[0]}`;
-    // Handle MM/DD/YYYY → DD/MM/YYYY
     const slashParts = d.split('/');
     if (slashParts.length === 3 && slashParts[2].length === 4) return `${slashParts[1]}/${slashParts[0]}/${slashParts[2]}`;
     return d;
   };
+
+  // ── BI Metrics ──
+  const biMetrics = useMemo(() => {
+    const aprovadas = biFiltered.filter(p => p.analiseStatus === 'Aprovada').length;
+    const vencidas = biFiltered.filter(p => p.analiseStatus === 'Vencida').length;
+    const semAnalise = biFiltered.filter(p => p.analiseStatus === 'Sem Análise').length;
+    const cobertura = biFiltered.length > 0 ? ((aprovadas / biFiltered.length) * 100).toFixed(1) : '0';
+    return { aprovadas, vencidas, semAnalise, cobertura };
+  }, [biFiltered]);
+
+  // Duration distribution
+  const durationData = useMemo(() => {
+    const brackets = [
+      { label: '0-1', min: 0, max: 1 },
+      { label: '1-2', min: 1, max: 2 },
+      { label: '2-3', min: 2, max: 3 },
+      { label: '3-5', min: 3, max: 5 },
+      { label: '5-10', min: 5, max: 10 },
+      { label: '10+', min: 10, max: Infinity },
+    ];
+    return brackets.map(b => {
+      const items = biFiltered.filter(p => {
+        const d = p.duration_du ? Number(p.duration_du) / 252 : null; // DU to years
+        return d !== null && d >= b.min && d < b.max;
+      });
+      return { name: b.label, qtd: items.length, volume: items.reduce((s, p) => s + Number(p.amount), 0) };
+    });
+  }, [biFiltered]);
+
+  // Analysis status distribution
+  const analiseStatusData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    biFiltered.forEach(p => {
+      const st = p.analiseStatus || 'Sem Análise';
+      counts[st] = (counts[st] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [biFiltered]);
+
+  // Coverage by fund (stacked bar)
+  const coverageByFund = useMemo(() => {
+    const funds = [...new Set(biFiltered.map(p => p.trading_desk_share_source))];
+    return funds.map(f => {
+      const items = biFiltered.filter(p => p.trading_desk_share_source === f);
+      return {
+        name: f.length > 20 ? f.substring(0, 20) + '…' : f,
+        fullName: f,
+        Aprovada: items.filter(p => p.analiseStatus === 'Aprovada').length,
+        Vencida: items.filter(p => p.analiseStatus === 'Vencida').length,
+        'Sem Análise': items.filter(p => p.analiseStatus === 'Sem Análise').length,
+        Outras: items.filter(p => !['Aprovada', 'Vencida', 'Sem Análise'].includes(p.analiseStatus || '')).length,
+      };
+    });
+  }, [biFiltered]);
+
+  // Rating distribution
+  const ratingData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    biFiltered.forEach(p => {
+      const r = p.empresaRating || 'Sem Rating';
+      counts[r] = (counts[r] || 0) + 1;
+    });
+    const order = ['AAA', 'AA+', 'AA', 'AA-', 'A+', 'A', 'A-', 'BBB+', 'BBB', 'BBB-', 'BB+', 'BB', 'BB-', 'B+', 'B', 'B-', 'CCC', 'CC', 'C', 'D', 'Sem Rating'];
+    return Object.entries(counts)
+      .sort(([a], [b]) => {
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      })
+      .map(([name, value]) => ({ name, value }));
+  }, [biFiltered]);
+
+  // Equity panel
+  const equityPositions = useMemo(() => {
+    return biFiltered
+      .filter(p => {
+        const pc = p.product_class.toLowerCase();
+        return pc.includes('equit') || pc.includes('ação') || pc.includes('acoes') || pc.includes('ações') || pc.includes('rv') || pc.includes('renda variável') || pc.includes('renda variavel');
+      })
+      .map(p => {
+        const price = p.financial_price ? Number(p.financial_price) : null;
+        const min = p.analisePrecoMin ? Number(p.analisePrecoMin) : null;
+        const max = p.analisePrecoMax ? Number(p.analisePrecoMax) : null;
+        let priceStatus: 'Abaixo' | 'Em Linha' | 'Acima' | '—' = '—';
+        if (price !== null && min !== null && max !== null) {
+          if (price < min) priceStatus = 'Abaixo';
+          else if (price > max) priceStatus = 'Acima';
+          else priceStatus = 'Em Linha';
+        }
+        return { ...p, priceStatus };
+      });
+  }, [biFiltered]);
 
   // ── Import ──
   const handleImport = async () => {
@@ -148,7 +377,6 @@ export default function PosicoesPage() {
         return;
       }
 
-      // Map columns – accept various header names
       const colMap: Record<string, string> = {};
       const firstRow = rows[0];
       const keys = Object.keys(firstRow);
@@ -166,12 +394,10 @@ export default function PosicoesPage() {
       colMap.implied_spread = find(['spread', 'impliedspread']) || '';
       colMap.dv01 = find(['dv01']) || '';
 
-      // Determine the val_date from first valid row for delete
       const firstValDate = rows[0][colMap.val_date];
       let valDateStr = '';
       if (firstValDate) {
         if (typeof firstValDate === 'number') {
-          // Excel serial date
           const d = XLSX.SSF.parse_date_code(firstValDate);
           valDateStr = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         } else {
@@ -179,12 +405,10 @@ export default function PosicoesPage() {
         }
       }
 
-      // Delete existing posicoes for same val_date (replace strategy)
       if (valDateStr) {
         await supabase.from('posicoes').delete().eq('val_date', valDateStr);
       }
 
-      // Prepare insert rows
       const toNum = (v: any): number | null => {
         if (v === null || v === undefined || v === '') return null;
         const n = Number(v);
@@ -214,7 +438,6 @@ export default function PosicoesPage() {
         dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
       }));
 
-      // Insert in batches of 500
       const batchSize = 500;
       for (let i = 0; i < insertRows.length; i += batchSize) {
         const batch = insertRows.slice(i, i + batchSize);
@@ -263,7 +486,6 @@ export default function PosicoesPage() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Posições');
 
-      // Auto column widths
       const colWidths = Object.keys(exportData[0]).map(key => ({
         wch: Math.max(key.length, ...exportData.map(r => String((r as any)[key]).length).slice(0, 100)) + 2,
       }));
@@ -275,6 +497,40 @@ export default function PosicoesPage() {
       toast({ title: 'Erro na exportação', description: err.message, variant: 'destructive' });
     } finally {
       setExporting(false);
+    }
+  };
+
+  const tooltipStyle = {
+    backgroundColor: 'hsl(240 6% 10%)',
+    border: '1px solid hsl(240 4% 20%)',
+    borderRadius: '6px',
+    fontSize: '12px',
+    color: 'hsl(0 0% 95%)',
+  };
+
+  const getRecBadge = (rec: string | null) => {
+    if (!rec) return <Badge variant="outline" className="text-[10px]">—</Badge>;
+    const r = rec.toLowerCase();
+    if (r === 'buy' || r === 'compra' || r === 'comprar') return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]"><TrendingUp className="h-3 w-3 mr-0.5" />Buy</Badge>;
+    if (r === 'sell' || r === 'venda' || r === 'vender') return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px]"><TrendingDown className="h-3 w-3 mr-0.5" />Sell</Badge>;
+    return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px]"><Minus className="h-3 w-3 mr-0.5" />Hold</Badge>;
+  };
+
+  const getPriceStatusBadge = (status: string) => {
+    if (status === 'Abaixo') return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Abaixo</Badge>;
+    if (status === 'Acima') return <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px]">Acima</Badge>;
+    if (status === 'Em Linha') return <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">Em Linha</Badge>;
+    return <Badge variant="outline" className="text-[10px]">—</Badge>;
+  };
+
+  const getAnaliseStatusIcon = (status: string) => {
+    switch (status) {
+      case 'Aprovada': return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />;
+      case 'Vencida': return <AlertTriangle className="h-3.5 w-3.5 text-yellow-400" />;
+      case 'Reprovada': return <XCircle className="h-3.5 w-3.5 text-red-400" />;
+      case 'Em Análise': return <Clock className="h-3.5 w-3.5 text-blue-400" />;
+      case 'Pendente': return <Clock className="h-3.5 w-3.5 text-purple-400" />;
+      default: return <FileQuestion className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   };
 
@@ -431,22 +687,76 @@ export default function PosicoesPage() {
         </TabsContent>
 
         <TabsContent value="analitico" className="space-y-4 mt-3">
+          {/* BI Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Select value={biFundFilter} onValueChange={setBiFundFilter}>
+              <SelectTrigger className="w-full sm:w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="all">Todos os fundos</SelectItem>
+                {allFunds.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={biClassFilter} onValueChange={setBiClassFilter}>
+              <SelectTrigger className="w-full sm:w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo de Ativo" /></SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="all">Todos os tipos</SelectItem>
+                {allProductClasses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center text-xs text-muted-foreground sm:ml-auto">
+              Data ref: <span className="text-foreground font-medium ml-1">{latestDate ? fmtDate(latestDate) : '—'}</span>
+            </div>
+          </div>
+
+          {/* KPIs Row 1 */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Total de ativos</p>
-              <p className="text-xl font-bold text-foreground mt-1">{totalAtivos}</p>
+              <p className="text-xl font-bold text-foreground mt-1">{biFiltered.length}</p>
             </CardContent></Card>
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Fundos com posição</p>
-              <p className="text-xl font-bold text-foreground mt-1">{totalFundos}</p>
+              <p className="text-xl font-bold text-foreground mt-1">{new Set(biFiltered.map(p => p.trading_desk_share_source)).size}</p>
             </CardContent></Card>
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Tipos distintos</p>
-              <p className="text-xl font-bold text-foreground mt-1">{totalTipos}</p>
+              <p className="text-xl font-bold text-foreground mt-1">{new Set(biFiltered.map(p => p.product_class)).size}</p>
             </CardContent></Card>
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Data referência</p>
               <p className="text-xl font-bold text-foreground mt-1">{latestDate ? fmtDate(latestDate) : '—'}</p>
+            </CardContent></Card>
+          </div>
+
+          {/* KPIs Row 2 - Research */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Card className="bg-card border-border border-l-4 border-l-emerald-500"><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Análise Aprovada</p>
+              </div>
+              <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.aprovadas}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-yellow-500"><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-yellow-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Análise Vencida</p>
+              </div>
+              <p className="text-xl font-bold text-yellow-400 mt-1">{biMetrics.vencidas}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-slate-500"><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <FileQuestion className="h-4 w-4 text-muted-foreground" />
+                <p className="text-[11px] text-muted-foreground uppercase">Sem Análise</p>
+              </div>
+              <p className="text-xl font-bold text-muted-foreground mt-1">{biMetrics.semAnalise}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-blue-500"><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">% Cobertura</p>
+              </div>
+              <p className="text-xl font-bold text-blue-400 mt-1">{biMetrics.cobertura}%</p>
             </CardContent></Card>
           </div>
 
@@ -457,35 +767,156 @@ export default function PosicoesPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Tipo</CardTitle></CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <PieChart>
-                      <Pie data={byClass} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        {byClass.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+            <>
+              {/* Row: Tipo + Fundo */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Tipo</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={byClass} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                          {byClass.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
 
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-2"><CardTitle className="text-sm">Posição por Fundo</CardTitle></CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={250}>
-                    <BarChart data={byFund} layout="vertical" margin={{ left: 10 }}>
-                      <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
-                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} />
-                      <Tooltip contentStyle={{ backgroundColor: 'hsl(240 6% 10%)', border: '1px solid hsl(240 4% 20%)', borderRadius: '6px', fontSize: '12px', color: 'hsl(0 0% 95%)' }} />
-                      <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Posição por Fundo</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={byFund} layout="vertical" margin={{ left: 10 }}>
+                        <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                        <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Row: Status de Análise + Duration */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Status de Análise da Carteira</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <PieChart>
+                        <Pie data={analiseStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                          {analiseStatusData.map((entry, i) => <Cell key={i} fill={STATUS_COLORS[entry.name] || COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Duration (anos)</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={durationData}>
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                        <YAxis tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                        <Tooltip contentStyle={tooltipStyle} formatter={(value: any, name: string) => [Number(value).toLocaleString('pt-BR'), name === 'qtd' ? 'Qtd Ativos' : 'Volume']} />
+                        <Bar dataKey="qtd" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Qtd Ativos" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Row: Cobertura por Fundo + Rating */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Cobertura por Fundo</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={Math.max(250, coverageByFund.length * 30)}>
+                      <BarChart data={coverageByFund} layout="vertical" margin={{ left: 10 }}>
+                        <XAxis type="number" tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                        <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Bar dataKey="Aprovada" stackId="a" fill="#22c55e" />
+                        <Bar dataKey="Vencida" stackId="a" fill="#eab308" />
+                        <Bar dataKey="Sem Análise" stackId="a" fill="#64748b" />
+                        <Bar dataKey="Outras" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Exposição por Rating</CardTitle></CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={ratingData}>
+                        <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(240 5% 65%)' }} interval={0} angle={-45} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 10, fill: 'hsl(240 5% 65%)' }} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Bar dataKey="value" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Posições" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Equity Panel */}
+              {equityPositions.length > 0 && (
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      Painel de Ações ({equityPositions.length} posições)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 overflow-x-auto">
+                    <Table className="min-w-[800px]">
+                      <TableHeader>
+                        <TableRow className="border-border">
+                          <TableHead className="text-[11px] h-9">Ativo</TableHead>
+                          <TableHead className="text-[11px] h-9">Fundo</TableHead>
+                          <TableHead className="text-[11px] h-9">Status</TableHead>
+                          <TableHead className="text-[11px] h-9">Recomendação</TableHead>
+                          <TableHead className="text-[11px] h-9 text-right">Preço Atual</TableHead>
+                          <TableHead className="text-[11px] h-9 text-right">Mín</TableHead>
+                          <TableHead className="text-[11px] h-9 text-right">Médio</TableHead>
+                          <TableHead className="text-[11px] h-9 text-right">Máx</TableHead>
+                          <TableHead className="text-[11px] h-9">Range</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {equityPositions.map(p => (
+                          <TableRow key={p.id} className="border-border">
+                            <TableCell className="text-[11px] py-1.5 font-medium">
+                              <div>{p.product}</div>
+                              {p.empresaNome && <div className="text-muted-foreground text-[10px]">{p.empresaNome}</div>}
+                            </TableCell>
+                            <TableCell className="text-[11px] py-1.5 max-w-[150px] truncate">{p.trading_desk_share_source}</TableCell>
+                            <TableCell className="text-[11px] py-1.5">
+                              <div className="flex items-center gap-1">
+                                {getAnaliseStatusIcon(p.analiseStatus || 'Sem Análise')}
+                                <span>{p.analiseStatus}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[11px] py-1.5">{getRecBadge(p.analiseRecomendacao)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono">{fmtNum(p.financial_price)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono text-muted-foreground">{fmtNum(p.analisePrecoMin)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono text-muted-foreground">{fmtNum(p.analisePrecoMedio)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5 text-right font-mono text-muted-foreground">{fmtNum(p.analisePrecoMax)}</TableCell>
+                            <TableCell className="text-[11px] py-1.5">{getPriceStatusBadge(p.priceStatus)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
