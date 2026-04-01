@@ -91,6 +91,7 @@ function getDisplayStatus(status: string, dataConclusao: string | null, empresaI
 export default function PipelineResearchPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   const [search, setSearch] = useState('');
   const [analistaFilter, setAnalistaFilter] = useState('all');
