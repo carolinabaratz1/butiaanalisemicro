@@ -109,9 +109,9 @@ export default function AnalisesPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-foreground">Análises</h2>
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos status</SelectItem>
             <SelectItem value="Pendente">Pendente</SelectItem>
@@ -123,7 +123,7 @@ export default function AnalisesPage() {
           </SelectContent>
         </Select>
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-32 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-32 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos tipos</SelectItem>
             <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
@@ -131,7 +131,7 @@ export default function AnalisesPage() {
           </SelectContent>
         </Select>
         <Select value={analistaFilter} onValueChange={setAnalistaFilter}>
-          <SelectTrigger className="w-44 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-44 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos analistas</SelectItem>
             {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
@@ -140,14 +140,14 @@ export default function AnalisesPage() {
       </div>
 
       <Card className="bg-card border-border">
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <p className="text-sm">Nenhuma análise encontrada</p>
               <p className="text-xs mt-1">As análises aparecerão aqui quando forem cadastradas no sistema.</p>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[800px]">
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-9">Empresa</TableHead>

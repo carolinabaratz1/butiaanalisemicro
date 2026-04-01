@@ -75,8 +75,8 @@ export default function CreditoEstruturadoPage() {
       </div>
 
       <Card className="bg-card border-border">
-        <CardContent className="p-0">
-          <Table>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table className="min-w-[800px]">
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="text-[11px] h-9">Nome</TableHead>

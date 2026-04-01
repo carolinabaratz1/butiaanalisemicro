@@ -186,7 +186,7 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'Total', value: stats.total },
           { label: 'Gestores', value: stats.gestores },
@@ -209,8 +209,8 @@ export default function ConfiguracoesPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium">Usuários do Sistema</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="text-muted-foreground">Nome</TableHead>

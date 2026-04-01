@@ -280,13 +280,13 @@ export default function PosicoesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-foreground">Posições</h2>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={() => setImportOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border flex-1 sm:flex-none" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5" /> Importar posições
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={handleExport} disabled={exporting || filtered.length === 0}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border flex-1 sm:flex-none" onClick={handleExport} disabled={exporting || filtered.length === 0}>
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Exportar .xlsx
           </Button>
         </div>
@@ -329,29 +329,29 @@ export default function PosicoesPage() {
         </TabsList>
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Select value={fundFilter} onValueChange={v => { setFundFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os fundos</SelectItem>
                 {allFunds.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={classFilter} onValueChange={v => { setClassFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os tipos</SelectItem>
                 {allProductClasses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={v => { setDateFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="latest">Mais recente</SelectItem>
                 {availableDates.map(d => <SelectItem key={d} value={d}>{fmtDate(d)}</SelectItem>)}
               </SelectContent>
             </Select>
-            <div className="flex items-center text-xs text-muted-foreground ml-auto">
+            <div className="flex items-center text-xs text-muted-foreground sm:ml-auto">
               Data ref: <span className="text-foreground font-medium ml-1">{latestDate ? fmtDate(latestDate) : '—'}</span>
             </div>
           </div>
@@ -372,8 +372,8 @@ export default function PosicoesPage() {
           ) : (
             <>
               <Card className="bg-card border-border">
-                <CardContent className="p-0">
-                  <Table>
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table className="min-w-[900px]">
                     <TableHeader>
                       <TableRow className="border-border">
                         <TableHead className="text-[11px] h-9">Fundo</TableHead>
@@ -431,7 +431,7 @@ export default function PosicoesPage() {
         </TabsContent>
 
         <TabsContent value="analitico" className="space-y-4 mt-3">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Total de ativos</p>
               <p className="text-xl font-bold text-foreground mt-1">{totalAtivos}</p>
@@ -457,7 +457,7 @@ export default function PosicoesPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="bg-card border-border">
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Distribuição por Tipo</CardTitle></CardHeader>
                 <CardContent>
