@@ -6,6 +6,8 @@ import {
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { ButiaLogo } from '@/components/ui/ButiaLogo';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const mainItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -47,8 +49,8 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
     cn(
       'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
       isActive(path)
-        ? 'bg-primary/15 text-primary font-medium'
-        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+        ? 'bg-white/15 text-sidebar-foreground font-medium'
+        : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8'
     );
 
   const filteredMain = mainItems.filter(item => hasAccess(item.path));
@@ -58,33 +60,41 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
 
   if (collapsed) {
     return (
-      <aside className="w-14 bg-surface-1 border-r border-border flex flex-col items-center py-4 gap-2 shrink-0">
+      <aside className="w-14 bg-sidebar border-r border-sidebar-border flex flex-col items-center py-4 gap-2 shrink-0">
+        <div className="mb-3">
+          <ButiaLogo variant="icon" theme="dark" size="sm" />
+        </div>
         {filteredMain.map(item => (
-          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-white/15 text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8')}>
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
         {hasCreditoAccess && (
-          <Link to="/credito/corporativo" onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link to="/credito/corporativo" onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-white/15 text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8')}>
             <CreditCard className="h-4 w-4" />
           </Link>
         )}
         {filteredBottom.map(item => (
-          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent')}>
+          <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-white/15 text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8')}>
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
+        <div className="mt-auto">
+          <ThemeToggle />
+        </div>
       </aside>
     );
   }
 
   return (
-    <aside className="w-56 bg-surface-1 border-r border-border flex flex-col shrink-0">
-      <div className="px-4 py-4">
-        <h1 className="text-base font-bold text-foreground tracking-tight">ResearchDesk</h1>
-        <p className="text-[10px] text-muted-foreground mt-0.5">Asset Management Platform</p>
+    <aside className="w-56 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0">
+      <div className="px-4 py-5 border-b border-white/10">
+        <ButiaLogo variant="full" theme="dark" size="md" />
+        <p className="mt-2 text-xs text-white/50 font-medium tracking-widest uppercase">
+          Research Platform
+        </p>
       </div>
-      <nav className="flex-1 px-3 space-y-0.5">
+      <nav className="flex-1 px-3 py-2 space-y-0.5">
         {filteredMain.map(item => (
           <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
@@ -97,7 +107,7 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
               onClick={() => setCreditoOpen(!creditoOpen)}
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full transition-colors',
-                isCreditoActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                isCreditoActive ? 'text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8'
               )}
             >
               <CreditCard className="h-4 w-4 shrink-0" />
@@ -122,6 +132,10 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
           </Link>
         ))}
       </nav>
+      <div className="px-4 py-3 border-t border-white/10 flex items-center justify-between">
+        <span className="text-xs text-white/40">Tema</span>
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

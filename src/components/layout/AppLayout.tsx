@@ -29,14 +29,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-12 flex items-center border-b border-border px-4 bg-surface-1 shrink-0">
+        <header className="h-12 flex items-center border-b border-border px-4 bg-card shrink-0">
           <button
             onClick={() => isMobile ? setMobileOpen(!mobileOpen) : setCollapsed(!collapsed)}
             className="p-1.5 rounded hover:bg-accent text-muted-foreground"
           >
             <Menu className="h-4 w-4" />
           </button>
-          <span className="ml-3 text-sm font-semibold text-foreground tracking-wide">ResearchDesk</span>
+          <span className="ml-3 text-sm font-semibold text-foreground tracking-wide">Butiá Research Platform</span>
           <div className="ml-auto flex items-center gap-2">
             {currentUser && (
               <>
