@@ -1007,15 +1007,37 @@ export default function PipelineResearchPage() {
           <div className="space-y-3">
             <div>
               <Label className="text-xs">Empresa / Emissor</Label>
-              <Select value={novoEmissor} onValueChange={setNovoEmissor}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
-                <SelectContent className="bg-card border-border max-h-60">
-                  {empresasDB.filter(e => e.tipo !== 'Título Público').map(e => (
-                    <SelectItem key={e.cnpj} value={e.cnpj}>{e.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="mt-1 h-8 w-full justify-between text-sm bg-surface-1 border-border font-normal">
+                    {novoEmissor
+                      ? empresasDB.find(e => e.cnpj === novoEmissor)?.nome ?? novoEmissor
+                      : "Selecionar empresa..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-card border-border" align="start">
+                  <Command>
+                    <CommandInput placeholder="Buscar empresa..." className="h-9" />
+                    <CommandList className="max-h-60">
+                      <CommandEmpty>Nenhuma empresa encontrada.</CommandEmpty>
+                      {empresasDB
+                        .filter(e => e.tipo !== 'Título Público')
+                        .sort((a, b) => a.nome.localeCompare(b.nome))
+                        .map(e => (
+                          <CommandItem
+                            key={e.cnpj}
+                            value={e.nome}
+                            onSelect={() => setNovoEmissor(e.cnpj)}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", novoEmissor === e.cnpj ? "opacity-100" : "opacity-0")} />
+                            {e.nome}
+                          </CommandItem>
+                        ))}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             <div>
               <Label className="text-xs">Tipo de Análise</Label>
               <Select value={novoTipo} onValueChange={setNovoTipo}>
