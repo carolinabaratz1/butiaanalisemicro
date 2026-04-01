@@ -118,6 +118,11 @@ export default function AnalistasPage() {
               {analistas.map(a => (
                 <TableRow key={a.id} className={`border-border ${a.status !== 'Ativo' ? 'opacity-50' : ''}`}>
                   <TableCell className="text-sm py-2 font-medium">{a.nome}</TableCell>
+                  <TableCell className="py-2">
+                    <Badge variant="outline" className={`text-[10px] ${a.funcao === 'Coordenação/Especialista' ? 'text-primary border-primary/30 bg-primary/10' : 'text-muted-foreground border-border bg-muted/30'}`}>
+                      {a.funcao === 'Coordenação/Especialista' ? 'Coord./Espec.' : 'Analista'}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-sm py-2 text-muted-foreground">{a.email}</TableCell>
                   <TableCell className="text-sm py-2 text-muted-foreground">
                     {new Date(a.created_at).toLocaleDateString('pt-BR')}
