@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck } from 'lucide-react';
+import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProfileUser {
@@ -45,6 +45,9 @@ export default function ConfiguracoesPage() {
   const [newUser, setNewUser] = useState({ nome: '', email: '', senha: '', funcao: 'Analista' });
   const [creating, setCreating] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{ userId: string; userName: string; action: 'deactivate' | 'reactivate' } | null>(null);
+  const [resetDialog, setResetDialog] = useState<{ userId: string; userName: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   const fetchUsers = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome');
@@ -89,6 +92,30 @@ export default function ConfiguracoesPage() {
       toast.error('Erro ao alterar status');
     }
     setConfirmAction(null);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetDialog || !resetPassword) return;
+    if (resetPassword.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'reset-password', userId: resetDialog.userId, newPassword: resetPassword },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao resetar senha');
+      } else {
+        toast.success('Senha resetada. O usuário deverá trocá-la no próximo login.');
+      }
+    } catch {
+      toast.error('Erro ao resetar senha');
+    }
+    setResetting(false);
+    setResetDialog(null);
+    setResetPassword('');
   };
 
   const handleCreateUser = async () => {
@@ -264,21 +291,32 @@ export default function ConfiguracoesPage() {
                       </Badge>
                     </TableCell>
                     {permissions.canManageUsers && (
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-1">
                         {!isCurrentUser && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
-                            onClick={() => setConfirmAction({
-                              userId: user.id,
-                              userName: user.nome,
-                              action: isActive ? 'deactivate' : 'reactivate',
-                            })}
-                          >
-                            {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                            {isActive ? 'Desativar' : 'Reativar'}
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                              title="Resetar senha"
+                              onClick={() => setResetDialog({ userId: user.id, userName: user.nome })}
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
+                              onClick={() => setConfirmAction({
+                                userId: user.id,
+                                userName: user.nome,
+                                action: isActive ? 'deactivate' : 'reactivate',
+                              })}
+                            >
+                              {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                              {isActive ? 'Desativar' : 'Reativar'}
+                            </Button>
+                          </>
                         )}
                       </TableCell>
                     )}
@@ -312,6 +350,33 @@ export default function ConfiguracoesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetDialog} onOpenChange={(open) => { if (!open) { setResetDialog(null); setResetPassword(''); } }}>
+        <DialogContent className="bg-surface-2 border-border">
+          <DialogHeader>
+            <DialogTitle>Resetar Senha — {resetDialog?.userName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Defina uma senha temporária. O usuário será obrigado a trocá-la no próximo login.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nova Senha Temporária</Label>
+              <Input
+                type="password"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="bg-surface-1 border-border"
+              />
+            </div>
+            <Button onClick={handleResetPassword} disabled={resetting} className="w-full">
+              {resetting ? 'Resetando...' : 'Resetar Senha'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

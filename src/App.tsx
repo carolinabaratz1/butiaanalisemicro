@@ -9,6 +9,7 @@ import { AnaliseEmissaoProvider } from "@/contexts/AnaliseEmissaoContext";
 import { ButiaLogo } from "@/components/ui/ButiaLogo";
 import { useTheme } from "@/hooks/useTheme";
 import LoginPage from "./pages/LoginPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import EmpresasPage from "./pages/EmpresasPage";
 import EmpresaDetailPage from "./pages/EmpresaDetailPage";
@@ -35,7 +36,7 @@ function LoadingScreen() {
 }
 
 function ProtectedRoutes() {
-  const { session, loading } = useAuth();
+  const { session, loading, currentUser } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
@@ -43,6 +44,10 @@ function ProtectedRoutes() {
 
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (currentUser?.must_change_password) {
+    return <Navigate to="/trocar-senha" replace />;
   }
 
   return (
@@ -66,7 +71,7 @@ function ProtectedRoutes() {
 }
 
 function AppRoutes() {
-  const { session, loading } = useAuth();
+  const { session, loading, currentUser } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
@@ -75,6 +80,11 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/trocar-senha" element={
+        !session ? <Navigate to="/login" replace /> :
+        !currentUser?.must_change_password ? <Navigate to="/" replace /> :
+        <ChangePasswordPage />
+      } />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { action, userId, newRole, newStatus } = body;
+    const { action, userId, newRole, newStatus, newPassword } = body;
 
     if (!action || !userId) {
       return new Response(JSON.stringify({ error: "action e userId são obrigatórios" }), {
@@ -68,7 +68,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Update profiles.funcao
       const { error: profileError } = await adminClient
         .from("profiles")
         .update({ funcao: newRole })
@@ -81,7 +80,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Delete old role and insert new
       await adminClient.from("user_roles").delete().eq("user_id", userId);
       const { error: roleError } = await adminClient
         .from("user_roles")
@@ -103,7 +101,6 @@ Deno.serve(async (req) => {
       const targetStatus = newStatus || "Inativo";
       const banned = targetStatus === "Inativo";
 
-      // Update profile status
       const { error: profileError } = await adminClient
         .from("profiles")
         .update({ status: targetStatus })
@@ -116,7 +113,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Ban/unban auth user
       const { error: authError } = await adminClient.auth.admin.updateUserById(userId, {
         ban_duration: banned ? "876600h" : "none",
       });
@@ -129,6 +125,42 @@ Deno.serve(async (req) => {
       }
 
       return new Response(JSON.stringify({ success: true, status: targetStatus }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "reset-password") {
+      if (!newPassword || newPassword.length < 6) {
+        return new Response(JSON.stringify({ error: "Nova senha deve ter pelo menos 6 caracteres" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: authError } = await adminClient.auth.admin.updateUserById(userId, {
+        password: newPassword,
+      });
+
+      if (authError) {
+        return new Response(JSON.stringify({ error: authError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: profileError } = await adminClient
+        .from("profiles")
+        .update({ must_change_password: true })
+        .eq("id", userId);
+
+      if (profileError) {
+        return new Response(JSON.stringify({ error: profileError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

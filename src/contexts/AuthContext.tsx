@@ -9,6 +9,7 @@ export interface User {
   email: string;
   funcao: UserRole;
   status: string;
+  must_change_password: boolean;
 }
 
 interface AuthContextType {
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: data.email,
         funcao: data.funcao as UserRole,
         status: data.status,
+        must_change_password: (data as any).must_change_password ?? false,
       });
     }
   };
