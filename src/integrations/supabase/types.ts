@@ -147,6 +147,7 @@ export type Database = {
         Row: {
           cnpj: string
           created_at: string
+          grupo_economico: string | null
           id: string
           nome: string
           rating: string | null
@@ -158,6 +159,7 @@ export type Database = {
         Insert: {
           cnpj: string
           created_at?: string
+          grupo_economico?: string | null
           id?: string
           nome: string
           rating?: string | null
@@ -169,6 +171,7 @@ export type Database = {
         Update: {
           cnpj?: string
           created_at?: string
+          grupo_economico?: string | null
           id?: string
           nome?: string
           rating?: string | null
