@@ -17,7 +17,6 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
-import { historicoAnalises } from '@/data/historicoAnalises';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -101,10 +100,19 @@ export default function EmpresaDetailPage() {
   const isAnalista = currentUser?.funcao === 'Analista';
   const canSolicitar = isGestor || isRC;
 
-  // Histórico filtrado por CNPJ
-  const historicoPorCnpj = historicoAnalises
-    .filter(h => h.cnpj === decodedCnpj)
-    .sort((a, b) => b.data.localeCompare(a.data));
+  // ── Fetch análises from DB for this empresa ──
+  const { data: historicoPorCnpj = [] } = useQuery({
+    queryKey: ['analises-historico', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises')
+        .select('*')
+        .eq('empresa_id', decodedCnpj)
+        .order('versao', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   if (loadingEmpresa) {
     return (
@@ -290,38 +298,42 @@ export default function EmpresaDetailPage() {
         <TabsContent value="historico">
           <Card className="bg-card border-border">
             <CardContent className="p-0 overflow-x-auto">
-              <Table className="min-w-[500px]">
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow className="border-border">
-                    <TableHead className="text-[11px] h-9">Data</TableHead>
-                    <TableHead className="text-[11px] h-9">Resultado</TableHead>
+                    <TableHead className="text-[11px] h-9">Versão</TableHead>
+                    <TableHead className="text-[11px] h-9">Tipo</TableHead>
+                    <TableHead className="text-[11px] h-9">Data Início</TableHead>
+                    <TableHead className="text-[11px] h-9">Data Conclusão</TableHead>
+                    <TableHead className="text-[11px] h-9">Status</TableHead>
                     <TableHead className="text-[11px] h-9">Analista</TableHead>
-                    <TableHead className="text-[11px] h-9">Status do Analista</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {historicoPorCnpj.map(h => {
-                    const matchedProfile = analistasUsuarios.find(a => a.id === h.analista_id || a.nome === h.analista_nome);
-                    const analistaAtivo = !!matchedProfile;
+                    const statusColor = h.status === 'Aprovada' ? 'bg-status-success/15 text-status-success border-status-success/30'
+                      : h.status === 'Reprovada' ? 'bg-status-danger/15 text-status-danger border-status-danger/30'
+                      : h.status === 'Concluída' ? 'bg-status-info/15 text-status-info border-status-info/30'
+                      : h.status === 'Em Análise' ? 'bg-status-warning/15 text-status-warning border-status-warning/30'
+                      : 'bg-muted/50 text-muted-foreground border-border';
+                    const analistaNome = getUserNome(h.analista_responsavel, analistasUsuarios);
                     return (
                       <TableRow key={h.id} className="border-border">
-                        <TableCell className="text-sm py-2 text-muted-foreground">{h.data}</TableCell>
+                        <TableCell className="text-sm py-2 font-medium">v{h.versao || 1}</TableCell>
+                        <TableCell className="text-sm py-2 text-muted-foreground">{h.tipo}</TableCell>
+                        <TableCell className="text-sm py-2 text-muted-foreground">{h.data_inicio || '—'}</TableCell>
+                        <TableCell className="text-sm py-2 text-muted-foreground">{h.data_conclusao || '—'}</TableCell>
                         <TableCell className="py-2">
-                          <Badge variant="outline" className={`text-[10px] ${resultadoConfig[h.resultado] || ''}`}>
-                            {h.resultado}
+                          <Badge variant="outline" className={`text-[10px] ${statusColor}`}>
+                            {h.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm py-2">{h.analista_nome}</TableCell>
-                        <TableCell className="py-2">
-                          <Badge variant="outline" className={`text-[10px] ${analistaAtivo ? 'text-status-success border-status-success/30 bg-status-success/10' : 'text-muted-foreground border-border bg-muted/30'}`}>
-                            {analistaAtivo ? 'Ativo' : 'Ex-Analista'}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="text-sm py-2">{analistaNome}</TableCell>
                       </TableRow>
                     );
                   })}
                   {historicoPorCnpj.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">Nenhuma análise histórica para este emissor</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">Nenhuma análise histórica para este emissor</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
