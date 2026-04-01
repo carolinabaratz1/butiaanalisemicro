@@ -280,13 +280,13 @@ export default function PosicoesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-foreground">Posições</h2>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={() => setImportOpen(true)}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border flex-1 sm:flex-none" onClick={() => setImportOpen(true)}>
             <Upload className="h-3.5 w-3.5" /> Importar posições
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border" onClick={handleExport} disabled={exporting || filtered.length === 0}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8 border-border flex-1 sm:flex-none" onClick={handleExport} disabled={exporting || filtered.length === 0}>
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Exportar .xlsx
           </Button>
         </div>
