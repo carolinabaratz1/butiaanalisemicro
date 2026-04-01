@@ -530,7 +530,7 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
+                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
