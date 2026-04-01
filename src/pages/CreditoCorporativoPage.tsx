@@ -33,7 +33,7 @@ export default function CreditoCorporativoPage() {
           {empresasComRating.map(empId => {
             const ratings = ri.filter(r => r.empresaId === empId).sort((a, b) => a.data.localeCompare(b.data));
             return (
-              <Card key={empId} className="bg-card border-border">
+              <Card key={empId} className="bg-card border-border overflow-x-auto">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">{getEmpresaNome(empId)}</CardTitle>
                 </CardHeader>

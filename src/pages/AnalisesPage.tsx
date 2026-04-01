@@ -147,7 +147,7 @@ export default function AnalisesPage() {
               <p className="text-xs mt-1">As análises aparecerão aqui quando forem cadastradas no sistema.</p>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[800px]">
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-9">Empresa</TableHead>

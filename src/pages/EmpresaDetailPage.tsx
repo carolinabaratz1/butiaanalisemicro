@@ -250,8 +250,8 @@ export default function EmpresaDetailPage() {
         {/* Tab Histórico de Análises */}
         <TabsContent value="historico">
           <Card className="bg-card border-border">
-            <CardContent className="p-0">
-              <Table>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table className="min-w-[500px]">
                 <TableHeader>
                   <TableRow className="border-border">
                     <TableHead className="text-[11px] h-9">Data</TableHead>

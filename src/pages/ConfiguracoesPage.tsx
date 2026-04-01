@@ -209,8 +209,8 @@ export default function ConfiguracoesPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium">Usuários do Sistema</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow className="border-border">
                 <TableHead className="text-muted-foreground">Nome</TableHead>
