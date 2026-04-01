@@ -350,6 +350,33 @@ export default function ConfiguracoesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetDialog} onOpenChange={(open) => { if (!open) { setResetDialog(null); setResetPassword(''); } }}>
+        <DialogContent className="bg-surface-2 border-border">
+          <DialogHeader>
+            <DialogTitle>Resetar Senha — {resetDialog?.userName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Defina uma senha temporária. O usuário será obrigado a trocá-la no próximo login.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nova Senha Temporária</Label>
+              <Input
+                type="password"
+                value={resetPassword}
+                onChange={e => setResetPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="bg-surface-1 border-border"
+              />
+            </div>
+            <Button onClick={handleResetPassword} disabled={resetting} className="w-full">
+              {resetting ? 'Resetando...' : 'Resetar Senha'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
