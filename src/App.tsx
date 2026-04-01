@@ -9,6 +9,7 @@ import { AnaliseEmissaoProvider } from "@/contexts/AnaliseEmissaoContext";
 import { ButiaLogo } from "@/components/ui/ButiaLogo";
 import { useTheme } from "@/hooks/useTheme";
 import LoginPage from "./pages/LoginPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import EmpresasPage from "./pages/EmpresasPage";
 import EmpresaDetailPage from "./pages/EmpresaDetailPage";
