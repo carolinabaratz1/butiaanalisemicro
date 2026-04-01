@@ -724,7 +724,7 @@ export default function PipelineResearchPage() {
                         <span className="text-[11px] text-muted-foreground">{fmtDateBR(h.data_conclusao)}</span>
                         <Badge variant="outline" className="text-[9px]">{h.displayStatus}</Badge>
                       </div>
-                      <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel)}</p>
+                      <p className="text-[11px]">Analista: {getAnalistaNome(h.analista_responsavel, allProfiles)}</p>
                       {(h as any).recomendacao && (
                         <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(h as any).recomendacao] || ''}`}>{(h as any).recomendacao}</Badge>
                       )}
