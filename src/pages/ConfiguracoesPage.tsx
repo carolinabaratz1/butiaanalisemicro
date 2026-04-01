@@ -23,6 +23,7 @@ interface ProfileUser {
 
 const roleColors: Record<string, string> = {
   'Gestor': 'bg-green-500/20 text-green-400 border-green-500/30',
+  'Coordenação/Especialista': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
   'Analista': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   'Risco e Compliance': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
   'Consulta': 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30',
@@ -30,6 +31,7 @@ const roleColors: Record<string, string> = {
 
 const roleIcons: Record<string, typeof Shield> = {
   'Gestor': UserCog,
+  'Coordenação/Especialista': UserCog,
   'Analista': Pencil,
   'Risco e Compliance': Shield,
   'Consulta': Eye,
@@ -116,6 +118,7 @@ export default function ConfiguracoesPage() {
   const stats = {
     total: userList.length,
     gestores: userList.filter(u => u.funcao === 'Gestor').length,
+    coordenadores: userList.filter(u => u.funcao === 'Coordenação/Especialista').length,
     analistas: userList.filter(u => u.funcao === 'Analista').length,
     compliance: userList.filter(u => u.funcao === 'Risco e Compliance').length,
     consulta: userList.filter(u => u.funcao === 'Consulta').length,
@@ -166,6 +169,7 @@ export default function ConfiguracoesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Gestor">Gestor</SelectItem>
+                      <SelectItem value="Coordenação/Especialista">Coordenação/Especialista</SelectItem>
                       <SelectItem value="Analista">Analista</SelectItem>
                       <SelectItem value="Risco e Compliance">Risco e Compliance</SelectItem>
                       <SelectItem value="Consulta">Consulta</SelectItem>
@@ -182,10 +186,11 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Total', value: stats.total },
           { label: 'Gestores', value: stats.gestores },
+          { label: 'Coord./Espec.', value: stats.coordenadores },
           { label: 'Analistas', value: stats.analistas },
           { label: 'Risco & Compliance', value: stats.compliance },
           { label: 'Consulta', value: stats.consulta },
@@ -238,6 +243,7 @@ export default function ConfiguracoesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Gestor">Gestor</SelectItem>
+                            <SelectItem value="Coordenação/Especialista">Coordenação/Especialista</SelectItem>
                             <SelectItem value="Analista">Analista</SelectItem>
                             <SelectItem value="Risco e Compliance">Risco e Compliance</SelectItem>
                             <SelectItem value="Consulta">Consulta</SelectItem>

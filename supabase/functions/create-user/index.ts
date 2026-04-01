@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const validRoles = ["Gestor", "Analista", "Risco e Compliance", "Consulta"];
+    const validRoles = ["Gestor", "Coordenação/Especialista", "Analista", "Risco e Compliance", "Consulta"];
     if (!validRoles.includes(funcao)) {
       return new Response(JSON.stringify({ error: "Função inválida" }), {
         status: 400,

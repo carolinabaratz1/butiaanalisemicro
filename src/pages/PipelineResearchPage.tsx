@@ -126,9 +126,10 @@ export default function PipelineResearchPage() {
   const [dataComite, setDataComite] = useState<Date>();
 
   const isGestor = currentUser?.funcao === 'Gestor';
+  const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
   const isAnalista = currentUser?.funcao === 'Analista';
-  const canCreate = isGestor || isRC;
+  const canCreate = isGestor || isCoord || isRC;
 
   const analistasAtivos = catalogoAnalistas.filter(a => a.ativo);
   const hoje = new Date().toISOString().split('T')[0];
