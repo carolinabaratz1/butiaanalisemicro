@@ -249,7 +249,7 @@ export default function EmpresaDetailPage() {
                       <TableRow key={em.isin} className="border-border">
                         <TableCell className="text-xs py-2 font-mono">{em.isin}</TableCell>
                         <TableCell className="text-sm py-2">{em.ticker || '—'}</TableCell>
-                        <TableCell className="text-sm py-2 text-muted-foreground">{em.valDate}</TableCell>
+                        <TableCell className="text-sm py-2 text-muted-foreground">{em.val_date || '—'}</TableCell>
                         <TableCell className="py-2">
                           <Badge variant="outline" className={`text-[10px] ${cfg.className}`}>{cfg.label}</Badge>
                         </TableCell>
