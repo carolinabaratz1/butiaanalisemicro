@@ -60,9 +60,9 @@ export default function EmpresaDetailPage() {
   const [novoValDate, setNovoValDate] = useState<Date>();
 
   const analistasUsuarios = users.filter(u => u.funcao === 'Analista' && u.status === 'Ativo');
-  const isGestor = currentUser.funcao === 'Gestor';
-  const isRC = currentUser.funcao === 'Risco e Compliance';
-  const isAnalista = currentUser.funcao === 'Analista';
+  const isGestor = currentUser?.funcao === 'Gestor';
+  const isRC = currentUser?.funcao === 'Risco e Compliance';
+  const isAnalista = currentUser?.funcao === 'Analista';
   const canSolicitar = isGestor || isRC;
 
   // Histórico filtrado por CNPJ
