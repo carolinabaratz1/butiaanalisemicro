@@ -338,9 +338,9 @@ export default function PosicoesPage() {
 
   // Coverage by fund (stacked bar)
   const coverageByFund = useMemo(() => {
-    const funds = [...new Set(biFiltered.map(p => p.trading_desk_share_source))];
+    const funds = [...new Set(biFilteredForAnalysis.map(p => p.trading_desk_share_source))];
     return funds.map(f => {
-      const items = biFiltered.filter(p => p.trading_desk_share_source === f);
+      const items = biFilteredForAnalysis.filter(p => p.trading_desk_share_source === f);
       return {
         name: f.length > 20 ? f.substring(0, 20) + '…' : f,
         fullName: f,
@@ -350,7 +350,7 @@ export default function PosicoesPage() {
         Outras: items.filter(p => !['Aprovada', 'Vencida', 'Sem Análise'].includes(p.analiseStatus || '')).length,
       };
     });
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   // Rating distribution
   const ratingData = useMemo(() => {
