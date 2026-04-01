@@ -100,10 +100,19 @@ export default function EmpresaDetailPage() {
   const isAnalista = currentUser?.funcao === 'Analista';
   const canSolicitar = isGestor || isRC;
 
-  // Histórico filtrado por CNPJ
-  const historicoPorCnpj = historicoAnalises
-    .filter(h => h.cnpj === decodedCnpj)
-    .sort((a, b) => b.data.localeCompare(a.data));
+  // ── Fetch análises from DB for this empresa ──
+  const { data: historicoPorCnpj = [] } = useQuery({
+    queryKey: ['analises-historico', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises')
+        .select('*')
+        .eq('empresa_id', decodedCnpj)
+        .order('versao', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   if (loadingEmpresa) {
     return (
