@@ -94,6 +94,30 @@ export default function ConfiguracoesPage() {
     setConfirmAction(null);
   };
 
+  const handleResetPassword = async () => {
+    if (!resetDialog || !resetPassword) return;
+    if (resetPassword.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+    setResetting(true);
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'reset-password', userId: resetDialog.userId, newPassword: resetPassword },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao resetar senha');
+      } else {
+        toast.success('Senha resetada. O usuário deverá trocá-la no próximo login.');
+      }
+    } catch {
+      toast.error('Erro ao resetar senha');
+    }
+    setResetting(false);
+    setResetDialog(null);
+    setResetPassword('');
+  };
+
   const handleCreateUser = async () => {
     if (!newUser.nome || !newUser.email || !newUser.senha) {
       toast.error('Preencha todos os campos');
