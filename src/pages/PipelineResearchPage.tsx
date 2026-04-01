@@ -245,7 +245,7 @@ export default function PipelineResearchPage() {
     createAnalise.mutate({
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
-      solicitante_id: currentUser.id,
+      solicitante_id: currentUser?.id || '',
       tipo: novoTipo,
       status: 'Pendente',
       data_inicio: format(new Date(), 'yyyy-MM-dd'),
