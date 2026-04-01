@@ -702,7 +702,28 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                              {(item.versao || 1) > 1 && (
+                                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30 shrink-0">v{item.versao}</Badge>
+                              )}
+                            </div>
+                            {isGestor && (
+                              <div onClick={e => e.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground">
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-card border-border">
+                                    <DropdownMenuItem className="text-destructive text-xs gap-2 cursor-pointer" onClick={() => setDeleteConfirmId(item.id)}>
+                                      <Trash2 className="h-3 w-3" /> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
