@@ -16,11 +16,11 @@ import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { emissores, emissoes, type Emissao } from '@/data/emissores';
-import { users } from '@/data/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
 import { historicoAnalises } from '@/data/historicoAnalises';
-import { analistas as catalogoAnalistas } from '@/data/analistas';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
