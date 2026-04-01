@@ -60,7 +60,18 @@ export default function EmpresaDetailPage() {
   const [novoTicker, setNovoTicker] = useState('');
   const [novoValDate, setNovoValDate] = useState<Date>();
 
-  const analistasUsuarios = users.filter(u => u.funcao === 'Analista' && u.status === 'Ativo');
+  const { data: analistasUsuarios = [] } = useQuery({
+    queryKey: ['profiles-analistas-ativos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
+        .eq('status', 'Ativo');
+      if (error) throw error;
+      return data || [];
+    },
+  });
   const isGestor = currentUser?.funcao === 'Gestor';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
   const isAnalista = currentUser?.funcao === 'Analista';
