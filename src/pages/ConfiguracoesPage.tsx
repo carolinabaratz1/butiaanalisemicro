@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { UserRole } from '@/data/users';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Shield, Eye, Pencil, UserCog, Plus } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProfileUser {
@@ -42,6 +42,7 @@ export default function ConfiguracoesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({ nome: '', email: '', senha: '', funcao: 'Analista' });
   const [creating, setCreating] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ userId: string; userName: string; action: 'deactivate' | 'reactivate' } | null>(null);
 
   const fetchUsers = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome');
@@ -53,13 +54,39 @@ export default function ConfiguracoesPage() {
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     if (!permissions.canManageUsers) return;
-    const { error } = await supabase.from('profiles').update({ funcao: newRole }).eq('id', userId);
-    if (error) {
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'change-role', userId, newRole },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao atualizar função');
+      } else {
+        setUserList(prev => prev.map(u => u.id === userId ? { ...u, funcao: newRole } : u));
+        toast.success('Função atualizada');
+      }
+    } catch {
       toast.error('Erro ao atualizar função');
-    } else {
-      setUserList(prev => prev.map(u => u.id === userId ? { ...u, funcao: newRole } : u));
-      toast.success('Função atualizada');
     }
+  };
+
+  const handleToggleStatus = async () => {
+    if (!confirmAction) return;
+    const { userId, action } = confirmAction;
+    const newStatus = action === 'deactivate' ? 'Inativo' : 'Ativo';
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'toggle-status', userId, newStatus },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao alterar status');
+      } else {
+        setUserList(prev => prev.map(u => u.id === userId ? { ...u, status: newStatus } : u));
+        toast.success(action === 'deactivate' ? 'Usuário desativado' : 'Usuário reativado');
+      }
+    } catch {
+      toast.error('Erro ao alterar status');
+    }
+    setConfirmAction(null);
   };
 
   const handleCreateUser = async () => {
@@ -69,7 +96,6 @@ export default function ConfiguracoesPage() {
     }
     setCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const res = await supabase.functions.invoke('create-user', {
         body: { email: newUser.email, nome: newUser.nome, senha: newUser.senha, funcao: newUser.funcao },
       });
@@ -186,17 +212,20 @@ export default function ConfiguracoesPage() {
                 <TableHead className="text-muted-foreground">E-mail</TableHead>
                 <TableHead className="text-muted-foreground">Função</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
+                {permissions.canManageUsers && <TableHead className="text-muted-foreground text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {userList.map(user => {
                 const Icon = roleIcons[user.funcao] || Eye;
+                const isCurrentUser = currentUser && user.id === currentUser.id;
+                const isActive = user.status === 'Ativo';
                 return (
-                  <TableRow key={user.id} className="border-border">
+                  <TableRow key={user.id} className={`border-border ${!isActive ? 'opacity-50' : ''}`}>
                     <TableCell className="font-medium text-foreground flex items-center gap-2">
                       <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                       {user.nome}
-                      {currentUser && user.id === currentUser.id && (
+                      {isCurrentUser && (
                         <Badge variant="outline" className="text-[10px] ml-1 border-primary/30 text-primary">Você</Badge>
                       )}
                     </TableCell>
@@ -221,10 +250,32 @@ export default function ConfiguracoesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-500/30">
+                      <Badge variant="outline" className={isActive
+                        ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                        : 'bg-red-500/20 text-red-400 border-red-500/30'
+                      }>
                         {user.status}
                       </Badge>
                     </TableCell>
+                    {permissions.canManageUsers && (
+                      <TableCell className="text-right">
+                        {!isCurrentUser && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
+                            onClick={() => setConfirmAction({
+                              userId: user.id,
+                              userName: user.nome,
+                              action: isActive ? 'deactivate' : 'reactivate',
+                            })}
+                          >
+                            {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                            {isActive ? 'Desativar' : 'Reativar'}
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -232,6 +283,29 @@ export default function ConfiguracoesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <AlertDialogContent className="bg-surface-2 border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmAction?.action === 'deactivate' ? 'Desativar Usuário' : 'Reativar Usuário'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.action === 'deactivate'
+                ? `Tem certeza que deseja desativar "${confirmAction?.userName}"? O usuário não poderá mais acessar o sistema.`
+                : `Deseja reativar "${confirmAction?.userName}"? O usuário voltará a ter acesso ao sistema.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleToggleStatus}>
+              {confirmAction?.action === 'deactivate' ? 'Desativar' : 'Reativar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
