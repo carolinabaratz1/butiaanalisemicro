@@ -123,7 +123,7 @@ export default function AnalisesPage() {
           </SelectContent>
         </Select>
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-32 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-32 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos tipos</SelectItem>
             <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
