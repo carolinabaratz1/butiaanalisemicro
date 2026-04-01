@@ -8,8 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Search, ExternalLink, AlertTriangle, Plus, Pencil, Check, X } from 'lucide-react';
+import { Search, ExternalLink, Plus, Pencil, Check, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,7 +20,8 @@ export default function EmpresasPage() {
   const [search, setSearch] = useState('');
   const [tipoFilter, setTipoFilter] = useState('all');
   const [setorFilter, setSetorFilter] = useState('all');
-  const { currentUser, permissions } = useAuth();
+  const [grupoFilter, setGrupoFilter] = useState('all');
+  const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
   // Dialog state
@@ -31,6 +31,7 @@ export default function EmpresasPage() {
   const [formTipo, setFormTipo] = useState('CORPORATIVO');
   const [formSetor, setFormSetor] = useState('');
   const [formRating, setFormRating] = useState('');
+  const [formGrupo, setFormGrupo] = useState('');
 
   // Rating edit state
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
@@ -38,7 +39,6 @@ export default function EmpresasPage() {
 
   const canEdit = currentUser?.funcao === 'Gestor' || currentUser?.funcao === 'Coordenação/Especialista';
 
-  // Fetch empresas from DB
   const { data: empresas = [], isLoading } = useQuery({
     queryKey: ['empresas'],
     queryFn: async () => {
@@ -51,7 +51,6 @@ export default function EmpresasPage() {
     },
   });
 
-  // Fetch active analysis counts
   const { data: analisesCounts = {} } = useQuery({
     queryKey: ['analises-ativas-count'],
     queryFn: async () => {
@@ -68,15 +67,23 @@ export default function EmpresasPage() {
     },
   });
 
-  // Create empresa mutation
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Check if CNPJ already exists
+      const { data: existing } = await supabase
+        .from('empresas')
+        .select('nome')
+        .eq('cnpj', formCnpj.trim())
+        .maybeSingle();
+      if (existing) throw new Error(`CNPJ já cadastrado para: ${existing.nome}`);
+
       const { error } = await supabase.from('empresas').insert({
         nome: formNome.trim(),
         cnpj: formCnpj.trim(),
         tipo: formTipo,
         setor: formSetor.trim() || null,
         rating: formRating.trim() || null,
+        grupo_economico: formGrupo.trim() || null,
       });
       if (error) throw error;
     },
@@ -84,14 +91,13 @@ export default function EmpresasPage() {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
       toast.success('Empresa criada com sucesso');
       setCreateOpen(false);
-      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating('');
+      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating(''); setFormGrupo('');
     },
     onError: (err: any) => {
-      toast.error(err.message?.includes('duplicate') ? 'CNPJ já cadastrado' : 'Erro ao criar empresa');
+      toast.error(err.message || 'Erro ao criar empresa');
     },
   });
 
-  // Update rating mutation
   const updateRatingMutation = useMutation({
     mutationFn: async ({ id, rating }: { id: string; rating: string }) => {
       const { error } = await supabase.from('empresas').update({ rating: rating || null }).eq('id', id);
@@ -107,14 +113,16 @@ export default function EmpresasPage() {
 
   const tipos = useMemo(() => [...new Set(empresas.map((e: any) => e.tipo).filter(Boolean))].sort(), [empresas]);
   const setores = useMemo(() => [...new Set(empresas.map((e: any) => e.setor).filter(Boolean))].sort(), [empresas]);
+  const grupos = useMemo(() => [...new Set(empresas.map((e: any) => e.grupo_economico).filter(Boolean))].sort(), [empresas]);
 
   const filtered = useMemo(() => empresas.filter((e: any) => {
     const q = search.toLowerCase();
-    const matchSearch = e.nome?.toLowerCase().includes(q) || e.cnpj?.includes(search);
+    const matchSearch = e.nome?.toLowerCase().includes(q) || e.cnpj?.includes(search) || e.grupo_economico?.toLowerCase().includes(q);
     const matchTipo = tipoFilter === 'all' || e.tipo === tipoFilter;
     const matchSetor = setorFilter === 'all' || e.setor === setorFilter;
-    return matchSearch && matchTipo && matchSetor;
-  }), [empresas, search, tipoFilter, setorFilter]);
+    const matchGrupo = grupoFilter === 'all' || e.grupo_economico === grupoFilter;
+    return matchSearch && matchTipo && matchSetor && matchGrupo;
+  }), [empresas, search, tipoFilter, setorFilter, grupoFilter]);
 
   return (
     <div className="space-y-4">
@@ -150,6 +158,10 @@ export default function EmpresasPage() {
                   </Select>
                 </div>
                 <div>
+                  <Label className="text-xs">Grupo Econômico</Label>
+                  <Input value={formGrupo} onChange={e => setFormGrupo(e.target.value)} className="h-8 text-sm bg-background" />
+                </div>
+                <div>
                   <Label className="text-xs">Setor</Label>
                   <Input value={formSetor} onChange={e => setFormSetor(e.target.value)} className="h-8 text-sm bg-background" />
                 </div>
@@ -171,7 +183,7 @@ export default function EmpresasPage() {
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="relative flex-1 min-w-0 sm:max-w-xs">
           <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Buscar por nome ou CNPJ..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm bg-surface-1 border-border" />
+          <Input placeholder="Buscar nome, CNPJ ou grupo..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm bg-surface-1 border-border" />
         </div>
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
           <SelectTrigger className="w-full sm:w-40 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
@@ -187,19 +199,29 @@ export default function EmpresasPage() {
             {setores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={grupoFilter} onValueChange={setGrupoFilter}>
+          <SelectTrigger className="w-full sm:w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Grupo Econômico" /></SelectTrigger>
+          <SelectContent className="bg-card border-border max-h-60">
+            <SelectItem value="all">Todos os grupos</SelectItem>
+            {grupos.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
+
+      <p className="text-xs text-muted-foreground">{filtered.length} empresa(s) encontrada(s)</p>
 
       <Card className="bg-card border-border">
         <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <p className="text-sm text-muted-foreground text-center py-8">Carregando...</p>
           ) : (
-            <Table className="min-w-[700px]">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-9">Nome</TableHead>
                   <TableHead className="text-[11px] h-9">CNPJ</TableHead>
                   <TableHead className="text-[11px] h-9">Tipo</TableHead>
+                  <TableHead className="text-[11px] h-9">Grupo Econômico</TableHead>
                   <TableHead className="text-[11px] h-9">Setor</TableHead>
                   <TableHead className="text-[11px] h-9">Rating</TableHead>
                   <TableHead className="text-[11px] h-9">Análises Ativas</TableHead>
@@ -207,14 +229,15 @@ export default function EmpresasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.slice(0, 50).map((e: any) => {
+                {filtered.slice(0, 100).map((e: any) => {
                   const ativas = analisesCounts[e.cnpj] || 0;
                   return (
                     <TableRow key={e.id} className="border-border group">
-                      <TableCell className="text-sm py-2 font-medium">{e.nome}</TableCell>
+                      <TableCell className="text-sm py-2 font-medium max-w-[280px] truncate">{e.nome}</TableCell>
                       <TableCell className="text-xs py-2 text-muted-foreground font-mono">{e.cnpj}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className="text-[10px]">{e.tipo || '—'}</Badge></TableCell>
-                      <TableCell className="text-sm py-2 text-muted-foreground">{e.setor || '—'}</TableCell>
+                      <TableCell className="text-xs py-2 text-muted-foreground">{e.grupo_economico || '—'}</TableCell>
+                      <TableCell className="text-xs py-2 text-muted-foreground">{e.setor || '—'}</TableCell>
                       <TableCell className="py-2">
                         {editingRatingId === e.id ? (
                           <div className="flex items-center gap-1">
@@ -266,7 +289,7 @@ export default function EmpresasPage() {
               </TableBody>
             </Table>
           )}
-          {filtered.length > 50 && <p className="text-xs text-muted-foreground text-center py-2">Mostrando 50 de {filtered.length} resultados. Refine a busca.</p>}
+          {filtered.length > 100 && <p className="text-xs text-muted-foreground text-center py-2">Mostrando 100 de {filtered.length} resultados. Refine a busca.</p>}
         </CardContent>
       </Card>
     </div>
