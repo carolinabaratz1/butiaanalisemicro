@@ -285,7 +285,7 @@ export default function PipelineResearchPage() {
     if (search) {
       const q = search.toLowerCase();
       items = items.filter(a =>
-        getEmissorNome(a.empresa_id).toLowerCase().includes(q) ||
+        getEmissorNome(a.empresa_id, empresasMap).toLowerCase().includes(q) ||
         (a.isin && a.isin.toLowerCase().includes(q))
       );
     }
