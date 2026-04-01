@@ -579,7 +579,7 @@ export default function PipelineResearchPage() {
                     <Badge variant="outline" className={`text-[10px] mt-0.5 ${tipoAnaliseColors[drawerAnalise.tipo] || ''}`}>{drawerAnalise.tipo}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
-                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao)}</Badge>
+                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva)}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
