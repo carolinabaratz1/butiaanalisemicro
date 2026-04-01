@@ -9,6 +9,7 @@ export interface User {
   email: string;
   funcao: UserRole;
   status: string;
+  must_change_password: boolean;
 }
 
 interface AuthContextType {
