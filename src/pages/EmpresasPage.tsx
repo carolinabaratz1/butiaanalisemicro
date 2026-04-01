@@ -210,7 +210,7 @@ export default function EmpresasPage() {
                 {filtered.slice(0, 50).map((e: any) => {
                   const ativas = analisesCounts[e.cnpj] || 0;
                   return (
-                    <TableRow key={e.id} className="border-border">
+                    <TableRow key={e.id} className="border-border group">
                       <TableCell className="text-sm py-2 font-medium">{e.nome}</TableCell>
                       <TableCell className="text-xs py-2 text-muted-foreground font-mono">{e.cnpj}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className="text-[10px]">{e.tipo || '—'}</Badge></TableCell>
