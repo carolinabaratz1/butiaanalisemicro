@@ -71,7 +71,7 @@ function ProtectedRoutes() {
 }
 
 function AppRoutes() {
-  const { session, loading } = useAuth();
+  const { session, loading, currentUser } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
