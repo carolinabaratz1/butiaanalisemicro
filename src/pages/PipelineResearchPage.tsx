@@ -651,7 +651,7 @@ export default function PipelineResearchPage() {
 
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser.id && drawerAnalise.status === 'Pendente' && (
+                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
                     <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); setDrawerAnalise(null); }}>
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
