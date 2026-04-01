@@ -23,7 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
@@ -31,7 +31,8 @@ const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
   { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
   { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
-  { key: 'Vencida', label: 'Vencida', color: 'text-orange-400' },
+  { key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' },
+  { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
 
 function getEmissorNome(cnpj: string) {
