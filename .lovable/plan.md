@@ -1,52 +1,27 @@
 
 
-## Plano: Correções de Integridade + Criação da Tabela Emissões
+## Plano: Dividir "Vencida" em "Vencida c/ Alocação" e "Vencida s/ Alocação"
 
-### Problema 1: Padronizar `analista_responsavel`
-Os 2 registros originais usam IDs (`analista_01`, `analista_02`), enquanto os 145 importados usam nomes completos. Precisamos padronizar para **nomes completos** (que é o formato usado pelo front-end no Pipeline).
+### Arquivo: `src/pages/PipelineResearchPage.tsx`
 
-**Migration:**
-```sql
-UPDATE analises SET analista_responsavel = 'Carolina Baratz Weinberg' WHERE analista_responsavel = 'analista_01';
-UPDATE analises SET analista_responsavel = 'Diogo Vilaça Teixeira' WHERE analista_responsavel = 'analista_02';
-```
+**1. Expandir tipo e colunas**
+- `AnaliseStatus` passa a incluir `'Vencida c/ Alocação' | 'Vencida s/ Alocação'`
+- Array `columns`: substituir a entrada `Vencida` por duas:
+  - `{ key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' }`
+  - `{ key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' }`
+- Grid: `grid-cols-6` → `grid-cols-7`
 
-### Problema 2: Cadastrar 29 empresas faltantes
-29 CNPJs referenciados em análises não existem na tabela `empresas`. Precisamos inseri-los (mesmo que com nome genérico ou buscando os nomes do Excel original) para que o vínculo funcione.
+**2. Ajustar `getDisplayStatus`**
+- A função precisa receber o `empresa_id` e a função `temPosicaoAtiva` para decidir:
+  - Se vencida + `temPosicaoAtiva(empresa_id)` → `'Vencida c/ Alocação'`
+  - Se vencida + sem posição → `'Vencida s/ Alocação'`
+- `analisesComStatus` useMemo passa a chamar a versão atualizada
 
-**Execução:** Script Python que:
-1. Busca os 29 CNPJs órfãos
-2. Cruza com dados disponíveis (Excel ou `src/data/emissores.ts`) para obter nomes
-3. Insere na tabela `empresas` com os dados disponíveis
+**3. Atualizar todas as referências a `'Vencida'`**
+- Quick actions "Reabrir" (linha ~539): verificar ambos os status
+- Drawer "Reabrir" (linha ~673): verificar ambos
+- Histórico no drawer (linha ~381): incluir ambos
+- Drag-and-drop: ambos são colunas de exibição apenas (não são targets de drop válidos, como já é o caso de "Vencida")
 
-### Problema 3: Criar tabela `emissoes` e importar 236 registros
-Plano já aprovado anteriormente — criar a tabela e importar os dados do Excel `base_de_Emissoes_ISIN.xlsx`.
-
-**Migration:**
-```sql
-CREATE TABLE emissoes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  isin text NOT NULL UNIQUE,
-  ticker text,
-  cnpj_emissor text NOT NULL,
-  val_date text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE emissoes ENABLE ROW LEVEL SECURITY;
--- Políticas públicas de leitura/escrita
-```
-
-**Importação:** Script Python lê o Excel e insere 236 registros via SQL.
-
-### Ordem de execução
-1. Migration: padronizar `analista_responsavel` (UPDATE 2 registros)
-2. Script: identificar e inserir 29 empresas faltantes
-3. Migration: criar tabela `emissoes` + RLS
-4. Script: importar 236 emissões do Excel
-
-### Arquivos modificados
-- 2 migrations SQL
-- 2 scripts Python (execução única)
-- Nenhuma alteração de código front-end neste momento
+**Resultado esperado**: 7 colunas no Kanban. Baseado na análise anterior: ~42 cards em "Vencida c/ Alocação" e ~23 em "Vencida s/ Alocação".
 
