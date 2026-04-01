@@ -195,7 +195,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-foreground">Dashboard</h2>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {summaryCards.map((card, i) => (
           <Card key={i} className="bg-card border-border">
             <CardContent className="p-4">
