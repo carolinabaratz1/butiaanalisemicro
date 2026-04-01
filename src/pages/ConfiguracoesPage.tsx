@@ -186,10 +186,11 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-6 gap-3">
         {[
           { label: 'Total', value: stats.total },
           { label: 'Gestores', value: stats.gestores },
+          { label: 'Coord./Espec.', value: stats.coordenadores },
           { label: 'Analistas', value: stats.analistas },
           { label: 'Risco & Compliance', value: stats.compliance },
           { label: 'Consulta', value: stats.consulta },
