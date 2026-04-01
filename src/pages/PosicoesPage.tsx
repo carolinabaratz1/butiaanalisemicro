@@ -236,20 +236,22 @@ export default function PosicoesPage() {
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filtered.length / pageSize);
 
-  const totalAtivos = posicoes.length;
-  const totalFundos = allFunds.length;
-  const totalTipos = allProductClasses.length;
+  const byClass = useMemo(() => {
+    const classes = [...new Set(biFiltered.map(p => p.product_class))];
+    return classes.map(pc => ({
+      name: pc,
+      value: biFiltered.filter(p => p.product_class === pc).length,
+    }));
+  }, [biFiltered]);
 
-  const byClass = allProductClasses.map(pc => ({
-    name: pc,
-    value: posicoes.filter(p => p.product_class === pc).length,
-  }));
-
-  const byFund = allFunds.map(f => ({
-    name: f.length > 25 ? f.substring(0, 25) + '…' : f,
-    fullName: f,
-    value: posicoes.filter(p => p.trading_desk_share_source === f).length,
-  }));
+  const byFund = useMemo(() => {
+    const funds = [...new Set(biFiltered.map(p => p.trading_desk_share_source))];
+    return funds.map(f => ({
+      name: f.length > 25 ? f.substring(0, 25) + '…' : f,
+      fullName: f,
+      value: biFiltered.filter(p => p.trading_desk_share_source === f).length,
+    }));
+  }, [biFiltered]);
 
   const latestDate = selectedDate;
 
