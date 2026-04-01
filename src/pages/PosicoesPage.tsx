@@ -372,8 +372,8 @@ export default function PosicoesPage() {
           ) : (
             <>
               <Card className="bg-card border-border">
-                <CardContent className="p-0">
-                  <Table>
+                <CardContent className="p-0 overflow-x-auto">
+                  <Table className="min-w-[900px]">
                     <TableHeader>
                       <TableRow className="border-border">
                         <TableHead className="text-[11px] h-9">Fundo</TableHead>
