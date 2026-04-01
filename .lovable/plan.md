@@ -1,44 +1,48 @@
 
 
-## Plano: Corrigir gráficos + Drill-down para Vencidas/Sem Análise
+## Plano: CRUD de Empresas com banco de dados + edição de Rating
 
-### Problema 1: Gráficos ignoram filtros
-Os gráficos "Distribuição por Tipo" e "Posição por Fundo" (linhas 243-252) usam `posicoes` e `allProductClasses`/`allFunds` em vez de `biFiltered`.
+### Problema atual
+A página Empresas lê dados estáticos de `src/data/emissores.ts`. A tabela `empresas` já existe no banco com 141 registros, mas não é usada na listagem. Não há funcionalidade para criar empresa nem editar rating.
 
-### Problema 2: Sem drill-down nos KPIs de research
-Os KPIs "Análise Vencida" e "Sem Análise" mostram apenas o número, sem forma de ver quais posições são.
+### Mudanças
 
-### Solução combinada em `src/pages/PosicoesPage.tsx`
+**1. Migrar listagem para o banco de dados**
 
-**1. Gráficos respeitarem filtros (linhas 239-252):**
-- Substituir `byClass` para agrupar por `biFiltered` em vez de `posicoes`
-- Substituir `byFund` para agrupar por `biFiltered` em vez de `posicoes`
-- Remover as variáveis `totalAtivos`, `totalFundos`, `totalTipos` que já não são usadas (os KPIs da linha 712 já usam `biFiltered` inline)
+Em `src/pages/EmpresasPage.tsx`:
+- Substituir `import { emissores }` por query ao Supabase: `supabase.from('empresas').select('*')`
+- Adaptar os campos: `nome` (era `nomeAbreviado`), `cnpj`, `setor` (era `setorButia`), `rating` (era `ratingAtual`)
+- O campo `tipo` não existe na tabela `empresas` -- será necessário adicionar via migration
 
-**2. Drill-down nos KPIs:**
-- Novo state: `const [drillStatus, setDrillStatus] = useState<string | null>(null)`
-- `useMemo` para filtrar `biFiltered` pelo status selecionado
-- KPIs "Aprovada", "Vencida" e "Sem Análise" ficam clicáveis com `cursor-pointer` e `onClick`
-- Dialog/modal com tabela mostrando: Produto, ISIN, Fundo, Tipo, Emissor, Rating, Data Conclusão
-- Botão de exportar a lista do drill-down em .xlsx
+**2. Migration: adicionar campo `tipo` à tabela empresas**
 
-### Detalhes técnicos
-
-**Gráficos (byClass / byFund):**
-```typescript
-const biClasses = [...new Set(biFiltered.map(p => p.product_class))];
-const byClass = biClasses.map(pc => ({
-  name: pc,
-  value: biFiltered.filter(p => p.product_class === pc).length,
-}));
-// Mesmo padrão para byFund
+```sql
+ALTER TABLE empresas ADD COLUMN tipo text DEFAULT 'CORPORATIVO';
 ```
 
-**Drill-down modal:**
-- Título dinâmico: "Posições com Análise Vencida" / "Posições sem Análise" / "Posições com Análise Aprovada"
-- Tabela com scroll horizontal em mobile
-- Botão "Exportar .xlsx" usando SheetJS (já importado)
+Depois popular os tipos a partir dos dados estáticos existentes (UPDATE por CNPJ).
 
-### Arquivo modificado
-- `src/pages/PosicoesPage.tsx`
+**3. Botão "+ Nova Empresa" com Dialog/formulário**
+
+Campos do formulário:
+- Nome (obrigatório)
+- CNPJ (obrigatório, único)
+- Tipo (select: FINANCEIRO, CORPORATIVO, FIDC, CRA, CDB, Fundo)
+- Setor (input texto)
+- Rating (input texto)
+
+Ao salvar: `supabase.from('empresas').insert(...)` + invalidar query + toast de sucesso.
+
+**4. Edição inline de Rating**
+
+Na tabela, a célula de Rating terá um botão de edição (ícone lápis). Ao clicar, abre um pequeno popover/input para digitar o novo rating. Ao confirmar: `supabase.from('empresas').update({ rating }).eq('id', empresa.id)` + invalidar query.
+
+**5. Permissões**
+
+- Criar empresa: apenas Gestor e Coordenação/Especialista
+- Editar rating: apenas Gestor e Coordenação/Especialista
+
+### Arquivos modificados
+- 1 migration SQL (adicionar coluna `tipo` + popular dados)
+- `src/pages/EmpresasPage.tsx` (reescrever para usar DB + adicionar criar/editar)
 
