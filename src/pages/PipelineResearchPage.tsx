@@ -700,6 +700,7 @@ export default function PipelineResearchPage() {
             );
           })}
         </div>
+        </>
       )}
 
       {/* Drawer */}
