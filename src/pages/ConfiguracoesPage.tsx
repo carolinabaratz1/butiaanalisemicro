@@ -118,6 +118,7 @@ export default function ConfiguracoesPage() {
   const stats = {
     total: userList.length,
     gestores: userList.filter(u => u.funcao === 'Gestor').length,
+    coordenadores: userList.filter(u => u.funcao === 'Coordenação/Especialista').length,
     analistas: userList.filter(u => u.funcao === 'Analista').length,
     compliance: userList.filter(u => u.funcao === 'Risco e Compliance').length,
     consulta: userList.filter(u => u.funcao === 'Consulta').length,
