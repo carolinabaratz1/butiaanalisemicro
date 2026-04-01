@@ -54,20 +54,20 @@ export default function EmpresasPage() {
         <h2 className="text-lg font-semibold text-foreground">Empresas / Emissores</h2>
       </div>
 
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-0 sm:max-w-xs">
           <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Buscar por nome ou CNPJ..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm bg-surface-1 border-border" />
         </div>
         <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger className="w-40 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-40 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos os tipos</SelectItem>
             {tipos.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={setorFilter} onValueChange={setSetorFilter}>
-          <SelectTrigger className="w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Setor" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Setor" /></SelectTrigger>
           <SelectContent className="bg-card border-border max-h-60">
             <SelectItem value="all">Todos os setores</SelectItem>
             {setores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
