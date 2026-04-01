@@ -14,7 +14,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
-import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -97,6 +98,7 @@ export default function PipelineResearchPage() {
   const [prazoFilter, setPrazoFilter] = useState('all');
   const [novaModal, setNovaModal] = useState(false);
   const [drawerAnalise, setDrawerAnalise] = useState<any | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [entregarModal, setEntregarModal] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState('');
   const [reatribuirModal, setReatribuirModal] = useState<string | null>(null);
@@ -250,6 +252,19 @@ export default function PipelineResearchPage() {
       toast({ title: 'Análise criada com sucesso' });
     },
     onError: (err: any) => toast({ title: 'Erro ao criar análise', description: err.message, variant: 'destructive' }),
+  });
+
+  const deleteAnalise = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('analises').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
+      queryClient.invalidateQueries({ queryKey: ['analises-ativas-count'] });
+      toast({ title: 'Análise excluída com sucesso' });
+    },
+    onError: (err: any) => toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' }),
   });
 
   // ── Apply display status (Vencida) ──
@@ -603,8 +618,13 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
+                              </Button>
+                            )}
+                            {isGestor && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
+                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
@@ -710,8 +730,13 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
+                              </Button>
+                            )}
+                            {isGestor && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
+                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
@@ -845,8 +870,13 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {isGestor && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
-                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
+                    </Button>
+                  )}
+                  {isGestor && (
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setDeleteConfirmId(drawerAnalise.id); setDrawerAnalise(null); }}>
+                      <Trash2 className="h-3 w-3" /> Excluir
                     </Button>
                   )}
                 </div>
@@ -1082,6 +1112,33 @@ export default function PipelineResearchPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Análise</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta análise? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmId) {
+                  deleteAnalise.mutate(deleteConfirmId);
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              {deleteAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
