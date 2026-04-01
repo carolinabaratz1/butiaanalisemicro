@@ -1038,6 +1038,7 @@ export default function PipelineResearchPage() {
                   </Command>
                 </PopoverContent>
               </Popover>
+            </div>
             <div>
               <Label className="text-xs">Tipo de Análise</Label>
               <Select value={novoTipo} onValueChange={setNovoTipo}>
