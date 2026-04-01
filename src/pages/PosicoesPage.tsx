@@ -276,7 +276,35 @@ export default function PosicoesPage() {
     return { aprovadas, vencidas, semAnalise, cobertura };
   }, [biFiltered]);
 
-  // Duration distribution
+  const drillPositions = useMemo(() => {
+    if (!drillStatus) return [];
+    return biFiltered.filter(p => p.analiseStatus === drillStatus);
+  }, [biFiltered, drillStatus]);
+
+  const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
+    : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
+    : drillStatus === 'Aprovada' ? 'Posições com Análise Aprovada'
+    : `Posições: ${drillStatus}`;
+
+  const handleDrillExport = () => {
+    if (drillPositions.length === 0) return;
+    const exportData = drillPositions.map(p => ({
+      'Produto': p.product,
+      'ISIN': p.isin || '',
+      'Fundo': p.trading_desk_share_source,
+      'Tipo': p.product_class,
+      'Emissor': p.empresaNome || '',
+      'Rating': p.empresaRating || '',
+      'Quantidade': Number(p.amount),
+      'Data Conclusão': p.analiseDataConclusao || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Posições');
+    XLSX.writeFile(wb, `posicoes_${drillStatus?.toLowerCase().replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+
   const durationData = useMemo(() => {
     const brackets = [
       { label: '0-1', min: 0, max: 1 },
