@@ -1,48 +1,33 @@
 
 
-## Plano: CRUD de Empresas com banco de dados + edição de Rating
+## Plano: Atualizar base de empresas + adicionar Grupo Econômico
 
-### Problema atual
-A página Empresas lê dados estáticos de `src/data/emissores.ts`. A tabela `empresas` já existe no banco com 141 registros, mas não é usada na listagem. Não há funcionalidade para criar empresa nem editar rating.
+### Contexto
+O arquivo Excel contém 164 empresas com dados completos incluindo **Grupo Econômico** — coluna que não existe ainda no banco. Vários nomes estão diferentes (abreviados no banco vs. completos no Excel). Preciso sincronizar tudo.
 
 ### Mudanças
 
-**1. Migrar listagem para o banco de dados**
-
-Em `src/pages/EmpresasPage.tsx`:
-- Substituir `import { emissores }` por query ao Supabase: `supabase.from('empresas').select('*')`
-- Adaptar os campos: `nome` (era `nomeAbreviado`), `cnpj`, `setor` (era `setorButia`), `rating` (era `ratingAtual`)
-- O campo `tipo` não existe na tabela `empresas` -- será necessário adicionar via migration
-
-**2. Migration: adicionar campo `tipo` à tabela empresas**
+**1. Migration: adicionar coluna `grupo_economico`**
 
 ```sql
-ALTER TABLE empresas ADD COLUMN tipo text DEFAULT 'CORPORATIVO';
+ALTER TABLE empresas ADD COLUMN IF NOT EXISTS grupo_economico text;
 ```
 
-Depois popular os tipos a partir dos dados estáticos existentes (UPDATE por CNPJ).
+**2. Atualizar dados via script SQL (insert tool)**
 
-**3. Botão "+ Nova Empresa" com Dialog/formulário**
+Para cada uma das 164 empresas do Excel, executar UPDATE por CNPJ atualizando: `nome`, `grupo_economico`, `tipo`, `setor`, `rating`. Empresas que não existem no banco serão inseridas.
 
-Campos do formulário:
-- Nome (obrigatório)
-- CNPJ (obrigatório, único)
-- Tipo (select: FINANCEIRO, CORPORATIVO, FIDC, CRA, CDB, Fundo)
-- Setor (input texto)
-- Rating (input texto)
+Isso corrige nomes abreviados (ex: "COSMGA" → "COMPANHIA DE SANEAMENTO DE MINAS GERAIS COPASA MG") e popula o grupo econômico para todas.
 
-Ao salvar: `supabase.from('empresas').insert(...)` + invalidar query + toast de sucesso.
+**3. Atualizar `EmpresasPage.tsx`**
 
-**4. Edição inline de Rating**
-
-Na tabela, a célula de Rating terá um botão de edição (ícone lápis). Ao clicar, abre um pequeno popover/input para digitar o novo rating. Ao confirmar: `supabase.from('empresas').update({ rating }).eq('id', empresa.id)` + invalidar query.
-
-**5. Permissões**
-
-- Criar empresa: apenas Gestor e Coordenação/Especialista
-- Editar rating: apenas Gestor e Coordenação/Especialista
+- Adicionar coluna "Grupo Econômico" na tabela
+- Adicionar campo "Grupo Econômico" no formulário de criação
+- Adicionar filtro por Grupo Econômico
+- Exibir grupo econômico na listagem
 
 ### Arquivos modificados
-- 1 migration SQL (adicionar coluna `tipo` + popular dados)
-- `src/pages/EmpresasPage.tsx` (reescrever para usar DB + adicionar criar/editar)
+- 1 migration SQL (adicionar coluna `grupo_economico`)
+- Dados atualizados via insert tool (UPDATE/INSERT por CNPJ)
+- `src/pages/EmpresasPage.tsx` (coluna + filtro + form)
 
