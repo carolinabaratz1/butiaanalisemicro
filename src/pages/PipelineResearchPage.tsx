@@ -157,6 +157,34 @@ export default function PipelineResearchPage() {
     },
   });
 
+  // ── Fetch empresas from DB for name resolution ──
+  const { data: empresasDB = [] } = useQuery({
+    queryKey: ['empresas-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('id, nome, cnpj, tipo, setor, rating, grupo_economico');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
+
+  // ── Fetch emissoes from DB for ticker resolution ──
+  const { data: emissoesDB = [] } = useQuery({
+    queryKey: ['emissoes-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emissoes')
+        .select('isin, ticker, cnpj_emissor');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const emissoesTickers = useMemo(() => new Map((emissoesDB || []).filter(e => e.ticker).map(e => [e.isin, e.ticker as string])), [emissoesDB]);
+
   const hoje = new Date().toISOString().split('T')[0];
 
   // ── Fetch analises from Supabase ──
