@@ -2,45 +2,79 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertTriangle, CheckCircle, Clock, Building2, FileCheck, AlertCircle, Briefcase, Shield, TrendingUp } from 'lucide-react';
-import { analises, pipelineItems, empresas, getEmpresaNome, getAnalistaNome, instrumentosEstruturados, monitoramentosFIDC } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
-import { useAnaliseEmissao } from '@/contexts/AnaliseEmissaoContext';
-import { users } from '@/data/users';
-import { emissores } from '@/data/emissores';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
-    'Aprovado': 'bg-status-success/15 text-status-success border-status-success/30',
-    'Em análise': 'bg-status-info/15 text-status-info border-status-info/30',
-    'Em revisão': 'bg-status-warning/15 text-status-warning border-status-warning/30',
-    'Reprovado': 'bg-status-danger/15 text-status-danger border-status-danger/30',
-    'Em andamento': 'bg-status-warning/15 text-status-warning border-status-warning/30',
-    'Planejado': 'bg-status-info/15 text-status-info border-status-info/30',
-    'Concluído': 'bg-status-success/15 text-status-success border-status-success/30',
-    'Atrasado': 'bg-status-danger/15 text-status-danger border-status-danger/30',
+    'Aprovada': 'bg-status-success/15 text-status-success border-status-success/30',
+    'Em Análise': 'bg-status-info/15 text-status-info border-status-info/30',
+    'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
+    'Reprovada': 'bg-status-danger/15 text-status-danger border-status-danger/30',
+    'Concluída': 'bg-muted/50 text-muted-foreground border-border',
   };
   return <Badge variant="outline" className={`text-[11px] ${map[status] || ''}`}>{status}</Badge>;
 };
 
-function getEmissorNome(cnpj: string) {
-  return emissores.find(e => e.cnpj === cnpj)?.nomeAbreviado ?? cnpj;
-}
-function getUserNome(id: string) {
-  return users.find(u => u.id === id)?.nome ?? 'N/A';
-}
-
 export default function DashboardPage() {
   const { currentUser } = useAuth();
-  const { analises: analisesEmissao } = useAnaliseEmissao();
-  const isAnalista = currentUser?.funcao === 'Analista';
   const isGestor = currentUser?.funcao === 'Gestor';
-  const hoje = new Date().toISOString().split('T')[0];
   const hojeFormatado = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-  // Query posições importadas hoje (by created_at)
+  // ========== CNPJs com posição ativa (latest val_date) ==========
+  const { data: cnpjsComPosicao } = useQuery({
+    queryKey: ['dashboard-cnpjs-posicao'],
+    queryFn: async () => {
+      // Get latest val_date
+      const { data: latestRow } = await supabase
+        .from('posicoes')
+        .select('val_date')
+        .order('val_date', { ascending: false })
+        .limit(1);
+      if (!latestRow || latestRow.length === 0) return new Set<string>();
+      const maxDate = latestRow[0].val_date;
+
+      // Get ISINs from latest date
+      const { data: posRows } = await supabase
+        .from('posicoes')
+        .select('isin')
+        .eq('val_date', maxDate)
+        .not('isin', 'is', null);
+      const isins = [...new Set((posRows ?? []).map(r => r.isin).filter(Boolean))];
+      if (isins.length === 0) return new Set<string>();
+
+      // Map ISINs to CNPJs via emissoes
+      const { data: emRows } = await supabase
+        .from('emissoes')
+        .select('cnpj_emissor')
+        .in('isin', isins);
+      return new Set((emRows ?? []).map(e => e.cnpj_emissor));
+    },
+  });
+
+  // ========== Todas as análises ==========
+  const { data: todasAnalises } = useQuery({
+    queryKey: ['dashboard-analises'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('analises')
+        .select('id, empresa_id, tipo, analista_responsavel, status, data_conclusao, data_inicio, decisao, conviccao');
+      return data ?? [];
+    },
+  });
+
+  // ========== Empresas ==========
+  const { data: empresasData } = useQuery({
+    queryKey: ['dashboard-empresas'],
+    queryFn: async () => {
+      const { data } = await supabase.from('empresas').select('id, nome, cnpj');
+      return data ?? [];
+    },
+  });
+
+  // ========== Posições importadas hoje ==========
   const { data: posicoesHoje } = useQuery({
     queryKey: ['posicoes-hoje'],
     queryFn: async () => {
@@ -48,156 +82,115 @@ export default function DashboardPage() {
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
-      const { count, error } = await supabase
-        .from('posicoes' as any)
+      const { count } = await supabase
+        .from('posicoes')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', todayStart.toISOString())
         .lte('created_at', todayEnd.toISOString());
-      if (error) return 0;
       return count ?? 0;
     },
   });
 
-  // Query total de ativos na carteira (latest val_date only)
-  const { data: totalPosicoes } = useQuery({
-    queryKey: ['posicoes-total-latest'],
-    queryFn: async () => {
-      // First get the max val_date
-      const { data: latest, error: latestErr } = await supabase
-        .from('posicoes' as any)
-        .select('val_date')
-        .order('val_date', { ascending: false })
-        .limit(1);
-      if (latestErr || !latest || latest.length === 0) return 0;
-      const maxDate = (latest[0] as any).val_date;
-      // Count rows with that val_date
-      const { count, error } = await supabase
-        .from('posicoes' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('val_date', maxDate);
-      if (error) return 0;
-      return count ?? 0;
-    },
+  // ========== Ativos na carteira (distinct CNPJs) ==========
+  const ativosCarteira = cnpjsComPosicao?.size ?? 0;
+
+  // ========== Classificar análises ==========
+  const umAnoAtras = new Date();
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+  const cnpjSet = cnpjsComPosicao ?? new Set<string>();
+  const empresaMap = new Map((empresasData ?? []).map(e => [e.cnpj, e]));
+  const empresaCnpjById = new Map((empresasData ?? []).map(e => [e.id, e.cnpj]));
+  const empresaNomeById = new Map((empresasData ?? []).map(e => [e.id, e.nome]));
+
+  // Helper: get empresa nome by empresa_id (which is cnpj)
+  const getEmpresaNome = (empresaId: string) => {
+    // empresa_id is cnpj in analises
+    const byId = empresaNomeById.get(empresaId);
+    if (byId) return byId;
+    const byCnpj = empresaMap.get(empresaId);
+    if (byCnpj) return byCnpj.nome;
+    return empresaId;
+  };
+
+  const analises = todasAnalises ?? [];
+
+  // Compute statuses (same logic as PipelineResearchPage)
+  const computedAnalises = analises.map(a => {
+    let computedStatus = a.status;
+    if (a.status === 'Aprovada' && a.data_conclusao) {
+      const dt = new Date(a.data_conclusao.split('T')[0]);
+      if (dt < umAnoAtras) {
+        const hasPosicao = cnpjSet.has(a.empresa_id);
+        computedStatus = hasPosicao ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
+      }
+    }
+    return { ...a, computedStatus };
   });
 
-  // Query empresas com posição ativa (latest val_date) + sem análise vinculada
-  const { data: portfolioStats } = useQuery({
-    queryKey: ['portfolio-cobertura'],
-    queryFn: async () => {
-      // Get latest val_date
-      const { data: latestRow } = await supabase
-        .from('posicoes' as any)
-        .select('val_date')
-        .order('val_date', { ascending: false })
-        .limit(1);
-      if (!latestRow || latestRow.length === 0) return { cobertura: 0, semAnalise: 0 };
-      const maxDate = (latestRow[0] as any).val_date;
+  const pendentes = computedAnalises.filter(a => a.computedStatus === 'Pendente');
+  const emAnalise = computedAnalises.filter(a => a.computedStatus === 'Em Análise');
+  const concluidas = computedAnalises.filter(a => a.computedStatus === 'Concluída');
+  const aprovadas = computedAnalises.filter(a => a.computedStatus === 'Aprovada');
+  const reprovadas = computedAnalises.filter(a => a.computedStatus === 'Reprovada');
+  const vencidasComAlocacao = computedAnalises.filter(a => a.computedStatus === 'Vencida c/ Alocação');
+  const vencidasSemAlocacao = computedAnalises.filter(a => a.computedStatus === 'Vencida s/ Alocação');
 
-      // Get distinct product names from latest date (these represent companies in portfolio)
-      const { data: posRows } = await supabase
-        .from('posicoes' as any)
-        .select('product')
-        .eq('val_date', maxDate);
-      const productosUnicos = [...new Set((posRows ?? []).map((r: any) => r.product))];
-      const cobertura = productosUnicos.length;
+  // KPIs
+  const analisesEmAndamento = pendentes.length + emAnalise.length;
 
-      // Get empresa_ids with active analyses
-      const { data: analisesAtivas } = await supabase
-        .from('analises')
-        .select('empresa_id')
-        .not('status', 'in', '("Concluído","Rejeitado")');
-      const comAnalise = new Set((analisesAtivas ?? []).map(a => a.empresa_id));
+  // Aprovadas no mês atual
+  const now = new Date();
+  const mesAtual = now.getMonth();
+  const anoAtual = now.getFullYear();
+  const aprovadasMes = aprovadas.filter(a => {
+    if (!a.data_conclusao) return false;
+    const dt = new Date(a.data_conclusao.split('T')[0]);
+    return dt.getMonth() === mesAtual && dt.getFullYear() === anoAtual;
+  }).length;
 
-      // Count portfolio companies without active analysis — match by product name against empresas
-      const { data: allEmpresas } = await supabase.from('empresas').select('cnpj, nome');
-      const empresasNaCarteira = (allEmpresas ?? []).filter(e => productosUnicos.some((p: string) => p.toLowerCase().includes(e.nome.toLowerCase()) || e.nome.toLowerCase().includes(p.toLowerCase())));
-      const semAnalise = empresasNaCarteira.filter(e => !comAnalise.has(e.cnpj)).length;
+  // Alertas: vencidas com alocação (precisam de nova análise urgente)
+  const alertasPendentes = vencidasComAlocacao.length;
 
-      return { cobertura, semAnalise };
-    },
-  });
+  // Cobertura ativa: CNPJs com posição que TÊM análise válida (<1 ano aprovada)
+  const cnpjsComAnaliseValida = new Set(aprovadas.map(a => a.empresa_id));
+  const coberturaAtiva = [...cnpjSet].filter(cnpj => cnpjsComAnaliseValida.has(cnpj)).length;
 
-  // Pipeline Geral — count from analises table by status
-  const { data: pipelineCounts } = useQuery({
-    queryKey: ['analises-pipeline-counts'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('analises').select('status, data_conclusao');
-      if (error) return { pendente: 0, emAnalise: 0, concluida: 0, aprovada: 0, reprovada: 0, vencida: 0 };
-      const rows = data ?? [];
-      const umAnoAtras = new Date();
-      umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
-      let vencidaCount = 0;
-      let aprovadaCount = 0;
-      rows.forEach(r => {
-        if (r.status === 'Aprovada' && r.data_conclusao) {
-          const dt = new Date(r.data_conclusao.split('T')[0]);
-          if (dt < umAnoAtras) { vencidaCount++; } else { aprovadaCount++; }
-        } else if (r.status === 'Aprovada') { aprovadaCount++; }
-      });
-      return {
-        pendente: rows.filter(r => r.status === 'Pendente').length,
-        emAnalise: rows.filter(r => r.status === 'Em Análise').length,
-        concluida: rows.filter(r => r.status === 'Concluída').length,
-        aprovada: aprovadaCount,
-        reprovada: rows.filter(r => r.status === 'Reprovada').length,
-        vencida: vencidaCount + rows.filter(r => r.status === 'Vencida').length,
-      };
-    },
-  });
-
-  const analisesEmAndamento = analises.filter(a => a.status === 'Em análise' || a.status === 'Em revisão').length;
-  const analisesAprovadas = analises.filter(a => a.status === 'Aprovado').length;
-  const alertasPendentes = 3;
-  const coberturaAtiva = portfolioStats?.cobertura ?? 0;
-  const alertasCreditoEstruturado = monitoramentosFIDC.filter(m => m.statusCovenants !== 'OK').length;
+  // Sem análise vinculada: CNPJs com posição ativa sem análise aprovada válida
+  const semAnalise = [...cnpjSet].filter(cnpj => !cnpjsComAnaliseValida.has(cnpj)).length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : 'Não';
   const posicoesColor = (posicoesHoje ?? 0) > 0 ? 'text-status-success' : 'text-status-danger';
 
   const summaryCards = [
     { label: 'Análises em andamento', value: analisesEmAndamento, icon: Clock, color: 'text-status-warning' },
-    { label: 'Aprovadas (mês)', value: analisesAprovadas, icon: CheckCircle, color: 'text-status-success' },
+    { label: 'Aprovadas (mês)', value: aprovadasMes, icon: CheckCircle, color: 'text-status-success' },
     { label: 'Alertas pendentes', value: alertasPendentes, icon: AlertTriangle, color: 'text-status-danger' },
     { label: 'Cobertura ativa', value: coberturaAtiva, icon: Building2, color: 'text-status-info' },
     { label: 'Posições importadas hoje', value: posicoesValue, icon: FileCheck, color: posicoesColor },
-    { label: 'Ativos na carteira', value: totalPosicoes ?? 0, icon: Briefcase, color: 'text-foreground' },
-    { label: 'Sem análise vinculada', value: portfolioStats?.semAnalise ?? 0, icon: AlertCircle, color: 'text-status-warning' },
-    { label: 'Alertas crédito estr.', value: alertasCreditoEstruturado, icon: Shield, color: 'text-status-danger' },
+    { label: 'Ativos na carteira', value: ativosCarteira, icon: Briefcase, color: 'text-foreground' },
+    { label: 'Sem análise vinculada', value: semAnalise, icon: AlertCircle, color: 'text-status-warning' },
   ];
 
-  const pipelineSemana = pipelineItems.filter(p => p.status !== 'Concluído').slice(0, 5);
-  const ultimasAprovadas = analises.filter(a => a.status === 'Aprovado');
-
-  const alertas = [
-    { tipo: 'Covenant', empresa: 'AXIOS NPL FIDC', data: '28/02/2026', severity: 'danger' as const },
-    { tipo: 'Vencimento', empresa: 'CRI Cyrela', data: '15/09/2032', severity: 'warning' as const },
-    { tipo: 'Target expirado', empresa: 'Vale', data: '01/03/2026', severity: 'warning' as const },
-  ];
-
-  // Analyst widget data
-  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser?.id);
-  const minhasPendentes = minhasAnalises.filter(a => a.status === 'pendente').length;
-  const minhasEmAnalise = minhasAnalises.filter(a => a.status === 'em_analise').length;
-  const minhasConcluidas = minhasAnalises.filter(a => a.status === 'concluido').length;
-  const urgentes = minhasAnalises
-    .filter(a => a.status === 'pendente' || a.status === 'em_analise')
-    .sort((a, b) => a.prazo.localeCompare(b.prazo))
+  // Pipeline da semana: análises pendentes/em análise, ordenadas por data_inicio
+  const pipelineSemana = [...pendentes, ...emAnalise]
+    .sort((a, b) => (a.data_inicio ?? '').localeCompare(b.data_inicio ?? ''))
     .slice(0, 5);
 
-  // Gestor widget data — from Supabase
-  const totalPendentes = pipelineCounts?.pendente ?? 0;
-  const totalEmAnalise2 = pipelineCounts?.emAnalise ?? 0;
-  const totalConcluidas = pipelineCounts?.concluida ?? 0;
-  const totalAprovadas = pipelineCounts?.aprovada ?? 0;
-  const totalReprovadas = pipelineCounts?.reprovada ?? 0;
-  const totalVencidas = pipelineCounts?.vencida ?? 0;
-  const vencidas = analisesEmissao.filter(a => (a.status === 'pendente' || a.status === 'em_analise') && a.prazo < hoje);
+  // Últimas aprovadas (5 mais recentes)
+  const ultimasAprovadas = [...aprovadas]
+    .sort((a, b) => (b.data_conclusao ?? '').localeCompare(a.data_conclusao ?? ''))
+    .slice(0, 5);
 
-  const analistasPendentes = users
-    .filter(u => u.funcao === 'Analista')
-    .map(u => ({ nome: u.nome, id: u.id, count: analisesEmissao.filter(a => a.analista_id === u.id && a.status === 'pendente').length }))
-    .filter(a => a.count > 0)
-    .sort((a, b) => b.count - a.count);
+  // Alertas dinâmicos: vencidas com alocação (mais urgentes)
+  const alertasDinamicos = vencidasComAlocacao
+    .sort((a, b) => (a.data_conclusao ?? '').localeCompare(b.data_conclusao ?? ''))
+    .slice(0, 5)
+    .map(a => ({
+      tipo: 'Análise vencida c/ alocação',
+      empresa: getEmpresaNome(a.empresa_id),
+      data: a.data_conclusao ? new Date(a.data_conclusao.split('T')[0]).toLocaleDateString('pt-BR') : '-',
+      severity: 'danger' as const,
+    }));
 
   return (
     <div className="space-y-6">
@@ -218,119 +211,67 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Analyst Widget */}
-      {isAnalista && (
-        <Card className="bg-card border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" /> Minhas Análises
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-warning">{minhasPendentes}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-info">{minhasEmAnalise}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-success">{minhasConcluidas}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Concluído</p>
-              </div>
+      {/* Pipeline Geral — visible for all, expanded for Gestor */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-primary" /> Pipeline Geral
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4 mb-4 flex-wrap">
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-warning">{pendentes.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
             </div>
-            {urgentes.length > 0 && (
-              <>
-                <p className="text-xs font-semibold text-foreground mb-2">Mais urgentes</p>
-                <div className="space-y-1.5">
-                  {urgentes.map(a => (
-                    <div key={a.id} className={`flex items-center justify-between p-2 rounded-md bg-surface-1 ${a.prazo < hoje ? 'border border-status-danger/50' : 'border border-transparent'}`}>
-                      <div>
-                        <p className="text-sm font-medium">{getEmissorNome(a.cnpj_emissor)}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{a.isin}</p>
-                      </div>
-                      <span className={`text-[11px] ${a.prazo < hoje ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>{a.prazo}</span>
-                    </div>
-                  ))}
-                </div>
-                <Link to="/pipeline" className="text-xs text-primary hover:underline mt-2 inline-block">Ver pipeline completo →</Link>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Gestor Widget */}
-      {isGestor && (
-        <Card className="bg-card border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-primary" /> Pipeline Geral
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4 mb-4 flex-wrap">
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-warning">{totalPendentes}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Pendente</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-info">{totalEmAnalise2}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-muted-foreground">{totalConcluidas}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Concluída</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-success">{totalAprovadas}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Aprovada</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-status-danger">{totalReprovadas}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Reprovada</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-bold text-orange-400">{totalVencidas}</p>
-                <p className="text-[10px] text-muted-foreground uppercase">Vencida</p>
-              </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-info">{emAnalise.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Em Análise</p>
             </div>
-            {vencidas.length > 0 && (
-              <div className="mb-3 p-2 rounded-md bg-status-danger/10 border border-status-danger/30">
-                <p className="text-xs text-status-danger font-semibold flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {vencidas.length} análise(s) com prazo vencido</p>
-              </div>
-            )}
-            {analistasPendentes.length > 0 && (
-              <>
-                <p className="text-xs font-semibold text-foreground mb-2">Analistas com pendências</p>
-                <div className="space-y-1">
-                  {analistasPendentes.map(a => (
-                    <div key={a.id} className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{a.nome}</span>
-                      <Badge variant="outline" className="text-[10px] bg-status-warning/15 text-status-warning border-status-warning/30">{a.count} pendente(s)</Badge>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-            <Link to="/pipeline" className="text-xs text-primary hover:underline mt-2 inline-block">Ver pipeline completo →</Link>
-          </CardContent>
-        </Card>
-      )}
+            <div className="text-center">
+              <p className="text-xl font-bold text-muted-foreground">{concluidas.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Concluída</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-success">{aprovadas.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Aprovada</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-danger">{reprovadas.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Reprovada</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-orange-400">{vencidasComAlocacao.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Vencida c/ Aloc.</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-orange-300">{vencidasSemAlocacao.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Vencida s/ Aloc.</p>
+            </div>
+          </div>
+          {vencidasComAlocacao.length > 0 && (
+            <div className="mb-3 p-2 rounded-md bg-status-danger/10 border border-status-danger/30">
+              <p className="text-xs text-status-danger font-semibold flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> {vencidasComAlocacao.length} análise(s) vencida(s) com posição ativa na carteira
+              </p>
+            </div>
+          )}
+          <Link to="/pipeline-research" className="text-xs text-primary hover:underline mt-2 inline-block">Ver pipeline completo →</Link>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-3 gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Pipeline da Semana</CardTitle></CardHeader>
           <CardContent className="space-y-2">
+            {pipelineSemana.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma análise pendente</p>}
             {pipelineSemana.map(item => (
-              <div key={item.id} className={`flex items-center justify-between p-2.5 rounded-md bg-surface-1 ${item.status === 'Atrasado' ? 'border border-status-danger/50' : 'border border-transparent'}`}>
+              <div key={item.id} className="flex items-center justify-between p-2.5 rounded-md bg-surface-1 border border-transparent">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{getEmpresaNome(item.empresaId)}</p>
-                  <p className="text-[11px] text-muted-foreground">{getAnalistaNome(item.analistaResponsavel)} · {item.dataPrevista}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{getEmpresaNome(item.empresa_id)}</p>
+                  <p className="text-[11px] text-muted-foreground">{item.analista_responsavel} · {item.data_inicio}</p>
                 </div>
-                {statusBadge(item.status)}
+                {statusBadge(item.computedStatus)}
               </div>
             ))}
           </CardContent>
@@ -349,12 +290,15 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {ultimasAprovadas.length === 0 && (
+                  <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhuma</TableCell></TableRow>
+                )}
                 {ultimasAprovadas.map(a => (
                   <TableRow key={a.id} className="border-border">
-                    <TableCell className="text-sm py-2">{getEmpresaNome(a.empresaId)}</TableCell>
+                    <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
                     <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                    <TableCell className="text-sm py-2">{getAnalistaNome(a.analistaResponsavel)}</TableCell>
-                    <TableCell className="text-sm py-2">{a.dataConclusao}</TableCell>
+                    <TableCell className="text-sm py-2">{a.analista_responsavel}</TableCell>
+                    <TableCell className="text-sm py-2">{a.data_conclusao ? new Date(a.data_conclusao.split('T')[0]).toLocaleDateString('pt-BR') : '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -365,7 +309,8 @@ export default function DashboardPage() {
         <Card className="bg-card border-border">
           <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Alertas</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {alertas.map((alerta, i) => (
+            {alertasDinamicos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum alerta</p>}
+            {alertasDinamicos.map((alerta, i) => (
               <div key={i} className="flex items-center gap-3 p-2.5 rounded-md bg-surface-1 border border-transparent">
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${alerta.severity === 'danger' ? 'text-status-danger' : 'text-status-warning'}`} />
                 <div className="min-w-0 flex-1">
