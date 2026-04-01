@@ -54,7 +54,7 @@ export default function AnalistasPage() {
 
   // Match analyst name to analista_responsavel field
   function getQtdAnalises(nome: string) {
-    return analisesCounts[nome] || 0;
+    return analisesCounts[nome.trim()] || 0;
   }
 
   if (loading) return <div className="text-muted-foreground text-sm p-4">Carregando...</div>;
