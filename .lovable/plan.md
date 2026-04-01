@@ -1,76 +1,45 @@
 
 
-## Plano: Tornar todo o sistema responsivo para celular e tablet
+## Plano: Corrigir espaços extras nos nomes (profiles) -- segunda tentativa
 
-### Problema atual
-O sistema usa layouts fixos (grids `grid-cols-4`, `grid-cols-7`, `grid-cols-3`, sidebar fixa `w-56`) sem breakpoints responsivos. Em telas pequenas, o conteúdo fica cortado e inutilizável.
+### Causa raiz
+Os nomes "Carolina Baratz Weinberg" e "Diogo Vilaça Teixeira" na tabela `profiles` ainda possuem espaço em branco no final (comprimentos 25 e 22, respectivamente, quando deveriam ser 24 e 21). O dropdown do Pipeline usa `profiles.nome` (com espaço) como valor do filtro, mas `analises.analista_responsavel` armazena o nome sem espaço. A comparação exata falha.
 
-### Mudanças por arquivo
+### Solução
 
-**1. `src/components/layout/AppLayout.tsx`** -- Sidebar mobile como overlay
-- Em telas `< md`, sidebar fica oculta por padrão (off-canvas)
-- Botão hambúrguer abre/fecha sidebar como overlay com backdrop
-- Em telas `>= md`, sidebar funciona como hoje (fixa lateral)
-- Header: ocultar nome do usuário em mobile, manter apenas badge e logout
+**1. Migration SQL** -- Limpar espaços e prevenir recorrência:
+```sql
+-- Limpar espaços existentes
+UPDATE profiles SET nome = TRIM(nome);
 
-**2. `src/components/layout/AppSidebar.tsx`** -- Fechar ao navegar em mobile
-- Receber callback `onClose` para fechar sidebar ao clicar em link (mobile)
-- Adicionar overlay/backdrop quando aberta em mobile
+-- Adicionar trigger para prevenir espaços futuros
+CREATE OR REPLACE FUNCTION trim_profile_nome()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.nome := TRIM(NEW.nome);
+  RETURN NEW;
+END;
+$$;
 
-**3. `src/pages/DashboardPage.tsx`** -- KPIs e grids responsivos
-- KPIs: `grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`
-- Pipeline Geral números: `flex-wrap` (já tem) com gap ajustado
-- Seção inferior: `grid-cols-1 lg:grid-cols-3`
-- Tabelas: scroll horizontal em mobile (`overflow-x-auto`)
+CREATE TRIGGER trg_trim_profile_nome
+BEFORE INSERT OR UPDATE ON profiles
+FOR EACH ROW EXECUTE FUNCTION trim_profile_nome();
+```
 
-**4. `src/pages/PipelineResearchPage.tsx`** -- Pipeline estilo accordion em mobile
-- Desktop (`>= lg`): manter Kanban 7 colunas
-- Mobile/Tablet (`< lg`): mudar para layout vertical com seções colapsáveis (accordion) por status, similar à imagem de referência
-  - Cada status vira uma seção com header clicável mostrando nome + contagem
-  - Cards empilhados dentro de cada seção
-  - Drag & drop desativado em mobile
-- Filtros: `flex-col` em mobile, inputs full-width
-- Drawer: `w-full sm:w-[420px]`
+**2. `src/pages/PipelineResearchPage.tsx`** -- Trim defensivo no filtro (linha 244):
+```typescript
+items = items.filter(a => a.analista_responsavel.trim() === analistaFilter.trim());
+```
 
-**5. `src/pages/EmpresasPage.tsx`** -- Tabela responsiva
-- Filtros: stack vertical em mobile
-- Tabela: `overflow-x-auto` wrapper, ou em mobile mostrar como cards ao invés de tabela
-
-**6. `src/pages/AnalistasPage.tsx`** -- Tabela responsiva
-- KPIs: `grid-cols-2 sm:grid-cols-4`
-- Tabela: `overflow-x-auto`, ocultar colunas menos importantes em mobile
-
-**7. `src/pages/PosicoesPage.tsx`** -- Charts e tabela responsivos
-- KPIs e gráficos: `grid-cols-1 md:grid-cols-2`
-- Tabela: `overflow-x-auto`
-
-**8. `src/pages/ConfiguracoesPage.tsx`** -- Tabela responsiva
-- Tabela: `overflow-x-auto`, formulário de criação stack vertical
-
-**9. `src/pages/LoginPage.tsx`** -- Já deve estar ok (Card centralizado), ajustar padding
-
-**10. `src/index.css`** -- `main` padding responsivo
-- Reduzir padding de `p-6` para `p-3 sm:p-4 lg:p-6` (no AppLayout)
-
-### Detalhes técnicos
-- Breakpoints Tailwind: `sm` (640px), `md` (768px), `lg` (1024px)
-- Pipeline mobile: usar componente `Collapsible` do shadcn (já disponível) para as seções
-- Sidebar mobile: posição `fixed` com `z-50`, backdrop semi-transparente
-- `useIsMobile()` hook já existe e pode ser usado para lógica condicional
-- Nenhuma mudança no banco de dados
+E na linha 241 (filtro de analista logado):
+```typescript
+items = items.filter(a => a.analista_responsavel.trim() === currentUser?.id);
+```
 
 ### Arquivos modificados
-- `src/components/layout/AppLayout.tsx`
-- `src/components/layout/AppSidebar.tsx`
-- `src/pages/DashboardPage.tsx`
-- `src/pages/PipelineResearchPage.tsx`
-- `src/pages/EmpresasPage.tsx`
-- `src/pages/AnalistasPage.tsx`
-- `src/pages/PosicoesPage.tsx`
-- `src/pages/ConfiguracoesPage.tsx`
-- `src/pages/AnalisesPage.tsx`
-- `src/pages/CreditoCorporativoPage.tsx`
-- `src/pages/CreditoEstruturadoPage.tsx`
-- `src/pages/AcoesPage.tsx`
-- `src/pages/EmpresaDetailPage.tsx`
+- 1 migration SQL (TRIM + trigger preventivo)
+- `src/pages/PipelineResearchPage.tsx` (trim defensivo nos filtros)
+
+### Resultado
+Filtrar por Carolina ou Diogo no Pipeline mostrará todas as análises vinculadas.
 
