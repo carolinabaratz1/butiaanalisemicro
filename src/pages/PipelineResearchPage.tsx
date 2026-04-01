@@ -146,26 +146,31 @@ export default function PipelineResearchPage() {
     },
   });
 
-  // ── Fetch empresas with active positions ──
-  const { data: empresasComPosicao = [] } = useQuery({
-    queryKey: ['posicoes-empresas-ativas'],
+  // ── Fetch CNPJs with active positions via posicoes.isin → emissoes.cnpj_emissor ──
+  const { data: cnpjsComPosicaoSet = new Set<string>() } = useQuery({
+    queryKey: ['posicoes-cnpjs-ativos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1. Get distinct ISINs from posicoes
+      const { data: posData, error: posErr } = await supabase
         .from('posicoes')
-        .select('product');
-      if (error) throw error;
-      return [...new Set((data || []).map(p => p.product))];
+        .select('isin');
+      if (posErr) throw posErr;
+      const isinsAtivos = [...new Set((posData || []).filter(p => p.isin).map(p => p.isin as string))];
+      if (isinsAtivos.length === 0) return new Set<string>();
+
+      // 2. Find corresponding cnpj_emissor from emissoes
+      const { data: emData, error: emErr } = await supabase
+        .from('emissoes')
+        .select('cnpj_emissor')
+        .in('isin', isinsAtivos);
+      if (emErr) throw emErr;
+      return new Set((emData || []).map(e => e.cnpj_emissor));
     },
   });
 
   const temPosicaoAtiva = useCallback((cnpj: string) => {
-    const emissor = emissores.find(e => e.cnpj === cnpj);
-    if (!emissor) return false;
-    return empresasComPosicao.some(product =>
-      product.toLowerCase().includes(emissor.nomeAbreviado.toLowerCase().split(' ')[0].toLowerCase()) ||
-      product.includes(cnpj)
-    );
-  }, [empresasComPosicao]);
+    return cnpjsComPosicaoSet.has(cnpj);
+  }, [cnpjsComPosicaoSet]);
 
   // ── Mutations ──
   const updateStatus = useMutation({
