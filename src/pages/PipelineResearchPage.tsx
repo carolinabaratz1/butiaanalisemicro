@@ -618,8 +618,13 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
+                              </Button>
+                            )}
+                            {isGestor && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
+                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
