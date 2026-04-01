@@ -24,8 +24,8 @@ export default function AnalistasPage() {
       // Fetch analysts from profiles
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, nome, email, status, created_at')
-        .eq('funcao', 'Analista')
+        .select('id, nome, email, status, created_at, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .order('nome');
 
       if (profiles) setAnalistas(profiles);
