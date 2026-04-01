@@ -129,7 +129,7 @@ export default function PipelineResearchPage() {
   const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isCoord || isRC;
 
-  // ── Fetch active analysts from profiles ──
+  // ── Fetch active analysts/coordinators from profiles ──
   const { data: analistasAtivos = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
     queryFn: async () => {
@@ -138,6 +138,18 @@ export default function PipelineResearchPage() {
         .select('id, nome, email, funcao')
         .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .eq('status', 'Ativo');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // ── Fetch all profiles for name lookups (solicitante, etc.) ──
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao');
       if (error) throw error;
       return data || [];
     },
