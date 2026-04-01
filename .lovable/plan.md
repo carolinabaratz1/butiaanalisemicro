@@ -1,38 +1,49 @@
 
 
-## Plano: Migrar Pipeline para usar tabela `empresas` do banco de dados
+## Plano: Adicionar exclusão de análise + Corrigir função Reabrir
 
-### Problema
-O Pipeline de Research usa o arquivo estático `src/data/emissores.ts` para resolver nomes de empresas. Isso causa:
-- Empresas sem nome (mostra apenas CNPJ) — quando o CNPJ existe no banco mas não no arquivo estático
-- Nomes antigos/abreviados — o arquivo estático nunca foi atualizado com os nomes completos da base atualizada
-- A lista "Nova Análise" mostra empresas do arquivo estático, não do banco
+### Problema 1: Exclusão não existe
+Não há botão nem lógica para excluir análises. Além disso, a tabela `analises` não possui política RLS para DELETE — qualquer tentativa falharia silenciosamente.
 
-### Causa raiz
-A função `getEmissorNome(cnpj)` na linha 38 busca no array `emissores` importado de `src/data/emissores.ts`. O campo `analises.empresa_id` armazena o **CNPJ** da empresa. A resolução do nome precisa ser feita contra a tabela `empresas` do banco.
+### Problema 2: Reabrir não funciona
+A mutação `updateStatus` envia `data_inicio: null, data_conclusao: null, data_comite: null` no update. O problema é que o Supabase ignora campos `null` em updates quando a coluna já tem valor — preciso garantir que o update está enviando corretamente. Vou investigar se o `.update()` do Supabase está tratando `null` vs `undefined` corretamente e se o status está sendo atualizado.
 
-### Mudanças em `src/pages/PipelineResearchPage.tsx`
+### Mudanças
 
-**1. Substituir import estático por query ao banco**
-- Remover `import { emissores, emissoes } from '@/data/emissores'`
-- Adicionar query: `supabase.from('empresas').select('id, nome, cnpj, tipo, setor, rating, grupo_economico')`
-- Criar um `Map<cnpj, nome>` a partir dos resultados para lookup rápido
+**1. Migration: adicionar política DELETE na tabela `analises`**
 
-**2. Reescrever `getEmissorNome`**
-- Receber o Map como parâmetro (ou usar via closure)
-- Buscar nome pelo CNPJ no Map do banco em vez do array estático
+```sql
+CREATE POLICY "Authenticated users can delete analises"
+ON public.analises FOR DELETE TO authenticated USING (true);
+```
 
-**3. Atualizar formulário "Nova Análise"**
-- Listar empresas do banco (query `empresas`) em vez de `emissores.filter(...)`
-- Manter o CNPJ como valor do select (para compatibilidade com `empresa_id`)
+Restrito a usuários autenticados. O controle fino (só Gestor pode excluir) será feito no frontend.
 
-**4. Atualizar busca por ISIN/ticker**
-- A função `getEmissaoTicker` (linha 41-43) usa `emissoes` estático — substituir por query à tabela `emissoes` do banco
+**2. Adicionar mutação `deleteAnalise` em `PipelineResearchPage.tsx`**
 
-### Mudanças em `src/pages/EmpresaDetailPage.tsx`
-- Mesmo tratamento: remover import estático e usar dados do banco
+```typescript
+const deleteAnalise = useMutation({
+  mutationFn: async (id: string) => {
+    const { error } = await supabase.from('analises').delete().eq('id', id);
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
+    toast({ title: 'Análise excluída' });
+  },
+});
+```
+
+**3. Adicionar botão "Excluir" nos cards**
+- Visível apenas para Gestor
+- Com confirmação via `AlertDialog` antes de excluir
+- Disponível em todos os status (com ícone de lixeira)
+
+**4. Corrigir função Reabrir**
+- Investigar e corrigir o update para garantir que os campos `data_inicio`, `data_conclusao` e `data_comite` sejam efetivamente limpos (null)
+- Garantir invalidação correta do cache após mutação
 
 ### Arquivos modificados
-- `src/pages/PipelineResearchPage.tsx`
-- `src/pages/EmpresaDetailPage.tsx`
+- 1 migration SQL (política DELETE)
+- `src/pages/PipelineResearchPage.tsx` (delete mutation + botão + fix reabrir)
 
