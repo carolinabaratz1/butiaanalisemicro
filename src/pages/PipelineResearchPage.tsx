@@ -458,7 +458,7 @@ export default function PipelineResearchPage() {
                   {items.map(item => {
                     const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
                     const posAtiva = temPosicaoAtiva(item.empresa_id);
-                    const isMyAnalise = item.analista_responsavel === currentUser.id;
+                    const isMyAnalise = item.analista_responsavel === currentUser?.id;
 
                     return (
                       <Card
