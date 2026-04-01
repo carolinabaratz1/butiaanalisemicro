@@ -329,29 +329,29 @@ export default function PosicoesPage() {
         </TabsList>
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Select value={fundFilter} onValueChange={v => { setFundFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-72 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Fundo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os fundos</SelectItem>
                 {allFunds.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={classFilter} onValueChange={v => { setClassFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="all">Todos os tipos</SelectItem>
                 {allProductClasses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={dateFilter} onValueChange={v => { setDateFilter(v); setPage(0); }}>
-              <SelectTrigger className="w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-52 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Data ref" /></SelectTrigger>
               <SelectContent className="bg-card border-border">
                 <SelectItem value="latest">Mais recente</SelectItem>
                 {availableDates.map(d => <SelectItem key={d} value={d}>{fmtDate(d)}</SelectItem>)}
               </SelectContent>
             </Select>
-            <div className="flex items-center text-xs text-muted-foreground ml-auto">
+            <div className="flex items-center text-xs text-muted-foreground sm:ml-auto">
               Data ref: <span className="text-foreground font-medium ml-1">{latestDate ? fmtDate(latestDate) : '—'}</span>
             </div>
           </div>
