@@ -542,7 +542,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida') && (
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
