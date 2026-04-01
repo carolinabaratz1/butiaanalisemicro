@@ -45,7 +45,6 @@ function ProtectedRoutes() {
         <Route path="/empresas" element={<EmpresasPage />} />
         <Route path="/empresas/:cnpj" element={<EmpresaDetailPage />} />
         <Route path="/analises" element={<AnalisesPage />} />
-        <Route path="/pipeline" element={<PipelinePage />} />
         <Route path="/pipeline-de-research" element={<PipelineResearchPage />} />
         <Route path="/credito/corporativo" element={<CreditoCorporativoPage />} />
         <Route path="/credito/estruturado" element={<CreditoEstruturadoPage />} />
