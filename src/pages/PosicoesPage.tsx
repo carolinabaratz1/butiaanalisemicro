@@ -268,13 +268,16 @@ export default function PosicoesPage() {
   };
 
   // ── BI Metrics ──
+  // Posições que requerem análise (exclui Termo)
+  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
+
   const biMetrics = useMemo(() => {
-    const aprovadas = biFiltered.filter(p => p.analiseStatus === 'Aprovada').length;
-    const vencidas = biFiltered.filter(p => p.analiseStatus === 'Vencida').length;
-    const semAnalise = biFiltered.filter(p => p.analiseStatus === 'Sem Análise').length;
-    const cobertura = biFiltered.length > 0 ? ((aprovadas / biFiltered.length) * 100).toFixed(1) : '0';
+    const aprovadas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada').length;
+    const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
+    const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
+    const cobertura = biFilteredForAnalysis.length > 0 ? ((aprovadas / biFilteredForAnalysis.length) * 100).toFixed(1) : '0';
     return { aprovadas, vencidas, semAnalise, cobertura };
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
