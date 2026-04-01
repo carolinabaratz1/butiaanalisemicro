@@ -129,7 +129,20 @@ export default function PipelineResearchPage() {
   const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isCoord || isRC;
 
-  const analistasAtivos = catalogoAnalistas.filter(a => a.ativo);
+  // ── Fetch active analysts from profiles ──
+  const { data: analistasAtivos = [] } = useQuery({
+    queryKey: ['profiles-analistas-ativos'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, email, funcao')
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
+        .eq('status', 'Ativo');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const hoje = new Date().toISOString().split('T')[0];
 
   // ── Fetch analises from Supabase ──
