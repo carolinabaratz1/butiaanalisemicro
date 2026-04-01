@@ -61,6 +61,7 @@ export default function PosicoesPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [drillStatus, setDrillStatus] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const pageSize = 50;
@@ -236,20 +237,22 @@ export default function PosicoesPage() {
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filtered.length / pageSize);
 
-  const totalAtivos = posicoes.length;
-  const totalFundos = allFunds.length;
-  const totalTipos = allProductClasses.length;
+  const byClass = useMemo(() => {
+    const classes = [...new Set(biFiltered.map(p => p.product_class))];
+    return classes.map(pc => ({
+      name: pc,
+      value: biFiltered.filter(p => p.product_class === pc).length,
+    }));
+  }, [biFiltered]);
 
-  const byClass = allProductClasses.map(pc => ({
-    name: pc,
-    value: posicoes.filter(p => p.product_class === pc).length,
-  }));
-
-  const byFund = allFunds.map(f => ({
-    name: f.length > 25 ? f.substring(0, 25) + '…' : f,
-    fullName: f,
-    value: posicoes.filter(p => p.trading_desk_share_source === f).length,
-  }));
+  const byFund = useMemo(() => {
+    const funds = [...new Set(biFiltered.map(p => p.trading_desk_share_source))];
+    return funds.map(f => ({
+      name: f.length > 25 ? f.substring(0, 25) + '…' : f,
+      fullName: f,
+      value: biFiltered.filter(p => p.trading_desk_share_source === f).length,
+    }));
+  }, [biFiltered]);
 
   const latestDate = selectedDate;
 
@@ -273,7 +276,35 @@ export default function PosicoesPage() {
     return { aprovadas, vencidas, semAnalise, cobertura };
   }, [biFiltered]);
 
-  // Duration distribution
+  const drillPositions = useMemo(() => {
+    if (!drillStatus) return [];
+    return biFiltered.filter(p => p.analiseStatus === drillStatus);
+  }, [biFiltered, drillStatus]);
+
+  const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
+    : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
+    : drillStatus === 'Aprovada' ? 'Posições com Análise Aprovada'
+    : `Posições: ${drillStatus}`;
+
+  const handleDrillExport = () => {
+    if (drillPositions.length === 0) return;
+    const exportData = drillPositions.map(p => ({
+      'Produto': p.product,
+      'ISIN': p.isin || '',
+      'Fundo': p.trading_desk_share_source,
+      'Tipo': p.product_class,
+      'Emissor': p.empresaNome || '',
+      'Rating': p.empresaRating || '',
+      'Quantidade': Number(p.amount),
+      'Data Conclusão': p.analiseDataConclusao || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Posições');
+    XLSX.writeFile(wb, `posicoes_${drillStatus?.toLowerCase().replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+
   const durationData = useMemo(() => {
     const brackets = [
       { label: '0-1', min: 0, max: 1 },
@@ -730,21 +761,21 @@ export default function PosicoesPage() {
 
           {/* KPIs Row 2 - Research */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="bg-card border-border border-l-4 border-l-emerald-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Aprovada')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                 <p className="text-[11px] text-muted-foreground uppercase">Análise Aprovada</p>
               </div>
               <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.aprovadas}</p>
             </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-yellow-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-yellow-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Vencida')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <AlertTriangle className="h-4 w-4 text-yellow-400" />
                 <p className="text-[11px] text-muted-foreground uppercase">Análise Vencida</p>
               </div>
               <p className="text-xl font-bold text-yellow-400 mt-1">{biMetrics.vencidas}</p>
             </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-slate-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-slate-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Sem Análise')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <FileQuestion className="h-4 w-4 text-muted-foreground" />
                 <p className="text-[11px] text-muted-foreground uppercase">Sem Análise</p>
@@ -920,6 +951,54 @@ export default function PosicoesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Drill-down Modal */}
+      <Dialog open={!!drillStatus} onOpenChange={(open) => { if (!open) setDrillStatus(null); }}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">{drillTitle}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {drillPositions.length} posição(ões) encontrada(s)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto flex-1">
+            <Table className="min-w-[700px]">
+              <TableHeader>
+                <TableRow className="border-border">
+                  <TableHead className="text-[11px] h-8">Produto</TableHead>
+                  <TableHead className="text-[11px] h-8">ISIN</TableHead>
+                  <TableHead className="text-[11px] h-8">Fundo</TableHead>
+                  <TableHead className="text-[11px] h-8">Tipo</TableHead>
+                  <TableHead className="text-[11px] h-8">Emissor</TableHead>
+                  <TableHead className="text-[11px] h-8">Rating</TableHead>
+                  <TableHead className="text-[11px] h-8 text-right">Quantidade</TableHead>
+                  <TableHead className="text-[11px] h-8">Data Conclusão</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drillPositions.map(p => (
+                  <TableRow key={p.id} className="border-border">
+                    <TableCell className="text-[11px] py-1.5 font-medium">{p.product}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 font-mono">{p.isin || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 max-w-[180px] truncate">{p.trading_desk_share_source}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.product_class}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.empresaNome || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.empresaRating || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 text-right font-mono">{Number(p.amount).toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.analiseDataConclusao ? fmtDate(p.analiseDataConclusao) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDrillStatus(null)}>Fechar</Button>
+            <Button size="sm" onClick={handleDrillExport} disabled={drillPositions.length === 0}>
+              <Download className="h-3.5 w-3.5 mr-1" /> Exportar .xlsx
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
