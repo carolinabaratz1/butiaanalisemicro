@@ -640,13 +640,22 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => {
+                                const novaVersao = (item.versao || 1) + 1;
+                                createAnalise.mutate({
+                                  empresa_id: item.empresa_id,
+                                  tipo: item.tipo,
+                                  analista_responsavel: item.analista_responsavel,
+                                  isin: item.isin || '',
+                                  status: 'Pendente',
+                                  data_inicio: new Date().toISOString().split('T')[0],
+                                  prazo: item.prazo,
+                                  versao: novaVersao,
+                                  solicitante_id: currentUser?.id || '',
+                                });
+                                toast({ title: `Nova análise v${novaVersao} criada` });
+                              }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
-                              </Button>
-                            )}
-                            {isGestor && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
-                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
