@@ -1,48 +1,57 @@
 
 
-## Plano: Gestão completa de usuários + Analistas dinâmicos
+## Plano: Criar função "Coordenação/Especialista"
 
-### Problema 1: Gestor não consegue alterar função nem excluir usuário
-- **Alterar função**: O `handleRoleChange` atualiza apenas `profiles.funcao`, mas a RLS de `profiles` só permite UPDATE onde `auth.uid() = id` (o próprio usuário). Gestor não consegue alterar outros.
-- **Excluir**: Não existe funcionalidade de exclusão/desativação na UI nem no backend.
-- A tabela `user_roles` também precisa ser atualizada junto com `profiles.funcao`.
+### O que muda
 
-### Problema 2: Aba Analistas usa dados estáticos
-A `AnalistasPage` importa de `src/data/analistas.ts` (hardcoded). Deveria buscar os usuários com função "Analista" do banco (`profiles`) e contar análises da tabela `analises`.
+Nova função com permissões quase idênticas ao Gestor, mas **sem acesso a Configurações** e **sem gestão de usuários**. Pode receber análises (como Analista) e também atribuir análises a outros analistas.
 
----
+### 1. Migration SQL -- Adicionar valor ao enum `app_role`
 
-### Solução
+```sql
+ALTER TYPE public.app_role ADD VALUE 'Coordenação/Especialista';
+```
 
-**1. Edge Function `manage-user` (nova)**
-Criar edge function que permite ao Gestor:
-- **Alterar função**: Atualiza `profiles.funcao` + `user_roles.role` usando service role (bypass RLS)
-- **Desativar usuário**: Atualiza `profiles.status` para "Inativo" + desabilita o auth user via admin API
-- **Reativar usuário**: Inverso da desativação
+### 2. `src/data/users.ts` -- Expandir tipo e permissões
 
-Valida que o caller é Gestor antes de executar.
+- Adicionar `'Coordenação/Especialista'` ao type `UserRole`
+- Adicionar entrada em `rolePermissions`:
 
-**2. Migration: RLS para DELETE em `user_roles`**
-Adicionar policy de DELETE em `user_roles` para permitir a troca de role (delete old + insert new).
+```text
+'Coordenação/Especialista': {
+  sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', 
+             '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas'],
+  canWrite: true,
+  canManageUsers: false,        // diferença do Gestor
+  canViewAllDashboards: true,
+  canApproveAnalyses: true,
+  canCreateAnalyses: true,
+  canEditOthersAnalyses: true,  // pode atribuir análises
+}
+```
 
-**3. Atualizar `ConfiguracoesPage.tsx`**
-- `handleRoleChange`: Chamar a edge function `manage-user` com action `change-role` em vez de update direto
-- Adicionar botão de desativar/reativar usuário em cada linha (apenas para Gestores)
-- Adicionar confirmação antes de desativar
+Sem `/configuracoes` nas sections e `canManageUsers: false`.
 
-**4. Refatorar `AnalistasPage.tsx`**
-- Remover imports de `analistas.ts` e `historicoAnalises.ts`
-- Buscar do Supabase: `profiles` com `funcao = 'Analista'` (ativos e inativos)
-- Contar análises por analista: query em `analises` agrupando por `analista_responsavel`
-- KPIs dinâmicos: total, ativos (`status = 'Ativo'`), ex-analistas (`status = 'Inativo'`)
+### 3. `src/pages/ConfiguracoesPage.tsx` -- Incluir opção no dropdown de funções
 
-### Arquivos
-- **Novo**: `supabase/functions/manage-user/index.ts`
-- **Migration**: Policy DELETE em `user_roles`
-- **Modificados**: `src/pages/ConfiguracoesPage.tsx`, `src/pages/AnalistasPage.tsx`
+Adicionar "Coordenação/Especialista" na lista de funções disponíveis ao criar ou alterar usuários.
+
+### 4. `supabase/functions/create-user/index.ts` e `manage-user/index.ts`
+
+Incluir `'Coordenação/Especialista'` na validação de funções aceitas. No `manage-user`, permitir que Coordenação/Especialista também execute ações de atribuição (já que `canEditOthersAnalyses: true` governa isso no frontend).
+
+### 5. `src/pages/PipelineResearchPage.tsx` -- Permissões de ações
+
+Verificar que a lógica de ações (criar análise, atribuir analista, aprovar) use as flags de `permissions` e não compare diretamente com `funcao === 'Gestor'`. Se houver comparações hardcoded, substituir pelas flags corretas.
+
+### Arquivos modificados
+- 1 migration SQL (ALTER TYPE)
+- `src/data/users.ts`
+- `src/pages/ConfiguracoesPage.tsx`
+- `supabase/functions/create-user/index.ts`
+- `supabase/functions/manage-user/index.ts`
+- `src/pages/PipelineResearchPage.tsx` (se necessário)
 
 ### Resultado
-- Gestor pode alterar função e desativar/reativar usuários
-- Aba Analistas reflete os usuários reais cadastrados no sistema
-- Contagem de análises vem do banco de dados
+Gestores poderão atribuir a função "Coordenação/Especialista" a usuários. Esses usuários terão acesso completo ao sistema exceto Configurações, poderão receber e atribuir análises, e aprovar/reprovar análises.
 
