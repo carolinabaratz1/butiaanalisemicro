@@ -329,12 +329,12 @@ export default function PosicoesPage() {
   // Analysis status distribution
   const analiseStatusData = useMemo(() => {
     const counts: Record<string, number> = {};
-    biFiltered.forEach(p => {
+    biFilteredForAnalysis.forEach(p => {
       const st = p.analiseStatus || 'Sem Análise';
       counts[st] = (counts[st] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [biFiltered]);
+  }, [biFilteredForAnalysis]);
 
   // Coverage by fund (stacked bar)
   const coverageByFund = useMemo(() => {
