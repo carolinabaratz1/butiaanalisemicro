@@ -464,7 +464,8 @@ export default function PipelineResearchPage() {
           <span className="ml-2 text-sm text-muted-foreground">Carregando pipeline...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-3">
+        {/* Desktop Kanban */}
+        <div className="hidden lg:grid grid-cols-7 gap-3">
           {columns.map(col => {
             const items = filtered.filter(a => a.displayStatus === col.key);
             return (
@@ -503,7 +504,6 @@ export default function PipelineResearchPage() {
                           <div className="flex items-center justify-between gap-1">
                             <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
                           </div>
-                          {/* Tipo + recomendacao badges */}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
                               <Badge variant="outline" className={`text-[9px] ${tipoAnaliseColors[item.tipo] || 'bg-muted/30 text-muted-foreground'}`}>
@@ -589,6 +589,113 @@ export default function PipelineResearchPage() {
                   )}
                 </div>
               </div>
+            );
+          })}
+        </div>
+
+        {/* Mobile/Tablet Accordion */}
+        <div className="lg:hidden space-y-2">
+          {columns.map(col => {
+            const items = filtered.filter(a => a.displayStatus === col.key);
+            return (
+              <Collapsible key={col.key} defaultOpen={items.length > 0}>
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-md bg-surface-1 border border-border">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`text-sm font-semibold ${col.color}`}>{col.label}</h3>
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">{items.length}</Badge>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 pt-2">
+                  {items.map(item => {
+                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
+                    const posAtiva = temPosicaoAtiva(item.empresa_id);
+                    const isMyAnalise = item.analista_responsavel === currentUser?.id;
+
+                    return (
+                      <Card
+                        key={item.id}
+                        className={cn(
+                          'bg-card border-border',
+                          prazoVencido && 'border-status-danger/60',
+                        )}
+                        onClick={() => setDrawerAnalise(item)}
+                      >
+                        <CardContent className="p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {item.tipo && (
+                              <Badge variant="outline" className={`text-[9px] ${tipoAnaliseColors[item.tipo] || 'bg-muted/30 text-muted-foreground'}`}>
+                                {item.tipo}
+                              </Badge>
+                            )}
+                            {(item as any).recomendacao && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`}>
+                                {(item as any).recomendacao}
+                              </Badge>
+                            )}
+                            {posAtiva && (
+                              <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
+                                ⚠️ Posição Ativa
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
+                              {getAnalistaInitials(item.analista_responsavel, allProfiles)}
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate">{getAnalistaNome(item.analista_responsavel, allProfiles)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] ${prazoVencido ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>
+                              {item.prazo ? `Prazo: ${fmtDateBR(item.prazo)}` : ''}
+                            </span>
+                          </div>
+
+                          {/* Quick actions */}
+                          <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } })}>
+                                <Play className="h-2.5 w-2.5" /> Iniciar
+                              </Button>
+                            )}
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
+                              <>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
+                                  <CheckCircle className="h-2.5 w-2.5" /> Entregar
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setRejeitarAnalistaModal(item.id); setJustificativaRejeicao(''); }}>
+                                  <X className="h-2.5 w-2.5" /> Devolver
+                                </Button>
+                              </>
+                            )}
+                            {isGestor && item.displayStatus === 'Concluída' && (
+                              <>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
+                                  <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                                  <ThumbsDown className="h-2.5 w-2.5" /> Reprovar
+                                </Button>
+                              </>
+                            )}
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
+                                <RotateCcw className="h-2.5 w-2.5" /> Reabrir
+                              </Button>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {items.length === 0 && (
+                    <div className="text-xs text-muted-foreground text-center py-4 border border-dashed border-border rounded-md">Nenhum item</div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </div>
