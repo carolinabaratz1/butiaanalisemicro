@@ -439,7 +439,7 @@ export default function PipelineResearchPage() {
             <SelectTrigger className="w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
             <SelectContent className="bg-card border-border max-h-60">
               <SelectItem value="all">Todos os analistas</SelectItem>
-              {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+              {analistasAtivos.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
