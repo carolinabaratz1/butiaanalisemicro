@@ -432,7 +432,7 @@ export default function PipelineResearchPage() {
           <span className="ml-2 text-sm text-muted-foreground">Carregando pipeline...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid grid-cols-7 gap-3">
           {columns.map(col => {
             const items = filtered.filter(a => a.displayStatus === col.key);
             return (
