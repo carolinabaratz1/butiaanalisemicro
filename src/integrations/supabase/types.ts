@@ -113,6 +113,36 @@ export type Database = {
         }
         Relationships: []
       }
+      emissoes: {
+        Row: {
+          cnpj_emissor: string
+          created_at: string
+          id: string
+          isin: string
+          ticker: string | null
+          updated_at: string
+          val_date: string | null
+        }
+        Insert: {
+          cnpj_emissor: string
+          created_at?: string
+          id?: string
+          isin: string
+          ticker?: string | null
+          updated_at?: string
+          val_date?: string | null
+        }
+        Update: {
+          cnpj_emissor?: string
+          created_at?: string
+          id?: string
+          isin?: string
+          ticker?: string | null
+          updated_at?: string
+          val_date?: string | null
+        }
+        Relationships: []
+      }
       empresas: {
         Row: {
           cnpj: string
