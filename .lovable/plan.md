@@ -1,22 +1,30 @@
 
 
-## Plano: Incluir Coordenação/Especialista na aba Analistas
+## Plano: Dropdown de analistas dinâmico (do banco de dados)
 
 ### Problema
-A query filtra apenas `funcao = 'Analista'`, excluindo usuários com função "Coordenação/Especialista".
+O dropdown "Analista Responsável" no formulário "Nova Análise" usa dados estáticos de `src/data/analistas.ts`. Deveria buscar os usuários reais cadastrados no banco com função Analista ou Coordenação/Especialista.
 
 ### Solução
-No `src/pages/AnalistasPage.tsx`, linha 27: substituir `.eq('funcao', 'Analista')` por `.in('funcao', ['Analista', 'Coordenação/Especialista'])`.
 
-Adicionar a coluna `funcao` ao select (linha 26) e exibi-la na tabela ao lado do nome ou como uma coluna separada, para distinguir Analistas de Coordenadores/Especialistas.
+**No `src/pages/PipelineResearchPage.tsx`:**
+
+1. Adicionar query ao Supabase para buscar profiles com `funcao IN ('Analista', 'Coordenação/Especialista')` e `status = 'Ativo'`
+2. Remover import de `analistas as catalogoAnalistas` de `src/data/analistas.ts`
+3. Substituir `catalogoAnalistas` e `analistasAtivos` pelos dados do Supabase
+4. Atualizar `getAnalistaNome` para usar os profiles do banco (já que a tabela `analises` armazena o nome do analista em `analista_responsavel` como texto, fazer lookup por nome ou id)
+
+**No `src/pages/EmpresaDetailPage.tsx`:**
+
+1. Mesma abordagem: buscar profiles do Supabase em vez de usar `users` estático
+2. Incluir Coordenação/Especialista no filtro
 
 ### Detalhes técnicos
-- Interface `AnalistaProfile`: adicionar campo `funcao: string`
-- Select: `'id, nome, email, status, created_at, funcao'`
-- Filtro: `.in('funcao', ['Analista', 'Coordenação/Especialista'])`
-- Tabela: adicionar coluna "Função" exibindo badge com a função
-- KPI "Total de Analistas" renomear para "Total" (ou manter, pois inclui coordenadores)
+- Query: `supabase.from('profiles').select('id, nome, email, funcao').in('funcao', ['Analista', 'Coordenação/Especialista']).eq('status', 'Ativo')`
+- O campo `analista_responsavel` nas análises armazena o nome do analista como texto; o dropdown passará o nome ao criar análise (mantendo compatibilidade)
+- Funções `getAnalistaNome` e `getAnalistaInitials` usarão os profiles do banco
 
-### Arquivo modificado
-- `src/pages/AnalistasPage.tsx`
+### Arquivos modificados
+- `src/pages/PipelineResearchPage.tsx`
+- `src/pages/EmpresaDetailPage.tsx`
 
