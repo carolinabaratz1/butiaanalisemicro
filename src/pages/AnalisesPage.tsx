@@ -131,7 +131,7 @@ export default function AnalisesPage() {
           </SelectContent>
         </Select>
         <Select value={analistaFilter} onValueChange={setAnalistaFilter}>
-          <SelectTrigger className="w-44 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-44 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos analistas</SelectItem>
             {analistasAtivos.map(a => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
