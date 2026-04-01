@@ -175,7 +175,7 @@ export default function DashboardPage() {
   ];
 
   // Analyst widget data
-  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser.id);
+  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser?.id);
   const minhasPendentes = minhasAnalises.filter(a => a.status === 'pendente').length;
   const minhasEmAnalise = minhasAnalises.filter(a => a.status === 'em_analise').length;
   const minhasConcluidas = minhasAnalises.filter(a => a.status === 'concluido').length;

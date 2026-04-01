@@ -656,7 +656,7 @@ export default function PipelineResearchPage() {
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser.id && drawerAnalise.status === 'Em Análise' && (
+                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
                         <CheckCircle className="h-3 w-3" /> Entregar Análise

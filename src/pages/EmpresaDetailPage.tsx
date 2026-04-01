@@ -191,7 +191,7 @@ export default function EmpresaDetailPage() {
                     const status = getEmissaoStatus(em.isin);
                     const activeAnalise = getActiveAnalise(em.isin);
                     const cfg = statusConfig[status];
-                    const isMyAnalise = activeAnalise?.analista_id === currentUser.id;
+                    const isMyAnalise = activeAnalise?.analista_id === currentUser?.id;
                     const prazoVencido = activeAnalise && activeAnalise.prazo < new Date().toISOString().split('T')[0] && (activeAnalise.status === 'pendente' || activeAnalise.status === 'em_analise');
 
                     return (
