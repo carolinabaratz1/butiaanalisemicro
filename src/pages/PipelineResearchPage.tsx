@@ -15,7 +15,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, Trash2 } from 'lucide-react';
+import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, Trash2, MoreVertical } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -545,7 +546,28 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                              {(item.versao || 1) > 1 && (
+                                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30 shrink-0">v{item.versao}</Badge>
+                              )}
+                            </div>
+                            {isGestor && (
+                              <div onClick={e => e.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground">
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-card border-border">
+                                    <DropdownMenuItem className="text-destructive text-xs gap-2 cursor-pointer" onClick={() => setDeleteConfirmId(item.id)}>
+                                      <Trash2 className="h-3 w-3" /> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
@@ -618,13 +640,22 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => {
+                                const novaVersao = (item.versao || 1) + 1;
+                                createAnalise.mutate({
+                                  empresa_id: item.empresa_id,
+                                  tipo: item.tipo,
+                                  analista_responsavel: item.analista_responsavel,
+                                  isin: item.isin || '',
+                                  status: 'Pendente',
+                                  data_inicio: new Date().toISOString().split('T')[0],
+                                  prazo: item.prazo,
+                                  versao: novaVersao,
+                                  solicitante_id: currentUser?.id || '',
+                                });
+                                toast({ title: `Nova análise v${novaVersao} criada` });
+                              }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
-                              </Button>
-                            )}
-                            {isGestor && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
-                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
@@ -671,7 +702,28 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                              {(item.versao || 1) > 1 && (
+                                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30 shrink-0">v{item.versao}</Badge>
+                              )}
+                            </div>
+                            {isGestor && (
+                              <div onClick={e => e.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground">
+                                      <MoreVertical className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="bg-card border-border">
+                                    <DropdownMenuItem className="text-destructive text-xs gap-2 cursor-pointer" onClick={() => setDeleteConfirmId(item.id)}>
+                                      <Trash2 className="h-3 w-3" /> Excluir
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
@@ -730,13 +782,22 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => {
+                                const novaVersao = (item.versao || 1) + 1;
+                                createAnalise.mutate({
+                                  empresa_id: item.empresa_id,
+                                  tipo: item.tipo,
+                                  analista_responsavel: item.analista_responsavel,
+                                  isin: item.isin || '',
+                                  status: 'Pendente',
+                                  data_inicio: new Date().toISOString().split('T')[0],
+                                  prazo: item.prazo,
+                                  versao: novaVersao,
+                                  solicitante_id: currentUser?.id || '',
+                                });
+                                toast({ title: `Nova análise v${novaVersao} criada` });
+                              }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
-                              </Button>
-                            )}
-                            {isGestor && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(item.id); }}>
-                                <Trash2 className="h-2.5 w-2.5" />
                               </Button>
                             )}
                           </div>
