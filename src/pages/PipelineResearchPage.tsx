@@ -16,8 +16,6 @@ import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundC
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { emissores, emissoes } from '@/data/emissores';
-import { analistas as catalogoAnalistas } from '@/data/analistas';
-import { users } from '@/data/users';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
