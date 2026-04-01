@@ -254,6 +254,19 @@ export default function PipelineResearchPage() {
     onError: (err: any) => toast({ title: 'Erro ao criar análise', description: err.message, variant: 'destructive' }),
   });
 
+  const deleteAnalise = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('analises').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
+      queryClient.invalidateQueries({ queryKey: ['analises-ativas-count'] });
+      toast({ title: 'Análise excluída com sucesso' });
+    },
+    onError: (err: any) => toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' }),
+  });
+
   // ── Apply display status (Vencida) ──
   const analisesComStatus = useMemo(() => {
     return analises.map(a => ({
