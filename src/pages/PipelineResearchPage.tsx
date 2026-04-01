@@ -197,9 +197,9 @@ export default function PipelineResearchPage() {
   const analisesComStatus = useMemo(() => {
     return analises.map(a => ({
       ...a,
-      displayStatus: getDisplayStatus(a.status, a.data_conclusao),
+      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
     }));
-  }, [analises]);
+  }, [analises, temPosicaoAtiva]);
 
   // ── Filters ──
   const filtered = useMemo(() => {
