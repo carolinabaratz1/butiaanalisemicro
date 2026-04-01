@@ -705,7 +705,7 @@ export default function PipelineResearchPage() {
 
       {/* Drawer */}
       <Sheet open={!!drawerAnalise} onOpenChange={() => setDrawerAnalise(null)}>
-        <SheetContent className="bg-card border-border w-[420px] sm:w-[420px]">
+        <SheetContent className="bg-card border-border w-full sm:w-[420px]">
           {drawerAnalise && (
             <ScrollArea className="h-full pr-4">
               <SheetHeader>

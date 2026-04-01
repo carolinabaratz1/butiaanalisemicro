@@ -80,8 +80,8 @@ export default function CreditoCorporativoPage() {
 
         <TabsContent value="externos">
           <Card className="bg-card border-border">
-            <CardContent className="p-0">
-              <Table>
+            <CardContent className="p-0 overflow-x-auto">
+              <Table className="min-w-[600px]">
                 <TableHeader>
                   <TableRow className="border-border">
                     <TableHead className="text-[11px] h-9">Empresa</TableHead>
