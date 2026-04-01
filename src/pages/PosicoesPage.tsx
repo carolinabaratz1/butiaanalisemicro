@@ -431,7 +431,7 @@ export default function PosicoesPage() {
         </TabsContent>
 
         <TabsContent value="analitico" className="space-y-4 mt-3">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="bg-card border-border"><CardContent className="p-4">
               <p className="text-[11px] text-muted-foreground uppercase">Total de ativos</p>
               <p className="text-xl font-bold text-foreground mt-1">{totalAtivos}</p>
