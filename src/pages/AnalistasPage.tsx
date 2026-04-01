@@ -11,6 +11,7 @@ interface AnalistaProfile {
   email: string;
   status: string;
   created_at: string;
+  funcao: string;
 }
 
 export default function AnalistasPage() {
