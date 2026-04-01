@@ -80,6 +80,11 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/trocar-senha" element={
+        !session ? <Navigate to="/login" replace /> :
+        !currentUser?.must_change_password ? <Navigate to="/" replace /> :
+        <ChangePasswordPage />
+      } />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );
