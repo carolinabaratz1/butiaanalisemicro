@@ -23,7 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
@@ -31,7 +31,8 @@ const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
   { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
   { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
-  { key: 'Vencida', label: 'Vencida', color: 'text-orange-400' },
+  { key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' },
+  { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
 
 function getEmissorNome(cnpj: string) {
@@ -77,8 +78,13 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null): AnaliseStatus {
-  if (isVencida(status, dataConclusao)) return 'Vencida';
+function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean): AnaliseStatus {
+  if (isVencida(status, dataConclusao)) {
+    if (empresaId && temPosicaoFn) {
+      return temPosicaoFn(empresaId) ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
+    }
+    return 'Vencida s/ Alocação';
+  }
   return status as AnaliseStatus;
 }
 
@@ -191,9 +197,9 @@ export default function PipelineResearchPage() {
   const analisesComStatus = useMemo(() => {
     return analises.map(a => ({
       ...a,
-      displayStatus: getDisplayStatus(a.status, a.data_conclusao),
+      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
     }));
-  }, [analises]);
+  }, [analises, temPosicaoAtiva]);
 
   // ── Filters ──
   const filtered = useMemo(() => {
@@ -378,7 +384,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida'))
+    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida c/ Alocação' || a.displayStatus === 'Vencida s/ Alocação'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
@@ -426,7 +432,7 @@ export default function PipelineResearchPage() {
           <span className="ml-2 text-sm text-muted-foreground">Carregando pipeline...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-6 gap-3">
+        <div className="grid grid-cols-7 gap-3">
           {columns.map(col => {
             const items = filtered.filter(a => a.displayStatus === col.key);
             return (
@@ -536,7 +542,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida') && (
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } })}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
@@ -573,7 +579,7 @@ export default function PipelineResearchPage() {
                     <Badge variant="outline" className={`text-[10px] mt-0.5 ${tipoAnaliseColors[drawerAnalise.tipo] || ''}`}>{drawerAnalise.tipo}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
-                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao)}</Badge>
+                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva)}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel)}</p></div>
@@ -670,7 +676,7 @@ export default function PipelineResearchPage() {
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Reprovada' || getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao) === 'Vencida') && (
+                  {isGestor && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
