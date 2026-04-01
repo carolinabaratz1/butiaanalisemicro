@@ -39,13 +39,13 @@ function getEmissorNome(cnpj: string) {
 function getEmissaoTicker(isin: string) {
   return emissoes.find(e => e.isin === isin)?.ticker ?? '';
 }
-function getAnalistaNome(id: string) {
-  const a = catalogoAnalistas.find(a => a.id === id);
-  if (a) return a.nome;
-  return users.find(u => u.id === id)?.nome ?? id;
+function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []) {
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  if (p) return p.nome;
+  return id;
 }
-function getAnalistaInitials(id: string) {
-  const nome = getAnalistaNome(id);
+function getAnalistaInitials(id: string, profiles: { id: string; nome: string }[] = []) {
+  const nome = getAnalistaNome(id, profiles);
   return nome.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
 
