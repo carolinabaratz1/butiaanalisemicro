@@ -262,8 +262,8 @@ export default function EmpresaDetailPage() {
                 </TableHeader>
                 <TableBody>
                   {historicoPorCnpj.map(h => {
-                    const analistaCatalogo = catalogoAnalistas.find(a => a.id === h.analista_id);
-                    const analistaAtivo = analistaCatalogo?.ativo ?? false;
+                    const matchedProfile = analistasUsuarios.find(a => a.id === h.analista_id || a.nome === h.analista_nome);
+                    const analistaAtivo = !!matchedProfile;
                     return (
                       <TableRow key={h.id} className="border-border">
                         <TableCell className="text-sm py-2 text-muted-foreground">{h.data}</TableCell>
