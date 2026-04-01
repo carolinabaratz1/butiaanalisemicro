@@ -280,12 +280,13 @@ export default function DashboardPage() {
         <Card className="bg-card border-border">
           <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Últimas Análises Aprovadas</CardTitle></CardHeader>
           <CardContent>
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-8">Empresa</TableHead>
                   <TableHead className="text-[11px] h-8">Tipo</TableHead>
-                  <TableHead className="text-[11px] h-8">Analista</TableHead>
+                  <TableHead className="text-[11px] h-8 hidden sm:table-cell">Analista</TableHead>
                   <TableHead className="text-[11px] h-8">Data</TableHead>
                 </TableRow>
               </TableHeader>
