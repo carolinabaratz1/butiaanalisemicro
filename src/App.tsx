@@ -36,7 +36,7 @@ function LoadingScreen() {
 }
 
 function ProtectedRoutes() {
-  const { session, loading } = useAuth();
+  const { session, loading, currentUser } = useAuth();
 
   if (loading) {
     return <LoadingScreen />;
@@ -44,6 +44,10 @@ function ProtectedRoutes() {
 
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (currentUser?.must_change_password) {
+    return <Navigate to="/trocar-senha" replace />;
   }
 
   return (
