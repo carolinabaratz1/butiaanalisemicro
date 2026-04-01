@@ -523,9 +523,9 @@ export default function PipelineResearchPage() {
                           )}
                           <div className="flex items-center gap-2">
                             <div className="h-5 w-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[9px] font-bold shrink-0">
-                              {getAnalistaInitials(item.analista_responsavel)}
+                              {getAnalistaInitials(item.analista_responsavel, allProfiles)}
                             </div>
-                            <span className="text-[11px] text-muted-foreground truncate">{getAnalistaNome(item.analista_responsavel)}</span>
+                            <span className="text-[11px] text-muted-foreground truncate">{getAnalistaNome(item.analista_responsavel, allProfiles)}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className={`text-[10px] ${prazoVencido ? 'text-status-danger font-semibold' : 'text-muted-foreground'}`}>
