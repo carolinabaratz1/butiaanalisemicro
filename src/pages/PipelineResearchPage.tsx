@@ -464,6 +464,7 @@ export default function PipelineResearchPage() {
           <span className="ml-2 text-sm text-muted-foreground">Carregando pipeline...</span>
         </div>
       ) : (
+        <>
         {/* Desktop Kanban */}
         <div className="hidden lg:grid grid-cols-7 gap-3">
           {columns.map(col => {
