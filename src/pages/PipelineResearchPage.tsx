@@ -237,7 +237,7 @@ export default function PipelineResearchPage() {
     }
 
     return items;
-  }, [analisesComStatus, isAnalista, currentUser.id, analistaFilter, prazoFilter, search, hoje]);
+  }, [analisesComStatus, isAnalista, currentUser?.id, analistaFilter, prazoFilter, search, hoje]);
 
   // ── Handlers ──
   const handleCriar = () => {
