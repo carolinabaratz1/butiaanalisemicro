@@ -241,6 +241,7 @@ export default function ConfiguracoesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Gestor">Gestor</SelectItem>
+                            <SelectItem value="Coordenação/Especialista">Coordenação/Especialista</SelectItem>
                             <SelectItem value="Analista">Analista</SelectItem>
                             <SelectItem value="Risco e Compliance">Risco e Compliance</SelectItem>
                             <SelectItem value="Consulta">Consulta</SelectItem>
