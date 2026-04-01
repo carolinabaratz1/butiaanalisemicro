@@ -152,6 +152,7 @@ export type Database = {
           rating: string | null
           setor: string | null
           status: string | null
+          tipo: string | null
           updated_at: string
         }
         Insert: {
@@ -162,6 +163,7 @@ export type Database = {
           rating?: string | null
           setor?: string | null
           status?: string | null
+          tipo?: string | null
           updated_at?: string
         }
         Update: {
@@ -172,6 +174,7 @@ export type Database = {
           rating?: string | null
           setor?: string | null
           status?: string | null
+          tipo?: string | null
           updated_at?: string
         }
         Relationships: []
