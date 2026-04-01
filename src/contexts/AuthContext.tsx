@@ -1,23 +1,92 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserRole, RolePermissions, users, rolePermissions } from '@/data/users';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { UserRole, RolePermissions, rolePermissions } from '@/data/users';
+import type { Session } from '@supabase/supabase-js';
+
+export interface User {
+  id: string;
+  nome: string;
+  email: string;
+  funcao: UserRole;
+  status: string;
+}
 
 interface AuthContextType {
-  currentUser: User;
-  setCurrentUser: (user: User) => void;
+  currentUser: User | null;
+  session: Session | null;
+  loading: boolean;
   permissions: RolePermissions;
   hasAccess: (path: string) => boolean;
-  allUsers: User[];
+  signOut: () => Promise<void>;
 }
+
+const defaultPermissions: RolePermissions = {
+  sections: [],
+  canWrite: false,
+  canManageUsers: false,
+  canViewAllDashboards: false,
+  canApproveAnalyses: false,
+  canCreateAnalyses: false,
+  canEditOthersAnalyses: false,
+};
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(users[1]); // Default to Rodrigo (Gestor)
+  const [session, setSession] = useState<Session | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const permissions = rolePermissions[currentUser.funcao];
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (data) {
+      setCurrentUser({
+        id: data.id,
+        nome: data.nome,
+        email: data.email,
+        funcao: data.funcao as UserRole,
+        status: data.status,
+      });
+    }
+  };
+
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        if (session?.user) {
+          // Use setTimeout to avoid potential deadlock with Supabase client
+          setTimeout(() => fetchProfile(session.user.id), 0);
+        } else {
+          setCurrentUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    // Then check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const permissions = currentUser
+    ? rolePermissions[currentUser.funcao] ?? defaultPermissions
+    : defaultPermissions;
 
   const hasAccess = (path: string) => {
-    // Check exact match or prefix match for nested routes
     return permissions.sections.some(s => {
       if (path === s) return true;
       if (s !== '/' && path.startsWith(s)) return true;
@@ -25,8 +94,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setSession(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ currentUser, setCurrentUser, permissions, hasAccess, allUsers: users }}>
+    <AuthContext.Provider value={{ currentUser, session, loading, permissions, hasAccess, signOut }}>
       {children}
     </AuthContext.Provider>
   );
