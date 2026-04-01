@@ -260,7 +260,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="bg-card border-border">
           <CardHeader className="pb-3"><CardTitle className="text-sm font-semibold">Pipeline da Semana</CardTitle></CardHeader>
           <CardContent className="space-y-2">
