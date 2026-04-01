@@ -98,6 +98,7 @@ export default function PipelineResearchPage() {
   const [prazoFilter, setPrazoFilter] = useState('all');
   const [novaModal, setNovaModal] = useState(false);
   const [drawerAnalise, setDrawerAnalise] = useState<any | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [entregarModal, setEntregarModal] = useState<string | null>(null);
   const [relatorio, setRelatorio] = useState('');
   const [reatribuirModal, setReatribuirModal] = useState<string | null>(null);
