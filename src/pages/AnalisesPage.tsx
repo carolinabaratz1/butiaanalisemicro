@@ -140,7 +140,7 @@ export default function AnalisesPage() {
       </div>
 
       <Card className="bg-card border-border">
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <p className="text-sm">Nenhuma análise encontrada</p>
