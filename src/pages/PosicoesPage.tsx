@@ -761,21 +761,21 @@ export default function PosicoesPage() {
 
           {/* KPIs Row 2 - Research */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="bg-card border-border border-l-4 border-l-emerald-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Aprovada')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                 <p className="text-[11px] text-muted-foreground uppercase">Análise Aprovada</p>
               </div>
               <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.aprovadas}</p>
             </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-yellow-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-yellow-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Vencida')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <AlertTriangle className="h-4 w-4 text-yellow-400" />
                 <p className="text-[11px] text-muted-foreground uppercase">Análise Vencida</p>
               </div>
               <p className="text-xl font-bold text-yellow-400 mt-1">{biMetrics.vencidas}</p>
             </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-slate-500"><CardContent className="p-4">
+            <Card className="bg-card border-border border-l-4 border-l-slate-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Sem Análise')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <FileQuestion className="h-4 w-4 text-muted-foreground" />
                 <p className="text-[11px] text-muted-foreground uppercase">Sem Análise</p>
