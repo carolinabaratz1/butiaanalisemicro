@@ -421,24 +421,24 @@ export default function PipelineResearchPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-foreground">Pipeline de Research</h2>
         {canCreate && (
-          <Button size="sm" className="gap-1.5" onClick={() => setNovaModal(true)}>
+          <Button size="sm" className="gap-1.5 w-full sm:w-auto" onClick={() => setNovaModal(true)}>
             <Plus className="h-3.5 w-3.5" /> Nova Análise
           </Button>
         )}
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-0 sm:max-w-xs">
           <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
           <Input placeholder="Buscar emissor ou ISIN..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-8 text-sm bg-surface-1 border-border" />
         </div>
         {!isAnalista && (
           <Select value={analistaFilter} onValueChange={setAnalistaFilter}>
-            <SelectTrigger className="w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-48 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Analista" /></SelectTrigger>
             <SelectContent className="bg-card border-border max-h-60">
               <SelectItem value="all">Todos os analistas</SelectItem>
               {analistasAtivos.map(a => <SelectItem key={a.id} value={a.nome}>{a.nome}</SelectItem>)}
@@ -446,7 +446,7 @@ export default function PipelineResearchPage() {
           </Select>
         )}
         <Select value={prazoFilter} onValueChange={setPrazoFilter}>
-          <SelectTrigger className="w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Prazo" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Prazo" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="vencido">Vencido</SelectItem>
