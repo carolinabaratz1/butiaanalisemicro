@@ -64,7 +64,7 @@ export default function AnalistasPage() {
       <h2 className="text-lg font-semibold text-foreground">Analistas</h2>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center">
