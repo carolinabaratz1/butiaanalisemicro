@@ -951,6 +951,54 @@ export default function PosicoesPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Drill-down Modal */}
+      <Dialog open={!!drillStatus} onOpenChange={(open) => { if (!open) setDrillStatus(null); }}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">{drillTitle}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {drillPositions.length} posição(ões) encontrada(s)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto flex-1">
+            <Table className="min-w-[700px]">
+              <TableHeader>
+                <TableRow className="border-border">
+                  <TableHead className="text-[11px] h-8">Produto</TableHead>
+                  <TableHead className="text-[11px] h-8">ISIN</TableHead>
+                  <TableHead className="text-[11px] h-8">Fundo</TableHead>
+                  <TableHead className="text-[11px] h-8">Tipo</TableHead>
+                  <TableHead className="text-[11px] h-8">Emissor</TableHead>
+                  <TableHead className="text-[11px] h-8">Rating</TableHead>
+                  <TableHead className="text-[11px] h-8 text-right">Quantidade</TableHead>
+                  <TableHead className="text-[11px] h-8">Data Conclusão</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drillPositions.map(p => (
+                  <TableRow key={p.id} className="border-border">
+                    <TableCell className="text-[11px] py-1.5 font-medium">{p.product}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 font-mono">{p.isin || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 max-w-[180px] truncate">{p.trading_desk_share_source}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.product_class}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.empresaNome || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.empresaRating || '—'}</TableCell>
+                    <TableCell className="text-[11px] py-1.5 text-right font-mono">{Number(p.amount).toLocaleString('pt-BR')}</TableCell>
+                    <TableCell className="text-[11px] py-1.5">{p.analiseDataConclusao ? fmtDate(p.analiseDataConclusao) : '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDrillStatus(null)}>Fechar</Button>
+            <Button size="sm" onClick={handleDrillExport} disabled={drillPositions.length === 0}>
+              <Download className="h-3.5 w-3.5 mr-1" /> Exportar .xlsx
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
