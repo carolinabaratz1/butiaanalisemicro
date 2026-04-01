@@ -160,7 +160,7 @@ export default function EmpresaDetailPage() {
 
       {/* Info card */}
       <Card className="bg-card border-border">
-        <CardContent className="p-4 grid grid-cols-4 gap-4">
+        <CardContent className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setorButia || emissor.setorGics || '—'}</p></div>
           <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupoEconomico}</p></div>
           <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.ratingAtual || '—'} {emissor.agenciaAtual ? `(${emissor.agenciaAtual})` : ''}</p></div>
