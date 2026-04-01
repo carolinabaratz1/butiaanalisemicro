@@ -12,10 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { emissores, emissoes, type Emissao } from '@/data/emissores';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
 import { historicoAnalises } from '@/data/historicoAnalises';
@@ -44,11 +43,9 @@ function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) 
 export default function EmpresaDetailPage() {
   const { cnpj } = useParams<{ cnpj: string }>();
   const decodedCnpj = decodeURIComponent(cnpj || '');
-  const emissor = emissores.find(e => e.cnpj === decodedCnpj);
   const { currentUser } = useAuth();
   const { analises, criarAnalise, iniciarAnalise, concluirAnalise, getAnalisesByIsin } = useAnaliseEmissao();
 
-  const [emissoesList, setEmissoesList] = useState<Emissao[]>(emissoes.filter(e => e.cnpjEmissor === decodedCnpj));
   const [solicitarModal, setSolicitarModal] = useState<string | null>(null);
   const [novaEmissaoModal, setNovaEmissaoModal] = useState(false);
   const [entregarModal, setEntregarModal] = useState<string | null>(null);
@@ -59,6 +56,33 @@ export default function EmpresaDetailPage() {
   const [novoIsin, setNovoIsin] = useState('');
   const [novoTicker, setNovoTicker] = useState('');
   const [novoValDate, setNovoValDate] = useState<Date>();
+
+  // ── Fetch empresa from DB ──
+  const { data: emissor, isLoading: loadingEmpresa } = useQuery({
+    queryKey: ['empresa-detail', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('cnpj', decodedCnpj)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // ── Fetch emissoes from DB ──
+  const { data: emissoesList = [] } = useQuery({
+    queryKey: ['emissoes-by-cnpj', decodedCnpj],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emissoes')
+        .select('*')
+        .eq('cnpj_emissor', decodedCnpj);
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const { data: analistasUsuarios = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
@@ -81,6 +105,15 @@ export default function EmpresaDetailPage() {
   const historicoPorCnpj = historicoAnalises
     .filter(h => h.cnpj === decodedCnpj)
     .sort((a, b) => b.data.localeCompare(a.data));
+
+  if (loadingEmpresa) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Carregando...</span>
+      </div>
+    );
+  }
 
   if (!emissor) {
     return (
@@ -133,11 +166,17 @@ export default function EmpresaDetailPage() {
     setRelatorio('');
   };
 
-  const handleNovaEmissao = () => {
+  const handleNovaEmissao = async () => {
     if (!novoIsin || !novoTicker || !novoValDate) return;
-    const exists = emissoesList.find(e => e.isin === novoIsin);
-    if (!exists) {
-      setEmissoesList(prev => [...prev, { isin: novoIsin, ticker: novoTicker, valDate: format(novoValDate, 'yyyy-MM-dd'), cnpjEmissor: decodedCnpj }]);
+    const { error } = await supabase.from('emissoes').upsert({
+      isin: novoIsin,
+      ticker: novoTicker,
+      val_date: format(novoValDate, 'yyyy-MM-dd'),
+      cnpj_emissor: decodedCnpj,
+    }, { onConflict: 'isin' });
+    if (!error) {
+      // Refetch emissoes
+      window.location.reload();
     }
     setNovaEmissaoModal(false);
     setNovoIsin('');
@@ -152,19 +191,19 @@ export default function EmpresaDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div>
-          <h2 className="text-lg font-semibold text-foreground">{emissor.nomeAbreviado}</h2>
-          <p className="text-xs text-muted-foreground">{emissor.nomeCompleto} · {emissor.cnpj}</p>
+          <h2 className="text-lg font-semibold text-foreground">{emissor.nome}</h2>
+          <p className="text-xs text-muted-foreground">{emissor.cnpj}</p>
         </div>
-        <Badge variant="outline" className="ml-auto text-[10px]">{emissor.tipo}</Badge>
+        <Badge variant="outline" className="ml-auto text-[10px]">{emissor.tipo || '—'}</Badge>
       </div>
 
       {/* Info card */}
       <Card className="bg-card border-border">
         <CardContent className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setorButia || emissor.setorGics || '—'}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupoEconomico}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.ratingAtual || '—'} {emissor.agenciaAtual ? `(${emissor.agenciaAtual})` : ''}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Última Análise</p><p className="text-sm font-medium">{emissor.dataAnalise || '—'} {emissor.resultadoAnalise ? `· ${emissor.resultadoAnalise}` : ''}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setor || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupo_economico || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.rating || '—'}</p></div>
+          <div><p className="text-[10px] text-muted-foreground uppercase">Tipo</p><p className="text-sm font-medium">{emissor.tipo || '—'}</p></div>
         </CardContent>
       </Card>
 
@@ -210,7 +249,7 @@ export default function EmpresaDetailPage() {
                       <TableRow key={em.isin} className="border-border">
                         <TableCell className="text-xs py-2 font-mono">{em.isin}</TableCell>
                         <TableCell className="text-sm py-2">{em.ticker || '—'}</TableCell>
-                        <TableCell className="text-sm py-2 text-muted-foreground">{em.valDate}</TableCell>
+                        <TableCell className="text-sm py-2 text-muted-foreground">{em.val_date || '—'}</TableCell>
                         <TableCell className="py-2">
                           <Badge variant="outline" className={`text-[10px] ${cfg.className}`}>{cfg.label}</Badge>
                         </TableCell>

@@ -17,7 +17,6 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { emissores, emissoes } from '@/data/emissores';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,11 +34,11 @@ const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
 
-function getEmissorNome(cnpj: string) {
-  return emissores.find(e => e.cnpj === cnpj)?.nomeAbreviado ?? cnpj;
+function getEmissorNome(cnpj: string, empresasMap: Map<string, string>) {
+  return empresasMap.get(cnpj) ?? cnpj;
 }
-function getEmissaoTicker(isin: string) {
-  return emissoes.find(e => e.isin === isin)?.ticker ?? '';
+function getEmissaoTicker(isin: string, emissoesTickers: Map<string, string>) {
+  return emissoesTickers.get(isin) ?? '';
 }
 function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []) {
   const p = profiles.find(p => p.id === id || p.nome === id);
@@ -158,6 +157,34 @@ export default function PipelineResearchPage() {
     },
   });
 
+  // ── Fetch empresas from DB for name resolution ──
+  const { data: empresasDB = [] } = useQuery({
+    queryKey: ['empresas-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('id, nome, cnpj, tipo, setor, rating, grupo_economico');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
+
+  // ── Fetch emissoes from DB for ticker resolution ──
+  const { data: emissoesDB = [] } = useQuery({
+    queryKey: ['emissoes-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emissoes')
+        .select('isin, ticker, cnpj_emissor');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const emissoesTickers = useMemo(() => new Map((emissoesDB || []).filter(e => e.ticker).map(e => [e.isin, e.ticker as string])), [emissoesDB]);
+
   const hoje = new Date().toISOString().split('T')[0];
 
   // ── Fetch analises from Supabase ──
@@ -258,7 +285,7 @@ export default function PipelineResearchPage() {
     if (search) {
       const q = search.toLowerCase();
       items = items.filter(a =>
-        getEmissorNome(a.empresa_id).toLowerCase().includes(q) ||
+        getEmissorNome(a.empresa_id, empresasMap).toLowerCase().includes(q) ||
         (a.isin && a.isin.toLowerCase().includes(q))
       );
     }
@@ -503,7 +530,7 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
+                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
@@ -624,7 +651,7 @@ export default function PipelineResearchPage() {
                       >
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between gap-1">
-                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id)}</p>
+                            <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {item.tipo && (
@@ -709,7 +736,7 @@ export default function PipelineResearchPage() {
           {drawerAnalise && (
             <ScrollArea className="h-full pr-4">
               <SheetHeader>
-                <SheetTitle className="text-foreground">{getEmissorNome(drawerAnalise.empresa_id)}</SheetTitle>
+                <SheetTitle className="text-foreground">{getEmissorNome(drawerAnalise.empresa_id, empresasMap)}</SheetTitle>
               </SheetHeader>
               <div className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-3">
@@ -863,8 +890,8 @@ export default function PipelineResearchPage() {
               <Select value={novoEmissor} onValueChange={setNovoEmissor}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
                 <SelectContent className="bg-card border-border max-h-60">
-                  {emissores.filter(e => e.tipo !== 'Título Público').map(e => (
-                    <SelectItem key={e.cnpj} value={e.cnpj}>{e.nomeAbreviado}</SelectItem>
+                  {empresasDB.filter(e => e.tipo !== 'Título Público').map(e => (
+                    <SelectItem key={e.cnpj} value={e.cnpj}>{e.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -918,7 +945,7 @@ export default function PipelineResearchPage() {
       <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id)}` : ''}</DialogTitle>
+            <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
               {isAcoes
                 ? 'Preencha o relatório, recomendação e preços sugeridos para concluir.'
