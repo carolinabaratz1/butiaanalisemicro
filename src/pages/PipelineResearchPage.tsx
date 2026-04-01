@@ -676,7 +676,7 @@ export default function PipelineResearchPage() {
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Reprovada' || getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao) === 'Vencida') && (
+                  {isGestor && (drawerAnalise.status === 'Reprovada' || (() => { const ds = getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva); return ds === 'Vencida c/ Alocação' || ds === 'Vencida s/ Alocação'; })()) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: null, data_conclusao: null, data_comite: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
