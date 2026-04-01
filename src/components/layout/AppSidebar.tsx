@@ -12,7 +12,6 @@ const mainItems = [
   { label: 'Posições', icon: Briefcase, path: '/posicoes' },
   { label: 'Empresas', icon: Building2, path: '/empresas' },
   { label: 'Análises', icon: FileSearch, path: '/analises' },
-  { label: 'Pipeline', icon: Kanban, path: '/pipeline' },
   { label: 'Pipeline Research', icon: Kanban, path: '/pipeline-de-research' },
 ];
 
