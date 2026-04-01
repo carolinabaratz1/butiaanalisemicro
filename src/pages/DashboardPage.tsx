@@ -35,8 +35,8 @@ function getUserNome(id: string) {
 export default function DashboardPage() {
   const { currentUser } = useAuth();
   const { analises: analisesEmissao } = useAnaliseEmissao();
-  const isAnalista = currentUser.funcao === 'Analista';
-  const isGestor = currentUser.funcao === 'Gestor';
+  const isAnalista = currentUser?.funcao === 'Analista';
+  const isGestor = currentUser?.funcao === 'Gestor';
   const hoje = new Date().toISOString().split('T')[0];
   const hojeFormatado = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
@@ -175,7 +175,7 @@ export default function DashboardPage() {
   ];
 
   // Analyst widget data
-  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser.id);
+  const minhasAnalises = analisesEmissao.filter(a => a.analista_id === currentUser?.id);
   const minhasPendentes = minhasAnalises.filter(a => a.status === 'pendente').length;
   const minhasEmAnalise = minhasAnalises.filter(a => a.status === 'em_analise').length;
   const minhasConcluidas = minhasAnalises.filter(a => a.status === 'concluido').length;

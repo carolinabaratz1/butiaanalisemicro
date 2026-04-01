@@ -60,9 +60,9 @@ export default function EmpresaDetailPage() {
   const [novoValDate, setNovoValDate] = useState<Date>();
 
   const analistasUsuarios = users.filter(u => u.funcao === 'Analista' && u.status === 'Ativo');
-  const isGestor = currentUser.funcao === 'Gestor';
-  const isRC = currentUser.funcao === 'Risco e Compliance';
-  const isAnalista = currentUser.funcao === 'Analista';
+  const isGestor = currentUser?.funcao === 'Gestor';
+  const isRC = currentUser?.funcao === 'Risco e Compliance';
+  const isAnalista = currentUser?.funcao === 'Analista';
   const canSolicitar = isGestor || isRC;
 
   // Histórico filtrado por CNPJ
@@ -102,7 +102,7 @@ export default function EmpresaDetailPage() {
       isin: solicitarModal,
       cnpj_emissor: decodedCnpj,
       analista_id: analistaSel,
-      solicitante_id: currentUser.id,
+      solicitante_id: currentUser?.id || '',
       status: 'pendente',
       prazo: format(prazoDate, 'yyyy-MM-dd'),
       observacoes,
@@ -191,7 +191,7 @@ export default function EmpresaDetailPage() {
                     const status = getEmissaoStatus(em.isin);
                     const activeAnalise = getActiveAnalise(em.isin);
                     const cfg = statusConfig[status];
-                    const isMyAnalise = activeAnalise?.analista_id === currentUser.id;
+                    const isMyAnalise = activeAnalise?.analista_id === currentUser?.id;
                     const prazoVencido = activeAnalise && activeAnalise.prazo < new Date().toISOString().split('T')[0] && (activeAnalise.status === 'pendente' || activeAnalise.status === 'em_analise');
 
                     return (

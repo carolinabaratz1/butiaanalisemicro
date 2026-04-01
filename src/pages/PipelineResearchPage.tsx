@@ -125,9 +125,9 @@ export default function PipelineResearchPage() {
   const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
 
-  const isGestor = currentUser.funcao === 'Gestor';
-  const isRC = currentUser.funcao === 'Risco e Compliance';
-  const isAnalista = currentUser.funcao === 'Analista';
+  const isGestor = currentUser?.funcao === 'Gestor';
+  const isRC = currentUser?.funcao === 'Risco e Compliance';
+  const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isRC;
 
   const analistasAtivos = catalogoAnalistas.filter(a => a.ativo);
@@ -211,7 +211,7 @@ export default function PipelineResearchPage() {
     let items = [...analisesComStatus];
 
     if (isAnalista) {
-      items = items.filter(a => a.analista_responsavel === currentUser.id);
+      items = items.filter(a => a.analista_responsavel === currentUser?.id);
     }
     if (analistaFilter !== 'all') {
       items = items.filter(a => a.analista_responsavel === analistaFilter);
@@ -237,7 +237,7 @@ export default function PipelineResearchPage() {
     }
 
     return items;
-  }, [analisesComStatus, isAnalista, currentUser.id, analistaFilter, prazoFilter, search, hoje]);
+  }, [analisesComStatus, isAnalista, currentUser?.id, analistaFilter, prazoFilter, search, hoje]);
 
   // ── Handlers ──
   const handleCriar = () => {
@@ -245,7 +245,7 @@ export default function PipelineResearchPage() {
     createAnalise.mutate({
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
-      solicitante_id: currentUser.id,
+      solicitante_id: currentUser?.id || '',
       tipo: novoTipo,
       status: 'Pendente',
       data_inicio: format(new Date(), 'yyyy-MM-dd'),
@@ -458,7 +458,7 @@ export default function PipelineResearchPage() {
                   {items.map(item => {
                     const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
                     const posAtiva = temPosicaoAtiva(item.empresa_id);
-                    const isMyAnalise = item.analista_responsavel === currentUser.id;
+                    const isMyAnalise = item.analista_responsavel === currentUser?.id;
 
                     return (
                       <Card
@@ -651,12 +651,12 @@ export default function PipelineResearchPage() {
 
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser.id && drawerAnalise.status === 'Pendente' && (
+                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
                     <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); setDrawerAnalise(null); }}>
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser.id && drawerAnalise.status === 'Em Análise' && (
+                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
                         <CheckCircle className="h-3 w-3" /> Entregar Análise

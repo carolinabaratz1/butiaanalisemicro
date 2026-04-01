@@ -1,14 +1,13 @@
 import { ReactNode, useState } from 'react';
 import { AppSidebar } from './AppSidebar';
-import { Menu, ChevronDown } from 'lucide-react';
+import { Menu, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { users } from '@/data/users';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
-  const { currentUser, setCurrentUser } = useAuth();
+  const { currentUser, signOut } = useAuth();
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -20,22 +19,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </button>
           <span className="ml-3 text-sm font-semibold text-foreground tracking-wide">ResearchDesk</span>
           <div className="ml-auto flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px]">{currentUser.funcao}</Badge>
-            <Select value={currentUser.id} onValueChange={(id) => {
-              const u = users.find(u => u.id === id);
-              if (u) setCurrentUser(u);
-            }}>
-              <SelectTrigger className="h-7 w-52 text-xs bg-surface-2 border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map(u => (
-                  <SelectItem key={u.id} value={u.id} className="text-xs">
-                    {u.nome} ({u.funcao})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {currentUser && (
+              <>
+                <Badge variant="outline" className="text-[10px]">{currentUser.funcao}</Badge>
+                <span className="text-xs text-muted-foreground">{currentUser.nome}</span>
+                <Button variant="ghost" size="sm" onClick={signOut} className="h-7 px-2 text-muted-foreground hover:text-foreground">
+                  <LogOut className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
           </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
