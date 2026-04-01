@@ -211,7 +211,7 @@ export default function PipelineResearchPage() {
     let items = [...analisesComStatus];
 
     if (isAnalista) {
-      items = items.filter(a => a.analista_responsavel === currentUser.id);
+      items = items.filter(a => a.analista_responsavel === currentUser?.id);
     }
     if (analistaFilter !== 'all') {
       items = items.filter(a => a.analista_responsavel === analistaFilter);
