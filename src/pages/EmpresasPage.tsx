@@ -56,12 +56,33 @@ export default function EmpresasPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('analises')
-        .select('empresa_id, status')
-        .not('status', 'in', '("Concluído","Rejeitado","Reprovado")');
+        .select('empresa_id, status, versao, data_conclusao');
       if (error) throw error;
-      const counts: Record<string, number> = {};
+
+      // Group by empresa_id, keep only max versao per empresa
+      const grouped = new Map<string, typeof data>();
       (data || []).forEach(row => {
-        counts[row.empresa_id] = (counts[row.empresa_id] || 0) + 1;
+        const list = grouped.get(row.empresa_id) || [];
+        list.push(row);
+        grouped.set(row.empresa_id, list);
+      });
+
+      const counts: Record<string, number> = {};
+      grouped.forEach((items, empresaId) => {
+        const maxVersao = Math.max(...items.map(i => i.versao || 1));
+        const latest = items.filter(i => (i.versao || 1) === maxVersao);
+        const active = latest.filter(i => {
+          if (['Reprovada', 'Concluído', 'Rejeitado'].includes(i.status)) return false;
+          // Exclude expired (Aprovada > 1 year old)
+          if (i.status === 'Aprovada' && i.data_conclusao) {
+            const conclusao = new Date(i.data_conclusao.split('T')[0]);
+            const umAnoAtras = new Date();
+            umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+            if (conclusao < umAnoAtras) return false;
+          }
+          return true;
+        });
+        if (active.length > 0) counts[empresaId] = active.length;
       });
       return counts;
     },

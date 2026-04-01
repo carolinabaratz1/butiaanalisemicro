@@ -268,12 +268,40 @@ export default function PipelineResearchPage() {
     onError: (err: any) => toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' }),
   });
 
-  // ── Apply display status (Vencida) ──
+  // ── Apply display status (Vencida) + filter superseded versions ──
   const analisesComStatus = useMemo(() => {
-    return analises.map(a => ({
+    const withStatus = analises.map(a => ({
       ...a,
       displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
     }));
+
+    // Group by empresa_id — keep only highest versao per empresa
+    // Exception: if latest version is terminal (Reprovada), also show previous approved/vencida
+    const grouped = new Map<string, typeof withStatus>();
+    withStatus.forEach(a => {
+      const list = grouped.get(a.empresa_id) || [];
+      list.push(a);
+      grouped.set(a.empresa_id, list);
+    });
+
+    const result: typeof withStatus = [];
+    grouped.forEach(items => {
+      if (items.length <= 1) {
+        result.push(...items);
+        return;
+      }
+      // Sort by versao descending
+      items.sort((a, b) => (b.versao || 1) - (a.versao || 1));
+      const latest = items[0];
+      result.push(latest);
+      // If latest is Reprovada, also show the previous approved/vencida version
+      if (latest.displayStatus === 'Reprovada') {
+        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Aprovada' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
+        if (prev) result.push(prev);
+      }
+    });
+
+    return result;
   }, [analises, temPosicaoAtiva]);
 
   // ── Filters ──
