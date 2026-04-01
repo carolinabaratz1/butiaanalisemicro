@@ -890,8 +890,8 @@ export default function PipelineResearchPage() {
               <Select value={novoEmissor} onValueChange={setNovoEmissor}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar empresa" /></SelectTrigger>
                 <SelectContent className="bg-card border-border max-h-60">
-                  {emissores.filter(e => e.tipo !== 'Título Público').map(e => (
-                    <SelectItem key={e.cnpj} value={e.cnpj}>{e.nomeAbreviado}</SelectItem>
+                  {empresasDB.filter(e => e.tipo !== 'Título Público').map(e => (
+                    <SelectItem key={e.cnpj} value={e.cnpj}>{e.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
