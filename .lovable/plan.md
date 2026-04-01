@@ -1,48 +1,63 @@
 
 
-## Plano: Corrigir Pipeline versionado + Histórico de análises no detalhe da empresa
+## Plano: Senha de primeiro acesso + Reset pelo Gestor
 
-### Problemas identificados
+### Contexto
+Hoje o Gestor cria o usuário com uma senha definitiva. O pedido é:
+1. A senha criada pelo Gestor ser **temporária** — o usuário é obrigado a trocá-la no primeiro login
+2. O Gestor poder **resetar a senha** de qualquer usuário (criar nova senha temporária), funcionando como "desbloqueio"
 
-**1. Pipeline mostra versão antiga como "Vencida" mesmo com v2 existente**
+### Como funciona
 
-A função `isVencida()` avalia cada análise independentemente. Quando o usuário cria uma v2 via "Reabrir", a v1 original (status "Aprovada" com data antiga) continua aparecendo como "Vencida c/ Alocação". O correto é: se existe uma versão mais recente para a mesma `empresa_id`, a versão anterior não deve aparecer como vencida — deve ser tratada como registro histórico e ocultada do pipeline ativo.
-
-**2. Histórico de análises usa dados estáticos**
-
-A aba "Histórico de Análises" em `EmpresaDetailPage.tsx` (linha 105) lê de `historicoAnalises` importado de `src/data/historicoAnalises.ts` — um arquivo estático com 145+ registros. Análises criadas no sistema (tabela `analises`) não aparecem neste histórico. Por isso a v2 do FIDC Chemical XIV não é exibida.
-
-**3. Contagem de "Análises Ativas" inclui versões antigas**
-
-A query em `EmpresasPage.tsx` (linha 54-68) conta todas as análises que não são "Concluído/Rejeitado/Reprovado" por `empresa_id`. Análises "Aprovada" antigas (que são vencidas) entram na contagem porque o status no banco ainda é "Aprovada". Isso infla o número.
+**Flag `must_change_password`**: adicionar coluna na tabela `profiles` (default `true`). Quando o Gestor cria um usuário ou reseta a senha, o valor é `true`. Quando o usuário troca a senha, o valor passa para `false`.
 
 ### Mudanças
 
-**1. Filtrar versões supersedidas no Pipeline (`PipelineResearchPage.tsx`)**
+**1. Migration: adicionar coluna `must_change_password` em `profiles`**
 
-No `useMemo` que calcula `analisesComStatus` (linha 272), após mapear os display statuses, filtrar análises que foram supersedidas: para cada `empresa_id`, se existem múltiplas versões, manter apenas a de maior `versao` no pipeline ativo. As versões anteriores ficam acessíveis apenas no histórico da empresa.
+```sql
+ALTER TABLE public.profiles 
+ADD COLUMN must_change_password boolean NOT NULL DEFAULT true;
 
-```text
-Lógica:
-- Agrupar por empresa_id
-- Para cada grupo, manter apenas a análise com maior versao
-- Exceção: se a versão mais recente está em status terminal
-  (Reprovada) e a anterior é Aprovada/Vencida, ambas aparecem
+-- Usuários existentes já trocaram senha, marcar como false
+UPDATE public.profiles SET must_change_password = false;
 ```
 
-**2. Migrar histórico para tabela `analises` do banco (`EmpresaDetailPage.tsx`)**
+**2. Atualizar Edge Function `create-user`**
 
-- Remover import de `historicoAnalises` e `useAnaliseEmissao`
-- Adicionar query: `supabase.from('analises').select('*').eq('empresa_id', decodedCnpj).order('versao', { ascending: false })`
-- Renderizar TODAS as versões no histórico (v1, v2, etc.) com data, status, analista, versão
-- O histórico agora inclui tanto os registros importados da base histórica quanto as novas análises criadas no sistema
+Após criar o usuário, garantir que `must_change_password = true` já está setado (o default da coluna cuida disso, sem mudança necessária na função).
 
-**3. Corrigir contagem de análises ativas (`EmpresasPage.tsx`)**
+**3. Adicionar ação "Resetar Senha" na Edge Function `manage-user`**
 
-Ajustar a query para excluir também status "Aprovada" com `data_conclusao` mais antiga que 1 ano (vencidas), ou filtrar apenas versões mais recentes por empresa.
+Nova action `reset-password`:
+- Recebe `userId` e `newPassword`
+- Usa `adminClient.auth.admin.updateUserById(userId, { password: newPassword })`
+- Atualiza `profiles.must_change_password = true`
+- Retorna sucesso
+
+**4. Tela de troca de senha obrigatória (`src/pages/ChangePasswordPage.tsx`)**
+
+- Formulário simples: nova senha + confirmação
+- Chama `supabase.auth.updateUser({ password: novaSenha })`
+- Após sucesso, atualiza `profiles.must_change_password = false` e redireciona para o dashboard
+
+**5. Interceptar login no `AuthContext.tsx`**
+
+- O `fetchProfile` já traz os dados do perfil. Adicionar `must_change_password` ao estado
+- No `App.tsx`, se o usuário está logado e `must_change_password === true`, redirecionar para `/trocar-senha` independente da rota
+
+**6. Botão "Resetar Senha" na página Configurações**
+
+- Na tabela de usuários, adicionar botão (ícone de chave) visível apenas para Gestor
+- Ao clicar, abre dialog pedindo a nova senha temporária
+- Chama `manage-user` com action `reset-password`
+- Toast confirma: "Senha resetada. O usuário deverá trocá-la no próximo login."
 
 ### Arquivos modificados
-- `src/pages/PipelineResearchPage.tsx` (filtrar versões supersedidas)
-- `src/pages/EmpresaDetailPage.tsx` (migrar histórico para DB)
-- `src/pages/EmpresasPage.tsx` (corrigir contagem)
+- 1 migration SQL (coluna `must_change_password`)
+- `supabase/functions/manage-user/index.ts` (nova action `reset-password`)
+- `src/pages/ChangePasswordPage.tsx` (novo)
+- `src/contexts/AuthContext.tsx` (expor `must_change_password`)
+- `src/App.tsx` (rota `/trocar-senha` + redirect guard)
+- `src/pages/ConfiguracoesPage.tsx` (botão resetar senha)
 
