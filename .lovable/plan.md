@@ -1,45 +1,74 @@
 
 
-## Plano: Corrigir espaços extras nos nomes (profiles) -- segunda tentativa
+## Plano: BI Completo no Painel Analítico de Posições
 
-### Causa raiz
-Os nomes "Carolina Baratz Weinberg" e "Diogo Vilaça Teixeira" na tabela `profiles` ainda possuem espaço em branco no final (comprimentos 25 e 22, respectivamente, quando deveriam ser 24 e 21). O dropdown do Pipeline usa `profiles.nome` (com espaço) como valor do filtro, mas `analises.analista_responsavel` armazena o nome sem espaço. A comparação exata falha.
+### Visão geral
+Transformar o "Painel Analítico" em um dashboard de BI completo, cruzando dados de posições com análises e emissões para fornecer visão integrada de carteira + research.
 
-### Solução
+### Dados necessários (queries adicionais)
+O painel precisa cruzar 4 tabelas:
+- `posicoes` (carteira atual)
+- `emissoes` (ponte: ISIN → CNPJ)
+- `empresas` (nome do emissor via CNPJ)
+- `analises` (status, tipo, recomendação, preços)
 
-**1. Migration SQL** -- Limpar espaços e prevenir recorrência:
-```sql
--- Limpar espaços existentes
-UPDATE profiles SET nome = TRIM(nome);
+### Seções do BI
 
--- Adicionar trigger para prevenir espaços futuros
-CREATE OR REPLACE FUNCTION trim_profile_nome()
-RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  NEW.nome := TRIM(NEW.nome);
-  RETURN NEW;
-END;
-$$;
+**1. KPIs (linha superior)** -- manter os 4 atuais + adicionar:
+- Posições com Análise Aprovada
+- Posições com Análise Vencida
+- Posições sem Análise
+- % Cobertura (com análise válida / total)
 
-CREATE TRIGGER trg_trim_profile_nome
-BEFORE INSERT OR UPDATE ON profiles
-FOR EACH ROW EXECUTE FUNCTION trim_profile_nome();
+**2. Gráficos existentes melhorados:**
+- Distribuição por Tipo (pie chart -- já existe)
+- Posição por Fundo (bar chart -- já existe)
+
+**3. Novos gráficos/tabelas:**
+
+- **Distribuição por Duration** -- Histograma agrupando posições em faixas de duration (0-1, 1-2, 2-3, 3-5, 5-10, 10+) com quantidade de ativos e volume
+- **Status de Análise da Carteira** -- Pie/donut chart mostrando quantas posições têm análise Aprovada, Vencida, Reprovada, Em Análise, Pendente, ou Sem Análise
+- **Cobertura por Fundo** -- Bar chart empilhado mostrando por fundo: % com análise aprovada vs vencida vs sem análise
+- **Painel de Ações** -- Tabela filtrada para posições do tipo Equity/Ações mostrando: nome do ativo, fundo, recomendação (Buy/Hold/Sell com badge colorido), preço atual (financial_price), preço alvo min/med/max, indicador visual se o preço está dentro do range
+- **Exposição por Rating** -- Bar chart com a distribuição de posições por rating do emissor (AAA, AA, A, BBB, etc.)
+
+**4. Filtros globais do BI:**
+- Filtro por Fundo (já existente, reutilizar)
+- Filtro por Tipo de Ativo
+- Filtro por Data de Referência
+
+### Lógica de cruzamento
+
+```text
+posicao.isin → emissoes (WHERE isin = posicao.isin)
+  → emissoes.cnpj_emissor → empresas (WHERE cnpj = cnpj_emissor)
+  → analises (WHERE empresa_id = empresas.cnpj)
+    → pegar análise mais recente por empresa
+    → verificar status + validade 1 ano
+    → se tipo = 'Ações': pegar recomendação + preços
 ```
 
-**2. `src/pages/PipelineResearchPage.tsx`** -- Trim defensivo no filtro (linha 244):
-```typescript
-items = items.filter(a => a.analista_responsavel.trim() === analistaFilter.trim());
-```
+Status de análise por posição:
+- "Aprovada": análise com status Aprovada e data_conclusao < 1 ano
+- "Vencida": análise Aprovada com data_conclusao > 1 ano
+- "Reprovada": última análise com status Reprovada
+- "Em Análise/Pendente": análise em andamento
+- "Sem Análise": nenhuma análise encontrada para o emissor
 
-E na linha 241 (filtro de analista logado):
-```typescript
-items = items.filter(a => a.analista_responsavel.trim() === currentUser?.id);
-```
+### Detalhes técnicos
+
+**Arquivo principal:** `src/pages/PosicoesPage.tsx`
+- Adicionar queries para `emissoes`, `empresas` e `analises` (3 queries adicionais via `useQuery`)
+- Criar `useMemo` para cruzar os dados e gerar as métricas
+- O painel de ações compara `financial_price` com `preco_min`/`preco_maximo` para indicar se está "Abaixo", "Em Linha" ou "Acima" do range
+
+**Componentes de gráfico:** Recharts (já instalado) -- PieChart, BarChart, ComposedChart
+
+**Responsividade:** Grids `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` para os cards de gráficos
 
 ### Arquivos modificados
-- 1 migration SQL (TRIM + trigger preventivo)
-- `src/pages/PipelineResearchPage.tsx` (trim defensivo nos filtros)
+- `src/pages/PosicoesPage.tsx` (principal -- expandir aba Painel Analítico)
 
 ### Resultado
-Filtrar por Carolina ou Diogo no Pipeline mostrará todas as análises vinculadas.
+Um BI completo integrado ao sistema onde o gestor pode visualizar a carteira sob diversas perspectivas (fundo, tipo, duration, rating, cobertura de research) e acompanhar especificamente as posições de ações com recomendações e range de preço.
 
