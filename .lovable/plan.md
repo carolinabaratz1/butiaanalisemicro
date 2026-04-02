@@ -1,40 +1,37 @@
 
 
-## Plano: Logo SVG dinâmica + Ícones para PWA / Home Screen
+## Plano: Substituir SVG genérico pela logo oficial PNG da Butiá
 
 ### Problema
-1. A logo na sidebar usa um PNG (`logo-butia.png`) com fundo branco, que não se integra bem ao fundo navy escuro
-2. Ao salvar o app na Home Screen do celular, aparece um ícone genérico "B" cinza em vez da logo da Butiá
+O componente `ButiaLogo` usa um SVG de palmeira desenhado manualmente que não corresponde à logo oficial da Butiá Investimentos. O usuário forneceu o PNG oficial (versão negativa/branca com fundo transparente).
 
 ### Mudanças
 
-**1. Converter logo PNG para SVG inline no componente `ButiaLogo.tsx`**
+**1. Copiar o PNG oficial para o projeto**
+- Copiar `ButiaInvestimentos_Vertical_Negativo.png` para `src/assets/logo-butia-white.png`
 
-- Substituir o `<img src={logoImg}>` por um SVG inline da palmeira estilizada da Butiá
-- O SVG terá `fill` dinâmico baseado na prop `theme`: branco no tema dark (sidebar), navy (#1B3864) no tema light
-- Fundo transparente natural do SVG — sem mais quadrado branco
-- Remover a dependência do arquivo `src/assets/logo-butia.png`
+**2. Reescrever `src/components/ui/ButiaLogo.tsx`**
+- Remover todo o SVG inline (PalmSvg) e o texto manual ("BUTIÁ" / "INVESTIMENTOS")
+- Usar `<img>` com o PNG importado
+- Para `theme="dark"`: exibir o PNG branco diretamente (fundo transparente funciona sobre navy)
+- Para `theme="light"`: aplicar CSS filter `brightness(0)` + `saturate(100%)` + cor via filtro para transformar o branco em navy (#1B3864), ou usar um segundo PNG se disponível
+- Manter as props `variant`, `size` e `className` controlando dimensões via width/height
+- Como o PNG já contém o texto "BUTIÁ INVESTIMENTOS" na versão vertical, a variante `full` usa a imagem completa; a variante `icon` pode usar um crop ou a imagem inteira em tamanho menor
 
-**2. Gerar ícones para PWA / Home Screen e configurar `manifest.json`**
+**3. Gerar ícones PWA a partir da logo oficial**
+- Usar script Python com Pillow para criar `icon-192.png` e `icon-512.png` a partir do PNG oficial (logo branca centralizada sobre fundo navy #1B3864)
+- Substituir os ícones genéricos atuais
 
-- Criar ícones da logo Butiá em múltiplos tamanhos (192x192, 512x512) com fundo navy e logo branca — para uso no celular
-- Criar `public/manifest.json` com:
-  - `name`: "Butiá Research Platform"
-  - `short_name`: "Butiá Research"
-  - `icons`: referenciando os ícones gerados
-  - `display`: "standalone"
-  - `theme_color`: "#1B3864"
-  - `background_color`: "#1B3864"
-- Adicionar `<link rel="manifest">` e `<link rel="apple-touch-icon">` no `index.html`
-- **Sem service worker** — apenas manifest para instalabilidade e ícone correto
-
-### Detalhe técnico: SVG da palmeira
-
-O SVG será desenhado como path inline reproduzindo o ícone da palmeira estilizada que já existe no PNG. A cor será controlada via prop, garantindo que funcione em qualquer contexto (sidebar escura, páginas claras, etc.).
+### Detalhe técnico: troca de cor por tema
+O PNG fornecido é branco — perfeito para fundos escuros. Para fundos claros, usaremos CSS filter para torná-lo navy:
+```css
+filter: brightness(0) saturate(100%);
+/* Isso transforma qualquer cor em preto puro */
+/* Combinado com sepia + hue-rotate para chegar ao navy */
+```
 
 ### Arquivos modificados
-- `src/components/ui/ButiaLogo.tsx` (SVG inline dinâmico)
-- `public/manifest.json` (novo)
-- `public/icon-192.png` e `public/icon-512.png` (novos, gerados via script)
-- `index.html` (links para manifest e apple-touch-icon)
+- `src/assets/logo-butia-white.png` (novo — cópia do upload)
+- `src/components/ui/ButiaLogo.tsx` (reescrito para usar img)
+- `public/icon-192.png` e `public/icon-512.png` (regenerados com logo oficial)
 
