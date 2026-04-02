@@ -280,7 +280,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      profiles_public: {
+        Row: {
+          funcao: string | null
+          id: string | null
+          nome: string | null
+          status: string | null
+        }
+        Insert: {
+          funcao?: string | null
+          id?: string | null
+          nome?: string | null
+          status?: string | null
+        }
+        Update: {
+          funcao?: string | null
+          id?: string | null
+          nome?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
