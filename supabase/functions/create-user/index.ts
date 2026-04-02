@@ -85,6 +85,12 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Explicitly ensure must_change_password is true for the new user
+    await adminClient
+      .from('profiles')
+      .update({ must_change_password: true })
+      .eq('id', newUser.user.id);
+
     return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
