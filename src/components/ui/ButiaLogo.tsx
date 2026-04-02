@@ -1,5 +1,5 @@
 import React from "react";
-import logoWhite from "@/assets/logo-butia-white.png";
+import logoWhite from "@/assets/logo-butia-horizontal.png";
 
 interface ButiaLogoProps {
   variant?: "full" | "icon" | "text";
