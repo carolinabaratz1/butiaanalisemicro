@@ -1,21 +1,47 @@
 
 
-## Plano: Excluir produto "Termo" dos KPIs de análise
+## Plano: Corrigir flag `must_change_password` para funcionar corretamente
 
-### Problema
-Posições com `product` = "Termo" são operações que não requerem análise de crédito. Atualmente, elas entram no cálculo dos KPIs (Análise Aprovada, Análise Vencida, Sem Análise, % Cobertura), inflando os números incorretamente.
+### Causa raiz
 
-### Mudança
+A migration que adicionou a coluna `must_change_password` executou `UPDATE public.profiles SET must_change_password = false` para não afetar usuários existentes. Porém, a Laura e outros usuários foram criados **antes** da migration rodar, então foram incluídos nesse UPDATE em massa — mesmo sem nunca terem feito login.
 
-**Filtrar "Termo" no cálculo de métricas BI (`src/pages/PosicoesPage.tsx`)**
+Novos usuários criados **após** a migration devem receber `true` pelo default da coluna. Mas para garantia extra, devemos tornar isso explícito.
 
-- No `biMetrics` (linha ~271), filtrar `biFiltered` excluindo posições onde `product === 'Termo'` antes de calcular aprovadas, vencidas, semAnalise e cobertura
-- Aplicar o mesmo filtro nos dados de:
-  - `coverageByFund` (gráfico cobertura por fundo)
-  - `statusDistribution` (gráfico distribuição por status)
-  - `drillPositions` (drill-down dos KPIs)
-- Os KPIs de "Total de Ativos", "Fundos com Posição" e "Tipos Distintos" continuam contando todas as posições (inclusive Termo), pois são métricas de carteira e não de research
+### Mudanças
 
-### Arquivo modificado
-- `src/pages/PosicoesPage.tsx`
+**1. Data fix: resetar `must_change_password = true` para usuários que nunca logaram**
+
+Usar o insert tool para atualizar a Laura (e qualquer outro usuário que o Gestor criou com senha temporária e que ainda não trocou):
+
+```sql
+UPDATE profiles SET must_change_password = true 
+WHERE id = 'a7b5cdac-8d8f-487a-a2e1-2c725bf9756d';
+```
+
+Perguntar ao usuário se há outros que precisam ser resetados ou se quer resetar todos de uma vez.
+
+**2. Tornar explícito no `create-user` edge function**
+
+Após criar o usuário via `admin.createUser`, adicionar um update explícito garantindo que `must_change_password = true`:
+
+```typescript
+await adminClient.from('profiles').update({ must_change_password: true }).eq('id', newUser.user.id);
+```
+
+Isso protege contra cenários onde o trigger já inseriu o registro mas o default não foi respeitado por alguma razão.
+
+**3. Tornar explícito no `handle_new_user` trigger (migration)**
+
+Alterar o trigger para incluir `must_change_password` explicitamente na inserção:
+
+```sql
+INSERT INTO public.profiles (id, nome, email, funcao, must_change_password)
+VALUES (..., true);
+```
+
+### Arquivos modificados
+- 1 data update (via insert tool) — corrigir Laura
+- `supabase/functions/create-user/index.ts` — update explícito
+- 1 migration SQL — atualizar trigger `handle_new_user`
 
