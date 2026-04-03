@@ -503,12 +503,14 @@ export default function PipelineResearchPage() {
       return;
     }
 
+    const fromStatus = item.displayStatus;
     const extras: Record<string, any> = {};
     if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
 
     updateStatus.mutate({ id: draggedId, status: targetStatus, extras });
+    registrarEvento({ analise_id: draggedId, acao: 'etapa_alterada', etapa_anterior: fromStatus, etapa_nova: targetStatus });
     setDraggedId(null);
   };
 
