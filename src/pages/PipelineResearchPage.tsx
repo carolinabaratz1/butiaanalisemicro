@@ -403,6 +403,7 @@ export default function PipelineResearchPage() {
         data_inicio: null,
       },
     });
+    registrarEvento({ analise_id: rejeitarAnalistaModal, acao: 'devolvida', etapa_anterior: 'Em Análise', etapa_nova: 'Pendente', comentario: justificativaRejeicao });
     setRejeitarAnalistaModal(null);
     setJustificativaRejeicao('');
     setDrawerAnalise(null);
