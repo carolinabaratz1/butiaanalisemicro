@@ -8,7 +8,7 @@ import { ButiaLogo } from '@/components/ui/ButiaLogo';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from 'sonner';
 import { ShieldCheck, Loader2 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+
 
 export default function MfaEnrollPage() {
   const { theme } = useTheme();
@@ -115,7 +115,7 @@ export default function MfaEnrollPage() {
                   1. Escaneie o QR Code com seu app autenticador:
                 </p>
                 <div className="flex justify-center p-4 bg-white rounded-lg">
-                  <QRCodeSVG value={qrUri} size={200} />
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUri)}`} alt="QR Code MFA" width={200} height={200} />
                 </div>
                 <div className="text-center">
                   <button
