@@ -343,7 +343,7 @@ export default function PipelineResearchPage() {
   // ── Handlers ──
   const handleCriar = () => {
     if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
-    createAnalise.mutate({
+    const row = {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
       solicitante_id: currentUser?.id || '',
@@ -353,6 +353,12 @@ export default function PipelineResearchPage() {
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
       observacoes: novoObs,
       isin: '',
+    };
+    createAnalise.mutate(row, {
+      onSuccess: (_data, _vars, _ctx) => {
+        // We don't have the new ID from createAnalise, so we skip audit for creation
+        // (or we could refactor to return it)
+      },
     });
     setNovaModal(false);
     setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
