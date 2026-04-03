@@ -411,15 +411,28 @@ export default function PipelineResearchPage() {
 
   const handleComite = () => {
     if (!comiteModal || !dataComite) return;
+    if (comiteModal.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) return;
+    const analise = analisesComStatus.find(a => a.id === comiteModal.id);
+    const etapaAnterior = analise?.displayStatus || analise?.status || '';
     updateStatus.mutate({
       id: comiteModal.id,
       status: comiteModal.targetStatus,
       extras: {
         data_comite: format(dataComite, 'yyyy-MM-dd'),
+        ...(comiteModal.targetStatus === 'Reprovada' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
       },
+    });
+    registrarEvento({
+      analise_id: comiteModal.id,
+      acao: comiteModal.targetStatus === 'Aprovada' ? 'aprovado' : 'reprovado',
+      etapa_anterior: etapaAnterior,
+      etapa_nova: comiteModal.targetStatus,
+      data_comite: format(dataComite, 'yyyy-MM-dd'),
+      comentario: comiteModal.targetStatus === 'Reprovada' ? comentarioReprovacao : null,
     });
     setComiteModal(null);
     setDataComite(undefined);
+    setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
 
