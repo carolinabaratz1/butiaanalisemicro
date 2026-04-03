@@ -10,6 +10,8 @@ import { ButiaLogo } from "@/components/ui/ButiaLogo";
 import { useTheme } from "@/hooks/useTheme";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import MfaEnrollPage from "./pages/MfaEnrollPage";
+import MfaVerifyPage from "./pages/MfaVerifyPage";
 import DashboardPage from "./pages/DashboardPage";
 import EmpresasPage from "./pages/EmpresasPage";
 import EmpresaDetailPage from "./pages/EmpresaDetailPage";
@@ -36,9 +38,9 @@ function LoadingScreen() {
 }
 
 function ProtectedRoutes() {
-  const { session, loading, currentUser } = useAuth();
+  const { session, loading, currentUser, mfaStatus } = useAuth();
 
-  if (loading) {
+  if (loading || mfaStatus === 'loading') {
     return <LoadingScreen />;
   }
 
@@ -48,6 +50,16 @@ function ProtectedRoutes() {
 
   if (currentUser?.must_change_password) {
     return <Navigate to="/trocar-senha" replace />;
+  }
+
+  // MFA enforcement: must enroll before accessing app
+  if (mfaStatus === 'needs_enroll') {
+    return <Navigate to="/mfa/configurar" replace />;
+  }
+
+  // MFA enforcement: must verify before accessing app
+  if (mfaStatus === 'needs_verify') {
+    return <Navigate to="/mfa/verificar" replace />;
   }
 
   return (
@@ -71,9 +83,9 @@ function ProtectedRoutes() {
 }
 
 function AppRoutes() {
-  const { session, loading, currentUser } = useAuth();
+  const { session, loading, currentUser, mfaStatus } = useAuth();
 
-  if (loading) {
+  if (loading || mfaStatus === 'loading') {
     return <LoadingScreen />;
   }
 
@@ -85,13 +97,23 @@ function AppRoutes() {
         !currentUser?.must_change_password ? <Navigate to="/" replace /> :
         <ChangePasswordPage />
       } />
+      <Route path="/mfa/configurar" element={
+        !session ? <Navigate to="/login" replace /> :
+        mfaStatus !== 'needs_enroll' ? <Navigate to="/" replace /> :
+        <MfaEnrollPage />
+      } />
+      <Route path="/mfa/verificar" element={
+        !session ? <Navigate to="/login" replace /> :
+        mfaStatus !== 'needs_verify' ? <Navigate to="/" replace /> :
+        <MfaVerifyPage />
+      } />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );
 }
 
 function ThemeInit() {
-  useTheme(); // initializes theme class on <html>
+  useTheme();
   return null;
 }
 
