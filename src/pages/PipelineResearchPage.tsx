@@ -715,6 +715,7 @@ export default function PipelineResearchPage() {
                                   versao: novaVersao,
                                   solicitante_id: currentUser?.id || '',
                                 });
+                                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
                                 toast({ title: `Nova análise v${novaVersao} criada` });
                               }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
