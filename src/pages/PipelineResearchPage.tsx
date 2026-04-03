@@ -1205,7 +1205,7 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Comitê Modal (Aprovar / Reprovar) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); }}>
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
             <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
@@ -1226,12 +1226,18 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
+            {comiteModal?.targetStatus === 'Reprovada' && (
+              <div>
+                <Label className="text-xs">Motivo da Reprovação (obrigatório)</Label>
+                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovação..." />
+              </div>
+            )}
             <Button
               size="sm"
               className="w-full"
               variant={comiteModal?.targetStatus === 'Aprovada' ? 'default' : 'destructive'}
               onClick={handleComite}
-              disabled={!dataComite || updateStatus.isPending}
+              disabled={!dataComite || (comiteModal?.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) || updateStatus.isPending}
             >
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}
