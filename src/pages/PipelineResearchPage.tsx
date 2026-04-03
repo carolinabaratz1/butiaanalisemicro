@@ -438,11 +438,14 @@ export default function PipelineResearchPage() {
 
   const handleReatribuir = () => {
     if (!reatribuirModal || !novoAnalista) return;
+    const analise = analises.find(a => a.id === reatribuirModal);
+    const nomeNovo = getAnalistaNome(novoAnalista, allProfiles);
     updateStatus.mutate({
       id: reatribuirModal,
-      status: analises.find(a => a.id === reatribuirModal)?.status || 'Pendente',
+      status: analise?.status || 'Pendente',
       extras: { analista_responsavel: novoAnalista },
     });
+    registrarEvento({ analise_id: reatribuirModal, acao: 'analista_atribuido', comentario: nomeNovo });
     setReatribuirModal(null);
     setNovoAnalista('');
   };
