@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { UserRole, RolePermissions, rolePermissions } from '@/data/users';
-import type { Session } from '@supabase/supabase-js';
+import type { Session, AuthenticatorAssuranceLevels } from '@supabase/supabase-js';
 
 export interface User {
   id: string;
@@ -12,10 +12,13 @@ export interface User {
   must_change_password: boolean;
 }
 
+export type MfaStatus = 'loading' | 'no_session' | 'needs_enroll' | 'needs_verify' | 'verified';
+
 interface AuthContextType {
   currentUser: User | null;
   session: Session | null;
   loading: boolean;
+  mfaStatus: MfaStatus;
   permissions: RolePermissions;
   hasAccess: (path: string) => boolean;
   signOut: () => Promise<void>;
@@ -33,10 +36,39 @@ const defaultPermissions: RolePermissions = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+async function getMfaStatus(): Promise<MfaStatus> {
+  try {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error || !data) return 'no_session';
+
+    const { currentLevel, nextLevel } = data as AuthenticatorAssuranceLevels;
+
+    // No factors enrolled yet
+    if (currentLevel === 'aal1' && nextLevel === 'aal1') {
+      return 'needs_enroll';
+    }
+
+    // Has factor but hasn't verified yet in this session
+    if (currentLevel === 'aal1' && nextLevel === 'aal2') {
+      return 'needs_verify';
+    }
+
+    // Fully verified
+    if (currentLevel === 'aal2') {
+      return 'verified';
+    }
+
+    return 'needs_enroll';
+  } catch {
+    return 'no_session';
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaStatus, setMfaStatus] = useState<MfaStatus>('loading');
 
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
@@ -57,26 +89,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshMfaStatus = async () => {
+    const status = await getMfaStatus();
+    setMfaStatus(status);
+  };
+
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
         if (session?.user) {
-          // Use setTimeout to avoid potential deadlock with Supabase client
           setTimeout(() => fetchProfile(session.user.id), 0);
+          setTimeout(() => refreshMfaStatus(), 0);
         } else {
           setCurrentUser(null);
+          setMfaStatus('no_session');
         }
         setLoading(false);
       }
     );
 
-    // Then check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
         fetchProfile(session.user.id);
+        refreshMfaStatus();
+      } else {
+        setMfaStatus('no_session');
       }
       setLoading(false);
     });
@@ -100,10 +139,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setSession(null);
+    setMfaStatus('no_session');
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, session, loading, permissions, hasAccess, signOut }}>
+    <AuthContext.Provider value={{ currentUser, session, loading, mfaStatus, permissions, hasAccess, signOut }}>
       {children}
     </AuthContext.Provider>
   );
