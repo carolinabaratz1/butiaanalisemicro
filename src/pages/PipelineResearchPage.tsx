@@ -999,7 +999,7 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {isGestor && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
-                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { registrarEvento({ analise_id: drawerAnalise.id, acao: 'reaberta', etapa_nova: 'Pendente' }); updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
                   )}
