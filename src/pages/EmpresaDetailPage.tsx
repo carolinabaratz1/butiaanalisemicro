@@ -274,6 +274,7 @@ export default function EmpresaDetailPage() {
         <TabsList className="bg-muted/50">
           <TabsTrigger value="emissoes">Emissões ({emissoesList.length})</TabsTrigger>
           <TabsTrigger value="historico">Histórico de Análises ({historicoPorCnpj.length})</TabsTrigger>
+          <TabsTrigger value="pipeline">Histórico de Pipeline ({pipelineEventos.length})</TabsTrigger>
         </TabsList>
 
         {/* Tab Emissões */}
