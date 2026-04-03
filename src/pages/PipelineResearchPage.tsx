@@ -128,6 +128,7 @@ export default function PipelineResearchPage() {
   // Comitê modal (Aprovada / Reprovada)
   const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
+  const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
   const isGestor = currentUser?.funcao === 'Gestor';
   const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
