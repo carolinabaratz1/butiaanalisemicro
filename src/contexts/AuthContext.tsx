@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { UserRole, RolePermissions, rolePermissions } from '@/data/users';
-import type { Session, AuthenticatorAssuranceLevels } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
 export interface User {
   id: string;
