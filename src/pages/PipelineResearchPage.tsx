@@ -816,6 +816,11 @@ export default function PipelineResearchPage() {
                               {item.prazo ? `Prazo: ${fmtDateBR(item.prazo)}` : ''}
                             </span>
                           </div>
+                          {item.data_comite && (
+                            <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
+                              📅 {fmtDateBR(item.data_comite)}
+                            </Badge>
+                          )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
