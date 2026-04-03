@@ -395,6 +395,60 @@ export default function EmpresaDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Tab Histórico de Pipeline */}
+        <TabsContent value="pipeline">
+          <Card className="bg-card border-border">
+            <CardContent className="p-4">
+              {pipelineEventos.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhum evento registrado para este emissor.</p>
+              ) : (
+                <div className="relative pl-6 space-y-4">
+                  <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
+                  {pipelineEventos.map((ev: any) => {
+                    const cfg = acaoConfig[ev.acao] || { icon: <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />, label: ev.acao };
+                    const userName = getProfileNome(ev.user_id);
+                    let descricao = cfg.label;
+                    if (ev.acao === 'etapa_alterada' && ev.etapa_anterior && ev.etapa_nova) {
+                      descricao = `Movido de ${ev.etapa_anterior} → ${ev.etapa_nova}`;
+                    } else if (ev.acao === 'analista_atribuido' && ev.comentario) {
+                      descricao = `Analista reatribuído para ${ev.comentario}`;
+                    } else if (ev.acao === 'reaberta' && ev.comentario) {
+                      descricao = `Análise reaberta (${ev.comentario})`;
+                    }
+
+                    return (
+                      <div key={ev.id} className="relative flex gap-3">
+                        <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-card border-2 border-border flex items-center justify-center">
+                          {cfg.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-foreground">{descricao}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-muted-foreground">por {userName}</span>
+                            <span className="text-[11px] text-muted-foreground">• {fmtDateTimeBR(ev.created_at)}</span>
+                          </div>
+                          {ev.comentario && ev.acao !== 'analista_atribuido' && ev.acao !== 'reaberta' && (
+                            <p className="text-xs text-muted-foreground mt-1 bg-surface-1 p-2 rounded border border-border">
+                              {ev.comentario}
+                            </p>
+                          )}
+                          {ev.data_comite && (
+                            <Badge variant="outline" className="text-[10px] mt-1 bg-primary/10 text-primary border-primary/30">
+                              📅 Comitê: {new Date(ev.data_comite).toLocaleDateString('pt-BR')}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Modal Solicitar Análise */}
