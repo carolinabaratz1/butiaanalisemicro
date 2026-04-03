@@ -825,7 +825,7 @@ export default function PipelineResearchPage() {
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
                             {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
