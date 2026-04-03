@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle, Loader2, ArrowRight, X, Calendar as CalendarIconSolid, UserRoundCog, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
@@ -113,6 +113,60 @@ export default function EmpresaDetailPage() {
       return data || [];
     },
   });
+
+  // ── Fetch pipeline events for this empresa's analyses ──
+  const analiseIds = historicoPorCnpj.map(a => a.id);
+  const { data: pipelineEventos = [] } = useQuery({
+    queryKey: ['pipeline-eventos', decodedCnpj, analiseIds],
+    queryFn: async () => {
+      if (analiseIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('pipeline_eventos' as any)
+        .select('*')
+        .in('analise_id', analiseIds)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: analiseIds.length > 0,
+  });
+
+  // ── Fetch profiles for name resolution ──
+  const { data: profilesPublic = [] } = useQuery({
+    queryKey: ['profiles-public-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles_public')
+        .select('id, nome');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  function getProfileNome(userId: string | null) {
+    if (!userId) return 'Sistema';
+    const p = profilesPublic.find((pr: any) => pr.id === userId);
+    return p?.nome ?? userId;
+  }
+
+  function fmtDateTimeBR(d: string | null): string {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return `${dt.toLocaleDateString('pt-BR')} ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  const acaoConfig: Record<string, { icon: React.ReactNode; label: string }> = {
+    criada: { icon: <Plus className="h-3.5 w-3.5 text-primary" />, label: 'Análise criada' },
+    etapa_alterada: { icon: <ArrowRight className="h-3.5 w-3.5 text-primary" />, label: 'Etapa alterada' },
+    concluida: { icon: <CheckCircle className="h-3.5 w-3.5 text-status-success" />, label: 'Análise concluída' },
+    aprovado: { icon: <CheckCircle className="h-3.5 w-3.5 text-status-success" />, label: 'Aprovada' },
+    reprovado: { icon: <X className="h-3.5 w-3.5 text-status-danger" />, label: 'Reprovada' },
+    devolvida: { icon: <RotateCcw className="h-3.5 w-3.5 text-status-warning" />, label: 'Devolvida ao solicitante' },
+    enviado_comite: { icon: <CalendarIconSolid className="h-3.5 w-3.5 text-primary" />, label: 'Enviada para Comitê' },
+    data_comite_definida: { icon: <CalendarIconSolid className="h-3.5 w-3.5 text-primary" />, label: 'Data de comitê definida' },
+    analista_atribuido: { icon: <UserRoundCog className="h-3.5 w-3.5 text-primary" />, label: 'Analista reatribuído' },
+    reaberta: { icon: <RotateCcw className="h-3.5 w-3.5 text-primary" />, label: 'Análise reaberta' },
+  };
 
   if (loadingEmpresa) {
     return (
@@ -220,6 +274,7 @@ export default function EmpresaDetailPage() {
         <TabsList className="bg-muted/50">
           <TabsTrigger value="emissoes">Emissões ({emissoesList.length})</TabsTrigger>
           <TabsTrigger value="historico">Histórico de Análises ({historicoPorCnpj.length})</TabsTrigger>
+          <TabsTrigger value="pipeline">Histórico de Pipeline ({pipelineEventos.length})</TabsTrigger>
         </TabsList>
 
         {/* Tab Emissões */}
@@ -337,6 +392,60 @@ export default function EmpresaDetailPage() {
                   )}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab Histórico de Pipeline */}
+        <TabsContent value="pipeline">
+          <Card className="bg-card border-border">
+            <CardContent className="p-4">
+              {pipelineEventos.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Nenhum evento registrado para este emissor.</p>
+              ) : (
+                <div className="relative pl-6 space-y-4">
+                  <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
+                  {pipelineEventos.map((ev: any) => {
+                    const cfg = acaoConfig[ev.acao] || { icon: <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />, label: ev.acao };
+                    const userName = getProfileNome(ev.user_id);
+                    let descricao = cfg.label;
+                    if (ev.acao === 'etapa_alterada' && ev.etapa_anterior && ev.etapa_nova) {
+                      descricao = `Movido de ${ev.etapa_anterior} → ${ev.etapa_nova}`;
+                    } else if (ev.acao === 'analista_atribuido' && ev.comentario) {
+                      descricao = `Analista reatribuído para ${ev.comentario}`;
+                    } else if (ev.acao === 'reaberta' && ev.comentario) {
+                      descricao = `Análise reaberta (${ev.comentario})`;
+                    }
+
+                    return (
+                      <div key={ev.id} className="relative flex gap-3">
+                        <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-card border-2 border-border flex items-center justify-center">
+                          {cfg.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-foreground">{descricao}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-muted-foreground">por {userName}</span>
+                            <span className="text-[11px] text-muted-foreground">• {fmtDateTimeBR(ev.created_at)}</span>
+                          </div>
+                          {ev.comentario && ev.acao !== 'analista_atribuido' && ev.acao !== 'reaberta' && (
+                            <p className="text-xs text-muted-foreground mt-1 bg-surface-1 p-2 rounded border border-border">
+                              {ev.comentario}
+                            </p>
+                          )}
+                          {ev.data_comite && (
+                            <Badge variant="outline" className="text-[10px] mt-1 bg-primary/10 text-primary border-primary/30">
+                              📅 Comitê: {new Date(ev.data_comite).toLocaleDateString('pt-BR')}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

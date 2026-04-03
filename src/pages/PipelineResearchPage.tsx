@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { registrarEvento } from '@/services/pipelineEventos';
 
 type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
@@ -128,6 +129,7 @@ export default function PipelineResearchPage() {
   // Comitê modal (Aprovada / Reprovada)
   const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
+  const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
   const isGestor = currentUser?.funcao === 'Gestor';
   const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
@@ -341,7 +343,7 @@ export default function PipelineResearchPage() {
   // ── Handlers ──
   const handleCriar = () => {
     if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
-    createAnalise.mutate({
+    const row = {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
       solicitante_id: currentUser?.id || '',
@@ -351,6 +353,12 @@ export default function PipelineResearchPage() {
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
       observacoes: novoObs,
       isin: '',
+    };
+    createAnalise.mutate(row, {
+      onSuccess: (_data, _vars, _ctx) => {
+        // We don't have the new ID from createAnalise, so we skip audit for creation
+        // (or we could refactor to return it)
+      },
     });
     setNovaModal(false);
     setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
@@ -379,6 +387,7 @@ export default function PipelineResearchPage() {
         data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
+    registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
     setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
@@ -394,6 +403,7 @@ export default function PipelineResearchPage() {
         data_inicio: null,
       },
     });
+    registrarEvento({ analise_id: rejeitarAnalistaModal, acao: 'devolvida', etapa_anterior: 'Em Análise', etapa_nova: 'Pendente', comentario: justificativaRejeicao });
     setRejeitarAnalistaModal(null);
     setJustificativaRejeicao('');
     setDrawerAnalise(null);
@@ -401,25 +411,41 @@ export default function PipelineResearchPage() {
 
   const handleComite = () => {
     if (!comiteModal || !dataComite) return;
+    if (comiteModal.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) return;
+    const analise = analisesComStatus.find(a => a.id === comiteModal.id);
+    const etapaAnterior = analise?.displayStatus || analise?.status || '';
     updateStatus.mutate({
       id: comiteModal.id,
       status: comiteModal.targetStatus,
       extras: {
         data_comite: format(dataComite, 'yyyy-MM-dd'),
+        ...(comiteModal.targetStatus === 'Reprovada' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
       },
+    });
+    registrarEvento({
+      analise_id: comiteModal.id,
+      acao: comiteModal.targetStatus === 'Aprovada' ? 'aprovado' : 'reprovado',
+      etapa_anterior: etapaAnterior,
+      etapa_nova: comiteModal.targetStatus,
+      data_comite: format(dataComite, 'yyyy-MM-dd'),
+      comentario: comiteModal.targetStatus === 'Reprovada' ? comentarioReprovacao : null,
     });
     setComiteModal(null);
     setDataComite(undefined);
+    setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
 
   const handleReatribuir = () => {
     if (!reatribuirModal || !novoAnalista) return;
+    const analise = analises.find(a => a.id === reatribuirModal);
+    const nomeNovo = getAnalistaNome(novoAnalista, allProfiles);
     updateStatus.mutate({
       id: reatribuirModal,
-      status: analises.find(a => a.id === reatribuirModal)?.status || 'Pendente',
+      status: analise?.status || 'Pendente',
       extras: { analista_responsavel: novoAnalista },
     });
+    registrarEvento({ analise_id: reatribuirModal, acao: 'analista_atribuido', comentario: nomeNovo });
     setReatribuirModal(null);
     setNovoAnalista('');
   };
@@ -477,12 +503,14 @@ export default function PipelineResearchPage() {
       return;
     }
 
+    const fromStatus = item.displayStatus;
     const extras: Record<string, any> = {};
     if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
 
     updateStatus.mutate({ id: draggedId, status: targetStatus, extras });
+    registrarEvento({ analise_id: draggedId, acao: 'etapa_alterada', etapa_anterior: fromStatus, etapa_nova: targetStatus });
     setDraggedId(null);
   };
 
@@ -630,11 +658,16 @@ export default function PipelineResearchPage() {
                             </span>
                             <span className="text-[10px] text-muted-foreground">{fmtDateBR(item.created_at)}</span>
                           </div>
+                          {item.data_comite && (
+                            <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
+                              📅 {fmtDateBR(item.data_comite)}
+                            </Badge>
+                          )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
                             {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
@@ -682,6 +715,7 @@ export default function PipelineResearchPage() {
                                   versao: novaVersao,
                                   solicitante_id: currentUser?.id || '',
                                 });
+                                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
                                 toast({ title: `Nova análise v${novaVersao} criada` });
                               }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
@@ -782,11 +816,16 @@ export default function PipelineResearchPage() {
                               {item.prazo ? `Prazo: ${fmtDateBR(item.prazo)}` : ''}
                             </span>
                           </div>
+                          {item.data_comite && (
+                            <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
+                              📅 {fmtDateBR(item.data_comite)}
+                            </Badge>
+                          )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
                             {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } })}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
@@ -930,7 +969,7 @@ export default function PipelineResearchPage() {
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
                   {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
-                    <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: drawerAnalise.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); setDrawerAnalise(null); }}>
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
@@ -960,7 +999,7 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {isGestor && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
-                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { registrarEvento({ analise_id: drawerAnalise.id, acao: 'reaberta', etapa_nova: 'Pendente' }); updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
                   )}
@@ -1172,7 +1211,7 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Comitê Modal (Aprovar / Reprovar) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); }}>
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
             <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
@@ -1193,12 +1232,18 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
+            {comiteModal?.targetStatus === 'Reprovada' && (
+              <div>
+                <Label className="text-xs">Motivo da Reprovação (obrigatório)</Label>
+                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovação..." />
+              </div>
+            )}
             <Button
               size="sm"
               className="w-full"
               variant={comiteModal?.targetStatus === 'Aprovada' ? 'default' : 'destructive'}
               onClick={handleComite}
-              disabled={!dataComite || updateStatus.isPending}
+              disabled={!dataComite || (comiteModal?.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) || updateStatus.isPending}
             >
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}

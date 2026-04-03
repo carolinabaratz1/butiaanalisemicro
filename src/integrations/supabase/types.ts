@@ -182,6 +182,57 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_eventos: {
+        Row: {
+          acao: string
+          analise_id: string
+          comentario: string | null
+          created_at: string | null
+          data_comite: string | null
+          etapa_anterior: string | null
+          etapa_nova: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          acao: string
+          analise_id: string
+          comentario?: string | null
+          created_at?: string | null
+          data_comite?: string | null
+          etapa_anterior?: string | null
+          etapa_nova?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          acao?: string
+          analise_id?: string
+          comentario?: string | null
+          created_at?: string | null
+          data_comite?: string | null
+          etapa_anterior?: string | null
+          etapa_nova?: string | null
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_eventos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_eventos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posicoes: {
         Row: {
           amount: number
