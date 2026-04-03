@@ -8,7 +8,7 @@ import { ButiaLogo } from '@/components/ui/ButiaLogo';
 import { useTheme } from '@/hooks/useTheme';
 import { toast } from 'sonner';
 import { ShieldCheck, Loader2 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+
 
 export default function MfaEnrollPage() {
   const { theme } = useTheme();
