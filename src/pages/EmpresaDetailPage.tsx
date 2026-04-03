@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, CalendarIcon, Play, CheckCircle, Loader2, ArrowRight, X, Calendar as CalendarIconSolid, UserRoundCog, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
