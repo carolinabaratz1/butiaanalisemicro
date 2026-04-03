@@ -114,6 +114,60 @@ export default function EmpresaDetailPage() {
     },
   });
 
+  // ── Fetch pipeline events for this empresa's analyses ──
+  const analiseIds = historicoPorCnpj.map(a => a.id);
+  const { data: pipelineEventos = [] } = useQuery({
+    queryKey: ['pipeline-eventos', decodedCnpj, analiseIds],
+    queryFn: async () => {
+      if (analiseIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('pipeline_eventos' as any)
+        .select('*')
+        .in('analise_id', analiseIds)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: analiseIds.length > 0,
+  });
+
+  // ── Fetch profiles for name resolution ──
+  const { data: profilesPublic = [] } = useQuery({
+    queryKey: ['profiles-public-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles_public')
+        .select('id, nome');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  function getProfileNome(userId: string | null) {
+    if (!userId) return 'Sistema';
+    const p = profilesPublic.find((pr: any) => pr.id === userId);
+    return p?.nome ?? userId;
+  }
+
+  function fmtDateTimeBR(d: string | null): string {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return `${dt.toLocaleDateString('pt-BR')} ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  const acaoConfig: Record<string, { icon: React.ReactNode; label: string }> = {
+    criada: { icon: <Plus className="h-3.5 w-3.5 text-primary" />, label: 'Análise criada' },
+    etapa_alterada: { icon: <ArrowRight className="h-3.5 w-3.5 text-primary" />, label: 'Etapa alterada' },
+    concluida: { icon: <CheckCircle className="h-3.5 w-3.5 text-status-success" />, label: 'Análise concluída' },
+    aprovado: { icon: <CheckCircle className="h-3.5 w-3.5 text-status-success" />, label: 'Aprovada' },
+    reprovado: { icon: <X className="h-3.5 w-3.5 text-status-danger" />, label: 'Reprovada' },
+    devolvida: { icon: <RotateCcw className="h-3.5 w-3.5 text-status-warning" />, label: 'Devolvida ao solicitante' },
+    enviado_comite: { icon: <CalendarIconSolid className="h-3.5 w-3.5 text-primary" />, label: 'Enviada para Comitê' },
+    data_comite_definida: { icon: <CalendarIconSolid className="h-3.5 w-3.5 text-primary" />, label: 'Data de comitê definida' },
+    analista_atribuido: { icon: <UserRoundCog className="h-3.5 w-3.5 text-primary" />, label: 'Analista reatribuído' },
+    reaberta: { icon: <RotateCcw className="h-3.5 w-3.5 text-primary" />, label: 'Análise reaberta' },
+  };
+
   if (loadingEmpresa) {
     return (
       <div className="flex items-center justify-center py-16">
