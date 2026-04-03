@@ -658,6 +658,11 @@ export default function PipelineResearchPage() {
                             </span>
                             <span className="text-[10px] text-muted-foreground">{fmtDateBR(item.created_at)}</span>
                           </div>
+                          {item.data_comite && (
+                            <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
+                              📅 {fmtDateBR(item.data_comite)}
+                            </Badge>
+                          )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
