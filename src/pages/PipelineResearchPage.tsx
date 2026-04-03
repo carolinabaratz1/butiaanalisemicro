@@ -387,6 +387,7 @@ export default function PipelineResearchPage() {
         data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
+    registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
     setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
