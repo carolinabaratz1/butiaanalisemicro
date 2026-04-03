@@ -41,7 +41,7 @@ async function getMfaStatus(): Promise<MfaStatus> {
     const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (error || !data) return 'no_session';
 
-    const { currentLevel, nextLevel } = data as AuthenticatorAssuranceLevels;
+    const { currentLevel, nextLevel } = data as any;
 
     // No factors enrolled yet
     if (currentLevel === 'aal1' && nextLevel === 'aal1') {
