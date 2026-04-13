@@ -280,11 +280,13 @@ export default function PipelineResearchPage() {
 
     // Group by empresa_id — keep only highest versao per empresa
     // Exception: if latest version is terminal (Reprovada), also show previous approved/vencida
+    // Group by empresa_id + tipo — different analysis types coexist independently
     const grouped = new Map<string, typeof withStatus>();
     withStatus.forEach(a => {
-      const list = grouped.get(a.empresa_id) || [];
+      const key = `${a.empresa_id}::${a.tipo}`;
+      const list = grouped.get(key) || [];
       list.push(a);
-      grouped.set(a.empresa_id, list);
+      grouped.set(key, list);
     });
 
     const result: typeof withStatus = [];
@@ -341,8 +343,17 @@ export default function PipelineResearchPage() {
   }, [analisesComStatus, isAnalista, currentUser?.id, analistaFilter, prazoFilter, search, hoje]);
 
   // ── Handlers ──
-  const handleCriar = () => {
+  const handleCriar = async () => {
     if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
+    // Calculate next version for this empresa + tipo
+    const { data: maxRows } = await supabase
+      .from('analises')
+      .select('versao')
+      .eq('empresa_id', novoEmissor)
+      .eq('tipo', novoTipo)
+      .order('versao', { ascending: false })
+      .limit(1);
+    const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
     const row = {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
@@ -353,13 +364,9 @@ export default function PipelineResearchPage() {
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
       observacoes: novoObs,
       isin: '',
+      versao: novaVersao,
     };
-    createAnalise.mutate(row, {
-      onSuccess: (_data, _vars, _ctx) => {
-        // We don't have the new ID from createAnalise, so we skip audit for creation
-        // (or we could refactor to return it)
-      },
-    });
+    createAnalise.mutate(row);
     setNovaModal(false);
     setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
   };
@@ -702,8 +709,15 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => {
-                                const novaVersao = (item.versao || 1) + 1;
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
+                                const { data: maxRows } = await supabase
+                                  .from('analises')
+                                  .select('versao')
+                                  .eq('empresa_id', item.empresa_id)
+                                  .eq('tipo', item.tipo)
+                                  .order('versao', { ascending: false })
+                                  .limit(1);
+                                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
                                 createAnalise.mutate({
                                   empresa_id: item.empresa_id,
                                   tipo: item.tipo,
@@ -850,8 +864,15 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => {
-                                const novaVersao = (item.versao || 1) + 1;
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
+                                const { data: maxRows } = await supabase
+                                  .from('analises')
+                                  .select('versao')
+                                  .eq('empresa_id', item.empresa_id)
+                                  .eq('tipo', item.tipo)
+                                  .order('versao', { ascending: false })
+                                  .limit(1);
+                                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
                                 createAnalise.mutate({
                                   empresa_id: item.empresa_id,
                                   tipo: item.tipo,
