@@ -1,82 +1,37 @@
 
 
-## Plano: Audit Trail para Pipeline de Research
+## Diagnóstico
 
-### Resumo
-Criar tabela `pipeline_eventos` para registrar todas as ações do pipeline de forma imutável, integrar o registro nos handlers existentes, exibir timeline na página de detalhe da empresa e badge de data de comitê nos cards Kanban.
+Existem 3 registros para MINERVA (empresa_id `67.620.377/0001-14`):
 
-### 1. Migration — tabela `pipeline_eventos`
+| versao | tipo | status |
+|--------|------|--------|
+| 1 | Crédito Privado | Aprovada |
+| 2 | Crédito Privado | Em Análise |
+| 1 | Ações | Pendente |
 
-```sql
-CREATE TABLE pipeline_eventos (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  analise_id uuid NOT NULL,
-  user_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
-  acao text NOT NULL,
-  etapa_anterior text,
-  etapa_nova text,
-  comentario text,
-  data_comite date,
-  created_at timestamptz DEFAULT now()
-);
+A deduplicação no Pipeline (linha 283) agrupa por `empresa_id` e mantém apenas a versão mais alta. A v2 (Crédito Privado, Em Análise) ganha, e a análise de Ações (v1) é descartada.
 
-ALTER TABLE pipeline_eventos ENABLE ROW LEVEL SECURITY;
+**Causa raiz**: O agrupamento ignora o `tipo` da análise. Crédito Privado e Ações são pipelines independentes para a mesma empresa e devem coexistir.
 
-CREATE POLICY "Leitura autenticados" ON pipeline_eventos
-  FOR SELECT TO authenticated USING (true);
+## Correção
 
-CREATE POLICY "Inserção autenticados" ON pipeline_eventos
-  FOR INSERT TO authenticated WITH CHECK (true);
+### 1. Alterar deduplicação para agrupar por `empresa_id + tipo`
 
-CREATE INDEX idx_pipeline_eventos_analise ON pipeline_eventos(analise_id);
-CREATE INDEX idx_pipeline_eventos_created ON pipeline_eventos(created_at DESC);
-```
+Na linha 283 de `PipelineResearchPage.tsx`, trocar a chave do `Map` de `a.empresa_id` para `${a.empresa_id}::${a.tipo}`. Isso garante que análises de tipos diferentes não se sobrescrevem.
 
-Sem FK para `analises(id)` — preserva o log se análise for excluída.
+### 2. Corrigir `handleCriar` — auto-incrementar versão por empresa+tipo
 
-### 2. Serviço `src/services/pipelineEventos.ts`
+No handler de criação (linha 344), antes de inserir, buscar `MAX(versao)` filtrando por `empresa_id` **e** `tipo`, e definir `versao = max + 1`.
 
-Função `registrarEvento()` que:
-- Obtém `user.id` via `supabase.auth.getUser()`
-- Insere em `pipeline_eventos` com `analise_id`, `acao`, `etapa_anterior`, `etapa_nova`, `comentario`, `data_comite`
-- Fire-and-forget (não bloqueia a ação principal; erros logados no console)
+### 3. Corrigir handler "Reabrir" — mesma lógica de versão
 
-### 3. Integrar nos handlers (`PipelineResearchPage.tsx`)
+Nos botões "Reabrir" (linhas ~706 e ~854), calcular `novaVersao` com base no max existente para aquele `empresa_id + tipo`, em vez de apenas `item.versao + 1`.
 
-Cada handler chama `registrarEvento()` **após** o `updateStatus.mutate` com sucesso (no `onSuccess` ou inline):
+### 4. Corrigir dado existente (data fix)
 
-| Handler | `acao` | Detalhes |
-|---|---|---|
-| `handleCriar` | `criada` | `etapa_nova = 'Pendente'` |
-| `handleDrop` (simples) | `etapa_alterada` | `etapa_anterior` / `etapa_nova` das colunas |
-| `handleDrop` → `Em Análise` | `etapa_alterada` | idem, com `data_inicio` |
-| `handleRejeitarAnalista` | `devolvida` | `etapa_anterior = 'Em Análise'`, `etapa_nova = 'Pendente'`, `comentario = justificativa` |
-| `handleEntregar` | `concluida` | `etapa_anterior = 'Em Análise'`, `etapa_nova = 'Concluída'` |
-| `handleComite` (Aprovada) | `aprovado` | `etapa_nova = 'Aprovada'`, `data_comite` |
-| `handleComite` (Reprovada) | `reprovado` | `etapa_nova = 'Reprovada'`, `data_comite`, `comentario` obrigatório |
-| `handleReatribuir` | `analista_atribuido` | `comentario = nome do novo analista` |
-| Reabrir (inline) | `reaberta` | `etapa_nova = 'Pendente'`, `comentario = 'vN'` |
-
-**Ajuste no modal de Reprovação (comitê):** Adicionar campo `Textarea` obrigatório para comentário quando `targetStatus === 'Reprovada'`. O botão fica desabilitado sem comentário.
-
-### 4. Badge de data de comitê nos cards Kanban
-
-Nos cards onde `item.data_comite` existe, exibir badge `📅 DD/MM/AAAA` (usando `fmtDateBR`). Sem query extra — dado já disponível no objeto `analise`.
-
-### 5. Aba "Histórico de Pipeline" em `EmpresaDetailPage.tsx`
-
-- Adicionar terceira tab `Histórico de Pipeline`
-- Query: `pipeline_eventos` filtrado por `analise_id IN (ids das análises da empresa)`
-- Join manual com `profiles_public` para nome do usuário
-- Timeline vertical com:
-  - Ícone por tipo de ação (CheckCircle, X, Calendar, ArrowRight, UserRoundCog)
-  - Nome do usuário + data/hora formatada
-  - Texto descritivo (ex: "Movido de Em Análise → Concluída por João Silva")
-  - Comentário e data de comitê quando presentes
+Atualizar a análise Pendente de Ações (`0c80ab06...`) para `versao = 1` (já está correta neste caso, pois é a primeira de Ações). Nenhuma correção de dados é necessária — o problema é puramente de lógica de exibição.
 
 ### Arquivos modificados
-- 1 migration SQL (nova tabela)
-- `src/services/pipelineEventos.ts` (novo)
-- `src/pages/PipelineResearchPage.tsx` (integrar registro + campo comentário na reprovação + badge comitê)
-- `src/pages/EmpresaDetailPage.tsx` (nova aba timeline)
+- `src/pages/PipelineResearchPage.tsx` (deduplicação + handleCriar + reabrir)
 
