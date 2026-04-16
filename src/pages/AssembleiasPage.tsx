@@ -416,7 +416,7 @@ export default function AssembleiasPage() {
                 <Label className="text-xs mb-1.5 block">Responsável interno</Label>
                 <Select value={form.responsavel_id} onValueChange={v => set('responsavel_id', v)}>
                   <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent><SelectItem value="">— Nenhum</SelectItem>{profiles.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="__none__">— Nenhum</SelectItem>{profiles.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="col-span-2">
@@ -462,7 +462,7 @@ export default function AssembleiasPage() {
                 <Label className="text-xs mb-1.5 block">Modalidade</Label>
                 <Select value={form.modalidade} onValueChange={v => set('modalidade', v)}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                  <SelectContent><SelectItem value="">— Não informada</SelectItem>{(['Presencial','Híbrida','Digital'] as Modalidade[]).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value="__none__">— Não informada</SelectItem>{(['Presencial','Híbrida','Digital'] as Modalidade[]).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="col-span-2">
@@ -484,7 +484,7 @@ export default function AssembleiasPage() {
                   <Label className="text-xs mb-1.5 block">Quórum atingido</Label>
                   <Select value={form.quorum_atingido} onValueChange={v => set('quorum_atingido', v)}>
                     <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                    <SelectContent><SelectItem value="">— Não informado</SelectItem><SelectItem value="true">Sim</SelectItem><SelectItem value="false">Não</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="__none__">— Não informado</SelectItem><SelectItem value="true">Sim</SelectItem><SelectItem value="false">Não</SelectItem></SelectContent>
                   </Select>
                 </div>
               )}
@@ -502,7 +502,7 @@ export default function AssembleiasPage() {
                   <Label className="text-xs mb-1.5 block">Posicionamento / Voto da Butia</Label>
                   <Select value={form.voto_butia} onValueChange={v => set('voto_butia', v)}>
                     <SelectTrigger><SelectValue placeholder="— Sem posição definida" /></SelectTrigger>
-                    <SelectContent><SelectItem value="">— Sem posição definida</SelectItem>{(['A favor','Contra','Abstenção','Não votou'] as VotoButia[]).map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="__none__">— Sem posição definida</SelectItem>{(['A favor','Contra','Abstenção','Não votou'] as VotoButia[]).map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="col-span-2">
