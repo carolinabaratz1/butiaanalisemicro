@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, FileSearch, Kanban, CreditCard,
-  TrendingUp, Users, Settings, ChevronDown, ChevronRight, Briefcase
+  TrendingUp, Users, Settings, ChevronDown, ChevronRight, Briefcase,
+  CalendarDays
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -10,11 +11,12 @@ import { ButiaLogo } from '@/components/ui/ButiaLogo';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const mainItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { label: 'Posições', icon: Briefcase, path: '/posicoes' },
-  { label: 'Empresas', icon: Building2, path: '/empresas' },
-  { label: 'Análises', icon: FileSearch, path: '/analises' },
-  { label: 'Pipeline Research', icon: Kanban, path: '/pipeline-de-research' },
+  { label: 'Dashboard',         icon: LayoutDashboard, path: '/' },
+  { label: 'Posições',          icon: Briefcase,        path: '/posicoes' },
+  { label: 'Empresas',          icon: Building2,        path: '/empresas' },
+  { label: 'Análises',          icon: FileSearch,       path: '/analises' },
+  { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
+  { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
 ];
 
 const creditoItems = [
@@ -23,9 +25,9 @@ const creditoItems = [
 ];
 
 const bottomItems = [
-  { label: 'Ações', icon: TrendingUp, path: '/acoes' },
-  { label: 'Analistas', icon: Users, path: '/analistas' },
-  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
+  { label: 'Ações',         icon: TrendingUp, path: '/acoes' },
+  { label: 'Analistas',     icon: Users,      path: '/analistas' },
+  { label: 'Configurações', icon: Settings,   path: '/configuracoes' },
 ];
 
 interface Props {
@@ -53,7 +55,7 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
         : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8'
     );
 
-  const filteredMain = mainItems.filter(item => hasAccess(item.path));
+  const filteredMain   = mainItems.filter(item => hasAccess(item.path));
   const filteredBottom = bottomItems.filter(item => hasAccess(item.path));
 
   const handleNav = () => onNavigate?.();
