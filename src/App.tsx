@@ -23,6 +23,7 @@ import AcoesPage from "./pages/AcoesPage";
 import PosicoesPage from "./pages/PosicoesPage";
 import AnalistasPage from "./pages/AnalistasPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
+import AssembleiasPage from "./pages/AssembleiasPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -52,12 +53,10 @@ function ProtectedRoutes() {
     return <Navigate to="/trocar-senha" replace />;
   }
 
-  // MFA enforcement: must enroll before accessing app
   if (mfaStatus === 'needs_enroll') {
     return <Navigate to="/mfa/configurar" replace />;
   }
 
-  // MFA enforcement: must verify before accessing app
   if (mfaStatus === 'needs_verify') {
     return <Navigate to="/mfa/verificar" replace />;
   }
@@ -76,6 +75,7 @@ function ProtectedRoutes() {
         <Route path="/acoes" element={<AcoesPage />} />
         <Route path="/analistas" element={<AnalistasPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="/assembleias" element={<AssembleiasPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
