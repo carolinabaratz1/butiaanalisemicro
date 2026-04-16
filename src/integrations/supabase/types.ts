@@ -113,6 +113,93 @@ export type Database = {
         }
         Relationships: []
       }
+      assembleias: {
+        Row: {
+          cnpj_empresa: string | null
+          created_at: string
+          data_evento: string
+          data_limite_voto: string | null
+          descricao: string | null
+          documentos: Json
+          hora_evento: string | null
+          id: string
+          isin: string | null
+          justificativa_voto: string | null
+          local_link: string | null
+          modalidade: string | null
+          observacoes: string | null
+          quorum_atingido: boolean | null
+          responsavel_id: string | null
+          resultado: string | null
+          status: string
+          tipo: string
+          titulo: string
+          updated_at: string
+          voto_butia: string | null
+        }
+        Insert: {
+          cnpj_empresa?: string | null
+          created_at?: string
+          data_evento: string
+          data_limite_voto?: string | null
+          descricao?: string | null
+          documentos?: Json
+          hora_evento?: string | null
+          id?: string
+          isin?: string | null
+          justificativa_voto?: string | null
+          local_link?: string | null
+          modalidade?: string | null
+          observacoes?: string | null
+          quorum_atingido?: boolean | null
+          responsavel_id?: string | null
+          resultado?: string | null
+          status?: string
+          tipo: string
+          titulo: string
+          updated_at?: string
+          voto_butia?: string | null
+        }
+        Update: {
+          cnpj_empresa?: string | null
+          created_at?: string
+          data_evento?: string
+          data_limite_voto?: string | null
+          descricao?: string | null
+          documentos?: Json
+          hora_evento?: string | null
+          id?: string
+          isin?: string | null
+          justificativa_voto?: string | null
+          local_link?: string | null
+          modalidade?: string | null
+          observacoes?: string | null
+          quorum_atingido?: boolean | null
+          responsavel_id?: string | null
+          resultado?: string | null
+          status?: string
+          tipo?: string
+          titulo?: string
+          updated_at?: string
+          voto_butia?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assembleias_cnpj_empresa_fkey"
+            columns: ["cnpj_empresa"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["cnpj"]
+          },
+          {
+            foreignKeyName: "assembleias_isin_fkey"
+            columns: ["isin"]
+            isOneToOne: false
+            referencedRelation: "emissoes"
+            referencedColumns: ["isin"]
+          },
+        ]
+      }
       emissoes: {
         Row: {
           cnpj_emissor: string
