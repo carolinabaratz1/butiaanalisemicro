@@ -130,8 +130,18 @@ Deno.serve(async (req) => {
     }
 
     if (action === "reset-password") {
-      if (!newPassword || newPassword.length < 6) {
-        return new Response(JSON.stringify({ error: "Nova senha deve ter pelo menos 6 caracteres" }), {
+      if (!newPassword || newPassword.length < 8) {
+        return new Response(JSON.stringify({ error: "Nova senha deve ter pelo menos 8 caracteres" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const hasLetter = /[A-Za-z]/.test(newPassword);
+      const hasNumber = /[0-9]/.test(newPassword);
+      const hasSymbol = /[^A-Za-z0-9]/.test(newPassword);
+      if (!hasLetter || !hasNumber || !hasSymbol) {
+        return new Response(JSON.stringify({ error: "A senha deve conter letras, números e ao menos um símbolo" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -142,8 +152,11 @@ Deno.serve(async (req) => {
       });
 
       if (authError) {
-        return new Response(JSON.stringify({ error: authError.message }), {
-          status: 500,
+        const msg = /weak|pwned|known/i.test(authError.message)
+          ? "Senha rejeitada por ser fraca ou estar em vazamentos conhecidos. Escolha uma senha mais forte."
+          : authError.message;
+        return new Response(JSON.stringify({ error: msg }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
