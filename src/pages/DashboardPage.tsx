@@ -71,7 +71,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("analises")
-        .select("id, empresa_id, tipo, analista_responsavel, status, data_conclusao, data_inicio, decisao, conviccao");
+        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, decisao, conviccao");
       return data ?? [];
     },
   });
@@ -126,7 +126,7 @@ export default function DashboardPage() {
   const analises = todasAnalises ?? [];
 
   // Compute statuses (same logic as PipelineResearchPage)
-  const computedAnalises = analises.map((a) => {
+  const computedAnalisesRaw = analises.map((a) => {
     let computedStatus = a.status;
     if (a.status === "Aprovada" && a.data_conclusao) {
       const dt = new Date(a.data_conclusao.split("T")[0]);
@@ -136,6 +136,36 @@ export default function DashboardPage() {
       }
     }
     return { ...a, computedStatus };
+  });
+
+  // Deduplicate by (empresa_id + tipo) keeping highest versao — mirrors PipelineResearchPage
+  // Exception: if latest is Reprovada, also include the previous Aprovada/Vencida version
+  const groupedDedup = new Map<string, typeof computedAnalisesRaw>();
+  computedAnalisesRaw.forEach((a) => {
+    const key = `${a.empresa_id}::${a.tipo}`;
+    const list = groupedDedup.get(key) || [];
+    list.push(a);
+    groupedDedup.set(key, list);
+  });
+  const computedAnalises: typeof computedAnalisesRaw = [];
+  groupedDedup.forEach((items) => {
+    if (items.length <= 1) {
+      computedAnalises.push(...items);
+      return;
+    }
+    items.sort((a, b) => ((b as any).versao || 1) - ((a as any).versao || 1));
+    const latest = items[0];
+    computedAnalises.push(latest);
+    if (latest.computedStatus === "Reprovada") {
+      const prev = items.find(
+        (i) =>
+          i.id !== latest.id &&
+          (i.computedStatus === "Aprovada" ||
+            i.computedStatus === "Vencida c/ Alocação" ||
+            i.computedStatus === "Vencida s/ Alocação"),
+      );
+      if (prev) computedAnalises.push(prev);
+    }
   });
 
   const pendentes = computedAnalises.filter((a) => a.computedStatus === "Pendente");
