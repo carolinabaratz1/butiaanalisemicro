@@ -2,36 +2,66 @@
 
 ## Diagnóstico
 
-Existem 3 registros para MINERVA (empresa_id `67.620.377/0001-14`):
+Há duas inconsistências distintas entre as métricas.
 
-| versao | tipo | status |
-|--------|------|--------|
-| 1 | Crédito Privado | Aprovada |
-| 2 | Crédito Privado | Em Análise |
-| 1 | Ações | Pendente |
+### Causa raiz #1 (Dashboard): falta de deduplicação por versão
 
-A deduplicação no Pipeline (linha 283) agrupa por `empresa_id` e mantém apenas a versão mais alta. A v2 (Crédito Privado, Em Análise) ganha, e a análise de Ações (v1) é descartada.
+O Dashboard (`DashboardPage.tsx`, linhas 129–147) classifica e conta **todas as análises da tabela**, incluindo versões antigas/superseded. O Pipeline Research (`PipelineResearchPage.tsx`, linhas 274–310) corretamente agrupa por `empresa_id + tipo` e mantém apenas a `MAX(versao)`.
 
-**Causa raiz**: O agrupamento ignora o `tipo` da análise. Crédito Privado e Ações são pipelines independentes para a mesma empresa e devem coexistir.
+**Verificação direta no banco:**
+- Total bruto (Dashboard): **50** Vencidas c/ Alocação
+- Após dedup por `empresa_id + tipo` (Pipeline): **42**
+
+Diferença = 8 análises antigas (v1) que já foram substituídas por uma v2 ativa (em Análise/Aprovada), mas o Dashboard ainda está contando ambas.
+
+**Conclusão:** o **Pipeline Research está correto (42)**. O Dashboard está inflando o contador.
+
+### Causa raiz #2 (dados): duplicatas com mesma versão
+
+Encontrei 2 pares `empresa_id + tipo` com **dois registros ambos com `versao = 1`** (versionamento foi bypassado, provavelmente em ações de "Reabrir" antes da correção anterior):
+
+| empresa | tipo | versões |
+|---|---|---|
+| `50.258.089/0001-69` | Crédito Privado | [1, 1] — ambas Vencida c/ Alocação |
+| `30.306.294/0001-45` | Crédito Privado | [1, 1] — Aprovada + Vencida c/ Alocação |
+
+Hoje o Pipeline mostra apenas uma delas (a primeira do `sort` desempate), mas a outra fica órfã no banco.
 
 ## Correção
 
-### 1. Alterar deduplicação para agrupar por `empresa_id + tipo`
+### 1. Aplicar deduplicação por versão no Dashboard
 
-Na linha 283 de `PipelineResearchPage.tsx`, trocar a chave do `Map` de `a.empresa_id` para `${a.empresa_id}::${a.tipo}`. Isso garante que análises de tipos diferentes não se sobrescrevem.
+Em `src/pages/DashboardPage.tsx`, antes dos filtros das linhas 141–147, replicar a lógica do Pipeline:
+- Agrupar `computedAnalises` por `${empresa_id}::${tipo}`
+- Ordenar por `versao DESC` e manter apenas o primeiro
+- Exceção: se o mais recente for `Reprovada`, incluir também a anterior `Aprovada/Vencida` (mesma regra do Pipeline, para coerência)
 
-### 2. Corrigir `handleCriar` — auto-incrementar versão por empresa+tipo
+Após isso, recalcular `pendentes`, `emAnalise`, `aprovadas`, `vencidasComAlocacao` etc. sobre o conjunto deduplicado. Resultado esperado: Dashboard passa a mostrar **42** (alinhado ao Pipeline).
 
-No handler de criação (linha 344), antes de inserir, buscar `MAX(versao)` filtrando por `empresa_id` **e** `tipo`, e definir `versao = max + 1`.
+### 2. Corrigir os 2 pares com `versao` duplicada (data fix via migration)
 
-### 3. Corrigir handler "Reabrir" — mesma lógica de versão
+Para cada par `(empresa_id, tipo)` com duas linhas em `versao = 1`, manter a mais recente (`updated_at` maior) como `versao = 2` e deixar a antiga como `versao = 1`. SQL:
 
-Nos botões "Reabrir" (linhas ~706 e ~854), calcular `novaVersao` com base no max existente para aquele `empresa_id + tipo`, em vez de apenas `item.versao + 1`.
+```sql
+WITH dups AS (
+  SELECT id, empresa_id, tipo,
+    ROW_NUMBER() OVER (PARTITION BY empresa_id, tipo ORDER BY updated_at ASC) AS rn
+  FROM analises
+  WHERE (empresa_id, tipo) IN (
+    SELECT empresa_id, tipo FROM analises
+    GROUP BY empresa_id, tipo, versao HAVING COUNT(*) > 1
+  )
+)
+UPDATE analises a SET versao = d.rn, updated_at = now()
+FROM dups d WHERE a.id = d.id;
+```
 
-### 4. Corrigir dado existente (data fix)
+### 3. (Opcional, recomendado) Constraint para prevenir recorrência
 
-Atualizar a análise Pendente de Ações (`0c80ab06...`) para `versao = 1` (já está correta neste caso, pois é a primeira de Ações). Nenhuma correção de dados é necessária — o problema é puramente de lógica de exibição.
+Adicionar índice único `UNIQUE (empresa_id, tipo, versao)` na tabela `analises` para impedir futuros bypasses do versionamento.
 
-### Arquivos modificados
-- `src/pages/PipelineResearchPage.tsx` (deduplicação + handleCriar + reabrir)
+## Arquivos modificados
+
+- `src/pages/DashboardPage.tsx` — deduplicação por `empresa_id + tipo` mantendo `MAX(versao)`
+- Nova migration SQL — corrige 2 duplicatas e (opcional) cria índice único
 
