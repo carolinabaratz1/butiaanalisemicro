@@ -26,16 +26,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
 
-type AnaliseStatus = 'Pendente' | 'Em AnÃ¡lise' | 'ConcluÃ­da' | 'Aprovada' | 'Reprovada' | 'Vencida c/ AlocaÃ§Ã£o' | 'Vencida s/ AlocaÃ§Ã£o';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
-  { key: 'Em AnÃ¡lise', label: 'Em AnÃ¡lise', color: 'text-status-info' },
-  { key: 'ConcluÃ­da', label: 'ConcluÃ­da', color: 'text-muted-foreground' },
+  { key: 'Em Análise', label: 'Em Análise', color: 'text-status-info' },
+  { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
   { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
   { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
-  { key: 'Vencida c/ AlocaÃ§Ã£o', label: 'Vencida c/ AlocaÃ§Ã£o', color: 'text-red-400' },
-  { key: 'Vencida s/ AlocaÃ§Ã£o', label: 'Vencida s/ AlocaÃ§Ã£o', color: 'text-orange-400' },
+  { key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' },
+  { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
 
 function getEmissorNome(cnpj: string, empresasMap: Map<string, string>) {
@@ -55,8 +55,8 @@ function getAnalistaInitials(id: string, profiles: { id: string; nome: string }[
 }
 
 const tipoAnaliseColors: Record<string, string> = {
-  'CrÃ©dito Privado': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  'AÃ§Ãµes': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'Crédito Privado': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  'Ações': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
 };
 
 const recomendacaoColors: Record<string, string> = {
@@ -66,7 +66,7 @@ const recomendacaoColors: Record<string, string> = {
 };
 
 function fmtDateBR(d: string | null | undefined): string {
-  if (!d) return 'â';
+  if (!d) return '—';
   const clean = d.split('T')[0];
   const parts = clean.split('-');
   if (parts.length === 3 && parts[0].length === 4) return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -84,9 +84,9 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
 function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean): AnaliseStatus {
   if (isVencida(status, dataConclusao)) {
     if (empresaId && temPosicaoFn) {
-      return temPosicaoFn(empresaId) ? 'Vencida c/ AlocaÃ§Ã£o' : 'Vencida s/ AlocaÃ§Ã£o';
+      return temPosicaoFn(empresaId) ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
     }
-    return 'Vencida s/ AlocaÃ§Ã£o';
+    return 'Vencida s/ Alocação';
   }
   return status as AnaliseStatus;
 }
@@ -108,50 +108,50 @@ export default function PipelineResearchPage() {
   const [novoAnalista, setNovoAnalista] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  // Nova anÃ¡lise form
+  // Nova análise form
   const [novoEmissor, setNovoEmissor] = useState('');
   const [novoTipo, setNovoTipo] = useState('');
   const [novoAnalistaId, setNovoAnalistaId] = useState('');
   const [novoPrazo, setNovoPrazo] = useState<Date>();
   const [novoObs, setNovoObs] = useState('');
 
-  // Entrega (conclusÃ£o) extra fields
+  // Entrega (conclusão) extra fields
   const [recomendacao, setRecomendacao] = useState('');
   const [precoMin, setPrecoMin] = useState('');
   const [precoMedio, setPrecoMedio] = useState('');
   const [precoMaximo, setPrecoMaximo] = useState('');
   const [dataAlvo, setDataAlvo] = useState<Date>();
 
-  // RejeiÃ§Ã£o pelo analista (Em AnÃ¡lise â Pendente)
+  // Rejeição pelo analista (Em Análise → Pendente)
   const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
   const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
 
-  // ComitÃª modal (Aprovada / Reprovada)
+  // Comitê modal (Aprovada / Reprovada)
   const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
   const isGestor = currentUser?.funcao === 'Gestor';
-  const isCoord = currentUser?.funcao === 'CoordenaÃ§Ã£o/Especialista';
+  const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
   const isAnalista = currentUser?.funcao === 'Analista';
   const canCreate = isGestor || isCoord || isRC;
 
-  // ââ Fetch active analysts/coordinators from profiles ââ
+  // ── Fetch active analysts/coordinators from profiles ──
   const { data: analistasAtivos = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, nome, email, funcao')
-        .in('funcao', ['Analista', 'CoordenaÃ§Ã£o/Especialista'])
+        .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .eq('status', 'Ativo');
       if (error) throw error;
       return data || [];
     },
   });
 
-  // ââ Fetch all profiles for name lookups (solicitante, etc.) ââ
+  // ── Fetch all profiles for name lookups (solicitante, etc.) ──
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-all'],
     queryFn: async () => {
@@ -163,7 +163,7 @@ export default function PipelineResearchPage() {
     },
   });
 
-  // ââ Fetch empresas from DB for name resolution ââ
+  // ── Fetch empresas from DB for name resolution ──
   const { data: empresasDB = [] } = useQuery({
     queryKey: ['empresas-all'],
     queryFn: async () => {
@@ -177,7 +177,7 @@ export default function PipelineResearchPage() {
 
   const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
 
-  // ââ Fetch emissoes from DB for ticker resolution ââ
+  // ── Fetch emissoes from DB for ticker resolution ──
   const { data: emissoesDB = [] } = useQuery({
     queryKey: ['emissoes-all'],
     queryFn: async () => {
@@ -193,7 +193,7 @@ export default function PipelineResearchPage() {
 
   const hoje = new Date().toISOString().split('T')[0];
 
-  // ââ Fetch analises from Supabase ââ
+  // ── Fetch analises from Supabase ──
   const { data: analises = [], isLoading } = useQuery({
     queryKey: ['pipeline-analises'],
     queryFn: async () => {
@@ -206,7 +206,7 @@ export default function PipelineResearchPage() {
     },
   });
 
-  // ââ Fetch CNPJs with active positions via posicoes.isin â emissoes.cnpj_emissor ââ
+  // ── Fetch CNPJs with active positions via posicoes.isin → emissoes.cnpj_emissor ──
   const { data: cnpjsComPosicaoSet = new Set<string>() } = useQuery({
     queryKey: ['posicoes-cnpjs-ativos'],
     queryFn: async () => {
@@ -232,7 +232,7 @@ export default function PipelineResearchPage() {
     return cnpjsComPosicaoSet.has(cnpj);
   }, [cnpjsComPosicaoSet]);
 
-  // ââ Mutations ââ
+  // ── Mutations ──
   const updateStatus = useMutation({
     mutationFn: async ({ id, status, extras }: { id: string; status: string; extras?: Record<string, any> }) => {
       const { error } = await supabase
@@ -253,9 +253,9 @@ export default function PipelineResearchPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
       queryClient.invalidateQueries({ queryKey: ['analises-ativas-count'] });
-      toast({ title: 'AnÃ¡lise criada com sucesso' });
+      toast({ title: 'Análise criada com sucesso' });
     },
-    onError: (err: any) => toast({ title: 'Erro ao criar anÃ¡lise', description: err.message, variant: 'destructive' }),
+    onError: (err: any) => toast({ title: 'Erro ao criar análise', description: err.message, variant: 'destructive' }),
   });
 
   const deleteAnalise = useMutation({
@@ -266,21 +266,21 @@ export default function PipelineResearchPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
       queryClient.invalidateQueries({ queryKey: ['analises-ativas-count'] });
-      toast({ title: 'AnÃ¡lise excluÃ­da com sucesso' });
+      toast({ title: 'Análise excluída com sucesso' });
     },
     onError: (err: any) => toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' }),
   });
 
-  // ââ Apply display status (Vencida) + filter superseded versions ââ
+  // ── Apply display status (Vencida) + filter superseded versions ──
   const analisesComStatus = useMemo(() => {
     const withStatus = analises.map(a => ({
       ...a,
       displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
     }));
 
-    // Group by empresa_id â keep only highest versao per empresa
+    // Group by empresa_id — keep only highest versao per empresa
     // Exception: if latest version is terminal (Reprovada), also show previous approved/vencida
-    // Group by empresa_id + tipo â different analysis types coexist independently
+    // Group by empresa_id + tipo — different analysis types coexist independently
     const grouped = new Map<string, typeof withStatus>();
     withStatus.forEach(a => {
       const key = `${a.empresa_id}::${a.tipo}`;
@@ -301,7 +301,7 @@ export default function PipelineResearchPage() {
       result.push(latest);
       // If latest is Reprovada, also show the previous approved/vencida version
       if (latest.displayStatus === 'Reprovada') {
-        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Aprovada' || i.displayStatus === 'Vencida c/ AlocaÃ§Ã£o' || i.displayStatus === 'Vencida s/ AlocaÃ§Ã£o'));
+        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Aprovada' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
         if (prev) result.push(prev);
       }
     });
@@ -309,7 +309,7 @@ export default function PipelineResearchPage() {
     return result;
   }, [analises, temPosicaoAtiva]);
 
-  // ââ Filters ââ
+  // ── Filters ──
   const filtered = useMemo(() => {
     let items = [...analisesComStatus];
 
@@ -320,7 +320,7 @@ export default function PipelineResearchPage() {
       items = items.filter(a => a.analista_responsavel.trim() === analistaFilter.trim());
     }
     if (prazoFilter === 'vencido') {
-      items = items.filter(a => a.prazo && a.prazo < hoje && (a.displayStatus === 'Pendente' || a.displayStatus === 'Em AnÃ¡lise'));
+      items = items.filter(a => a.prazo && a.prazo < hoje && (a.displayStatus === 'Pendente' || a.displayStatus === 'Em Análise'));
     } else if (prazoFilter === 'semana') {
       const end = new Date(); end.setDate(end.getDate() + 7);
       const endStr = format(end, 'yyyy-MM-dd');
@@ -342,7 +342,7 @@ export default function PipelineResearchPage() {
     return items;
   }, [analisesComStatus, isAnalista, currentUser?.id, analistaFilter, prazoFilter, search, hoje]);
 
-  // ââ Handlers ââ
+  // ── Handlers ──
   const handleCriar = async () => {
     if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
     // Calculate next version for this empresa + tipo
@@ -376,14 +376,14 @@ export default function PipelineResearchPage() {
     return analisesComStatus.find(a => a.id === entregarModal) || null;
   }, [entregarModal, analisesComStatus]);
 
-  const isAcoes = entregarAnalise?.tipo === 'AÃ§Ãµes';
+  const isAcoes = entregarAnalise?.tipo === 'Ações';
 
   const handleEntregar = () => {
     if (!entregarModal || !relatorio.trim()) return;
     if (isAcoes && !recomendacao) return;
     updateStatus.mutate({
       id: entregarModal,
-      status: 'ConcluÃ­da',
+      status: 'Concluída',
       extras: {
         relatorio,
         data_conclusao: new Date().toISOString().split('T')[0],
@@ -394,7 +394,7 @@ export default function PipelineResearchPage() {
         data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
-    registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em AnÃ¡lise', etapa_nova: 'ConcluÃ­da' });
+    registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
     setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
@@ -410,7 +410,7 @@ export default function PipelineResearchPage() {
         data_inicio: null,
       },
     });
-    registrarEvento({ analise_id: rejeitarAnalistaModal, acao: 'devolvida', etapa_anterior: 'Em AnÃ¡lise', etapa_nova: 'Pendente', comentario: justificativaRejeicao });
+    registrarEvento({ analise_id: rejeitarAnalistaModal, acao: 'devolvida', etapa_anterior: 'Em Análise', etapa_nova: 'Pendente', comentario: justificativaRejeicao });
     setRejeitarAnalistaModal(null);
     setJustificativaRejeicao('');
     setDrawerAnalise(null);
@@ -457,7 +457,7 @@ export default function PipelineResearchPage() {
     setNovoAnalista('');
   };
 
-  // ââ Drag & Drop ââ
+  // ── Drag & Drop ──
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedId(id);
     e.dataTransfer.effectAllowed = 'move';
@@ -477,20 +477,20 @@ export default function PipelineResearchPage() {
       return;
     }
 
-    // Analyst restrictions: can only do PendenteâEm AnÃ¡lise, Em AnÃ¡liseâConcluÃ­da, Em AnÃ¡liseâPendente
+    // Analyst restrictions: can only do Pendente→Em Análise, Em Análise→Concluída, Em Análise→Pendente
     if (isAnalista) {
       const from = item.displayStatus;
       const allowed =
-        (from === 'Pendente' && targetStatus === 'Em AnÃ¡lise') ||
-        (from === 'Em AnÃ¡lise' && targetStatus === 'ConcluÃ­da') ||
-        (from === 'Em AnÃ¡lise' && targetStatus === 'Pendente');
+        (from === 'Pendente' && targetStatus === 'Em Análise') ||
+        (from === 'Em Análise' && targetStatus === 'Concluída') ||
+        (from === 'Em Análise' && targetStatus === 'Pendente');
       if (!allowed) {
-        toast({ title: 'AÃ§Ã£o nÃ£o permitida', description: 'Analistas sÃ³ podem iniciar, entregar ou devolver anÃ¡lises.', variant: 'destructive' });
+        toast({ title: 'Ação não permitida', description: 'Analistas só podem iniciar, entregar ou devolver análises.', variant: 'destructive' });
         setDraggedId(null);
         return;
       }
-      // Em AnÃ¡lise â Pendente opens rejection modal
-      if (from === 'Em AnÃ¡lise' && targetStatus === 'Pendente') {
+      // Em Análise → Pendente opens rejection modal
+      if (from === 'Em Análise' && targetStatus === 'Pendente') {
         setRejeitarAnalistaModal(draggedId);
         setJustificativaRejeicao('');
         setDraggedId(null);
@@ -498,7 +498,7 @@ export default function PipelineResearchPage() {
       }
     }
 
-    if (targetStatus === 'ConcluÃ­da') {
+    if (targetStatus === 'Concluída') {
       setEntregarModal(draggedId);
       setDraggedId(null);
       return;
@@ -512,7 +512,7 @@ export default function PipelineResearchPage() {
 
     const fromStatus = item.displayStatus;
     const extras: Record<string, any> = {};
-    if (targetStatus === 'Em AnÃ¡lise') {
+    if (targetStatus === 'Em Análise') {
       extras.data_inicio = new Date().toISOString().split('T')[0];
     }
 
@@ -523,7 +523,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'ConcluÃ­da' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida c/ AlocaÃ§Ã£o' || a.displayStatus === 'Vencida s/ AlocaÃ§Ã£o'))
+    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida c/ Alocação' || a.displayStatus === 'Vencida s/ Alocação'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
@@ -533,7 +533,7 @@ export default function PipelineResearchPage() {
         <h2 className="text-lg font-semibold text-foreground">Pipeline de Research</h2>
         {canCreate && (
           <Button size="sm" className="gap-1.5 w-full sm:w-auto" onClick={() => setNovaModal(true)}>
-            <Plus className="h-3.5 w-3.5" /> Nova AnÃ¡lise
+            <Plus className="h-3.5 w-3.5" /> Nova Análise
           </Button>
         )}
       </div>
@@ -559,7 +559,7 @@ export default function PipelineResearchPage() {
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="vencido">Vencido</SelectItem>
             <SelectItem value="semana">Esta semana</SelectItem>
-            <SelectItem value="mes">Este mÃªs</SelectItem>
+            <SelectItem value="mes">Este mês</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -592,7 +592,7 @@ export default function PipelineResearchPage() {
                   draggedId && "border-2 border-dashed border-primary/30 bg-primary/5"
                 )}>
                   {items.map(item => {
-                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em AnÃ¡lise');
+                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
                     const posAtiva = temPosicaoAtiva(item.empresa_id);
                     const isMyAnalise = item.analista_responsavel === currentUser?.id;
 
@@ -646,7 +646,7 @@ export default function PipelineResearchPage() {
                             )}
                             {posAtiva && (
                               <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
-                                â ï¸ PosiÃ§Ã£o Ativa
+                                ⚠️ Posição Ativa
                               </Badge>
                             )}
                           </div>
@@ -667,18 +667,18 @@ export default function PipelineResearchPage() {
                           </div>
                           {item.data_comite && (
                             <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
-                              ð {fmtDateBR(item.data_comite)}
+                              📅 {fmtDateBR(item.data_comite)}
                             </Badge>
                           )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
                             {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em AnÃ¡lise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em AnÃ¡lise' }); }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Em AnÃ¡lise' && (
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
                                   <CheckCircle className="h-2.5 w-2.5" /> Entregar
@@ -688,7 +688,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && item.displayStatus === 'ConcluÃ­da' && (
+                            {isGestor && item.displayStatus === 'Concluída' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                                   <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
@@ -698,7 +698,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em AnÃ¡lise') && (
+                            {isGestor && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
@@ -708,7 +708,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ AlocaÃ§Ã£o' || item.displayStatus === 'Vencida s/ AlocaÃ§Ã£o') && (
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
                                 const { data: maxRows } = await supabase
                                   .from('analises')
@@ -730,7 +730,7 @@ export default function PipelineResearchPage() {
                                   solicitante_id: currentUser?.id || '',
                                 });
                                 registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
-                                toast({ title: `Nova anÃ¡lise v${novaVersao} criada` });
+                                toast({ title: `Nova análise v${novaVersao} criada` });
                               }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
@@ -764,7 +764,7 @@ export default function PipelineResearchPage() {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-2 pt-2">
                   {items.map(item => {
-                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em AnÃ¡lise');
+                    const prazoVencido = item.prazo && item.prazo < hoje && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise');
                     const posAtiva = temPosicaoAtiva(item.empresa_id);
                     const isMyAnalise = item.analista_responsavel === currentUser?.id;
 
@@ -815,7 +815,7 @@ export default function PipelineResearchPage() {
                             )}
                             {posAtiva && (
                               <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
-                                â ï¸ PosiÃ§Ã£o Ativa
+                                ⚠️ Posição Ativa
                               </Badge>
                             )}
                           </div>
@@ -832,18 +832,18 @@ export default function PipelineResearchPage() {
                           </div>
                           {item.data_comite && (
                             <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30">
-                              ð {fmtDateBR(item.data_comite)}
+                              📅 {fmtDateBR(item.data_comite)}
                             </Badge>
                           )}
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
                             {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em AnÃ¡lise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em AnÃ¡lise' }); }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Em AnÃ¡lise' && (
+                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
                                   <CheckCircle className="h-2.5 w-2.5" /> Entregar
@@ -853,7 +853,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && item.displayStatus === 'ConcluÃ­da' && (
+                            {isGestor && item.displayStatus === 'Concluída' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                                   <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
@@ -863,7 +863,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ AlocaÃ§Ã£o' || item.displayStatus === 'Vencida s/ AlocaÃ§Ã£o') && (
+                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
                                 const { data: maxRows } = await supabase
                                   .from('analises')
@@ -884,7 +884,7 @@ export default function PipelineResearchPage() {
                                   versao: novaVersao,
                                   solicitante_id: currentUser?.id || '',
                                 });
-                                toast({ title: `Nova anÃ¡lise v${novaVersao} criada` });
+                                toast({ title: `Nova análise v${novaVersao} criada` });
                               }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
@@ -924,18 +924,18 @@ export default function PipelineResearchPage() {
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
                     <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva)}</Badge>
                   </div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em AnÃ¡lise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel, allProfiles)}</p></div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? getAnalistaNome(drawerAnalise.solicitante_id, allProfiles) : 'â'}</p></div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">InÃ­cio</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_inicio)}</p></div>
-                  <div><p className="text-[10px] text-muted-foreground uppercase">ConclusÃ£o</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_conclusao)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Solicitante</p><p className="text-xs">{drawerAnalise.solicitante_id ? getAnalistaNome(drawerAnalise.solicitante_id, allProfiles) : '—'}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Início</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_inicio)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Conclusão</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_conclusao)}</p></div>
                 </div>
 
-                {/* RecomendaÃ§Ã£o + PreÃ§os */}
+                {/* Recomendação + Preços */}
                 {drawerAnalise.recomendacao && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-muted-foreground uppercase">RecomendaÃ§Ã£o</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
                       <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[drawerAnalise.recomendacao] || ''}`}>
                         {drawerAnalise.recomendacao}
                       </Badge>
@@ -943,16 +943,16 @@ export default function PipelineResearchPage() {
                     {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">MÃ­nimo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : 'â'}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
                         </div>
                         <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">MÃ©dio</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : 'â'}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
                         </div>
                         <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">MÃ¡ximo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : 'â'}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
+                          <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
                         </div>
                       </div>
                     )}
@@ -962,49 +962,49 @@ export default function PipelineResearchPage() {
                   </div>
                 )}
 
-                {/* Data do ComitÃª */}
+                {/* Data do Comitê */}
                 {drawerAnalise.data_comite && (
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Data do ComitÃª</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_comite)}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Data do Comitê</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_comite)}</p></div>
                 )}
 
-                {/* Justificativa de rejeiÃ§Ã£o */}
+                {/* Justificativa de rejeição */}
                 {drawerAnalise.justificativa_rejeicao && (
-                  <div><p className="text-[10px] text-muted-foreground uppercase">Justificativa de DevoluÃ§Ã£o</p><p className="text-xs mt-1 text-status-danger">{drawerAnalise.justificativa_rejeicao}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Justificativa de Devolução</p><p className="text-xs mt-1 text-status-danger">{drawerAnalise.justificativa_rejeicao}</p></div>
                 )}
 
                 {drawerAnalise.observacoes && (
-                  <div><p className="text-[10px] text-muted-foreground uppercase">ObservaÃ§Ãµes</p><p className="text-xs mt-1">{drawerAnalise.observacoes}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Observações</p><p className="text-xs mt-1">{drawerAnalise.observacoes}</p></div>
                 )}
 
                 {drawerAnalise.relatorio && (
-                  <div><p className="text-[10px] text-muted-foreground uppercase">RelatÃ³rio</p><p className="text-xs mt-1 whitespace-pre-wrap">{drawerAnalise.relatorio}</p></div>
+                  <div><p className="text-[10px] text-muted-foreground uppercase">Relatório</p><p className="text-xs mt-1 whitespace-pre-wrap">{drawerAnalise.relatorio}</p></div>
                 )}
 
                 {temPosicaoAtiva(drawerAnalise.empresa_id) && (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-orange-500/10 border border-orange-500/30">
                     <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0" />
-                    <span className="text-xs text-orange-400">Este emissor possui posiÃ§Ã£o ativa na carteira</span>
+                    <span className="text-xs text-orange-400">Este emissor possui posição ativa na carteira</span>
                   </div>
                 )}
 
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
                   {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
-                    <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em AnÃ¡lise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: drawerAnalise.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em AnÃ¡lise' }); setDrawerAnalise(null); }}>
-                      <Play className="h-3 w-3" /> Iniciar AnÃ¡lise
+                    <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: drawerAnalise.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); setDrawerAnalise(null); }}>
+                      <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em AnÃ¡lise' && (
+                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
-                        <CheckCircle className="h-3 w-3" /> Entregar AnÃ¡lise
+                        <CheckCircle className="h-3 w-3" /> Entregar Análise
                       </Button>
                       <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setRejeitarAnalistaModal(drawerAnalise.id); setJustificativaRejeicao(''); }}>
                         <X className="h-3 w-3" /> Devolver
                       </Button>
                     </>
                   )}
-                  {isGestor && drawerAnalise.status === 'ConcluÃ­da' && (
+                  {isGestor && drawerAnalise.status === 'Concluída' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                         <ThumbsUp className="h-3 w-3" /> Aprovar
@@ -1014,7 +1014,7 @@ export default function PipelineResearchPage() {
                       </Button>
                     </>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em AnÃ¡lise') && (
+                  {isGestor && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
                     <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
@@ -1033,10 +1033,10 @@ export default function PipelineResearchPage() {
 
                 <Separator className="bg-border" />
 
-                {/* HistÃ³rico */}
+                {/* Histórico */}
                 <div>
-                  <p className="text-xs font-semibold text-foreground mb-2">HistÃ³rico deste emissor</p>
-                  {historico.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma anÃ¡lise anterior.</p>}
+                  <p className="text-xs font-semibold text-foreground mb-2">Histórico deste emissor</p>
+                  {historico.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma análise anterior.</p>}
                   {historico.map(h => (
                     <div key={h.id} className="p-2 rounded-md bg-surface-1 mb-2 space-y-1">
                       <div className="flex items-center justify-between">
@@ -1057,12 +1057,12 @@ export default function PipelineResearchPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Nova AnÃ¡lise Modal */}
+      {/* Nova Análise Modal */}
       <Dialog open={novaModal} onOpenChange={setNovaModal}>
         <DialogContent className="max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Nova AnÃ¡lise</DialogTitle>
-            <DialogDescription>Preencha os campos para solicitar uma nova anÃ¡lise de crÃ©dito ou aÃ§Ãµes.</DialogDescription>
+            <DialogTitle>Nova Análise</DialogTitle>
+            <DialogDescription>Preencha os campos para solicitar uma nova análise de crédito ou ações.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -1082,7 +1082,7 @@ export default function PipelineResearchPage() {
                     <CommandList className="max-h-60">
                       <CommandEmpty>Nenhuma empresa encontrada.</CommandEmpty>
                       {empresasDB
-                        .filter(e => e.tipo !== 'TÃ­tulo PÃºblico')
+                        .filter(e => e.tipo !== 'Título Público')
                         .sort((a, b) => a.nome.localeCompare(b.nome))
                         .map(e => (
                           <CommandItem
@@ -1100,17 +1100,17 @@ export default function PipelineResearchPage() {
               </Popover>
             </div>
             <div>
-              <Label className="text-xs">Tipo de AnÃ¡lise</Label>
+              <Label className="text-xs">Tipo de Análise</Label>
               <Select value={novoTipo} onValueChange={setNovoTipo}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar tipo" /></SelectTrigger>
                 <SelectContent className="bg-card border-border">
-                  <SelectItem value="CrÃ©dito Privado">CrÃ©dito Privado</SelectItem>
-                  <SelectItem value="AÃ§Ãµes">AÃ§Ãµes</SelectItem>
+                  <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
+                  <SelectItem value="Ações">Ações</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Analista ResponsÃ¡vel</Label>
+              <Label className="text-xs">Analista Responsável</Label>
               <Select value={novoAnalistaId} onValueChange={setNovoAnalistaId}>
                 <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar analista" /></SelectTrigger>
                 <SelectContent className="bg-card border-border max-h-60">
@@ -1133,37 +1133,37 @@ export default function PipelineResearchPage() {
               </Popover>
             </div>
             <div>
-              <Label className="text-xs">ObservaÃ§Ãµes</Label>
+              <Label className="text-xs">Observações</Label>
               <Textarea value={novoObs} onChange={e => setNovoObs(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Opcional..." />
             </div>
             <Button size="sm" className="w-full" onClick={handleCriar} disabled={!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo || createAnalise.isPending}>
               {createAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Criar AnÃ¡lise
+              Criar Análise
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Entregar Modal (ConclusÃ£o) */}
+      {/* Entregar Modal (Conclusão) */}
       <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Entregar AnÃ¡lise {entregarAnalise ? `â ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
+            <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
               {isAcoes
-                ? 'Preencha o relatÃ³rio, recomendaÃ§Ã£o e preÃ§os sugeridos para concluir.'
-                : 'Preencha o relatÃ³rio para concluir a anÃ¡lise.'}
+                ? 'Preencha o relatório, recomendação e preços sugeridos para concluir.'
+                : 'Preencha o relatório para concluir a análise.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">RelatÃ³rio (obrigatÃ³rio)</Label>
+              <Label className="text-xs">Relatório (obrigatório)</Label>
               <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
             </div>
             {isAcoes && (
               <>
                 <div>
-                  <Label className="text-xs">RecomendaÃ§Ã£o (obrigatÃ³rio)</Label>
+                  <Label className="text-xs">Recomendação (obrigatório)</Label>
                   <Select value={recomendacao} onValueChange={setRecomendacao}>
                     <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
                     <SelectContent className="bg-card border-border">
@@ -1175,15 +1175,15 @@ export default function PipelineResearchPage() {
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <Label className="text-xs">PreÃ§o MÃ­n.</Label>
+                    <Label className="text-xs">Preço Mín.</Label>
                     <Input type="number" step="0.01" value={precoMin} onChange={e => setPrecoMin(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
                   </div>
                   <div>
-                    <Label className="text-xs">PreÃ§o MÃ©dio</Label>
+                    <Label className="text-xs">Preço Médio</Label>
                     <Input type="number" step="0.01" value={precoMedio} onChange={e => setPrecoMedio(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
                   </div>
                   <div>
-                    <Label className="text-xs">PreÃ§o MÃ¡x.</Label>
+                    <Label className="text-xs">Preço Máx.</Label>
                     <Input type="number" step="0.01" value={precoMaximo} onChange={e => setPrecoMaximo(e.target.value)} className="mt-1 h-8 text-sm bg-surface-1 border-border" placeholder="R$" />
                   </div>
                 </div>
@@ -1205,42 +1205,42 @@ export default function PipelineResearchPage() {
             )}
             <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || (isAcoes && !recomendacao) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Entregar AnÃ¡lise
+              Entregar Análise
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* RejeiÃ§Ã£o pelo Analista Modal (Em AnÃ¡lise â Pendente) */}
+      {/* Rejeição pelo Analista Modal (Em Análise → Pendente) */}
       <Dialog open={!!rejeitarAnalistaModal} onOpenChange={() => { setRejeitarAnalistaModal(null); setJustificativaRejeicao(''); }}>
         <DialogContent className="max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Devolver AnÃ¡lise</DialogTitle>
-            <DialogDescription>Informe a justificativa para devolver esta anÃ¡lise. Ela voltarÃ¡ ao status Pendente.</DialogDescription>
+            <DialogTitle>Devolver Análise</DialogTitle>
+            <DialogDescription>Informe a justificativa para devolver esta análise. Ela voltará ao status Pendente.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Justificativa (obrigatÃ³ria)</Label>
+              <Label className="text-xs">Justificativa (obrigatória)</Label>
               <Textarea value={justificativaRejeicao} onChange={e => setJustificativaRejeicao(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
             </div>
             <Button size="sm" className="w-full" variant="destructive" onClick={handleRejeitarAnalista} disabled={!justificativaRejeicao.trim() || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Confirmar DevoluÃ§Ã£o
+              Confirmar Devolução
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ComitÃª Modal (Aprovar / Reprovar) */}
+      {/* Comitê Modal (Aprovar / Reprovar) */}
       <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
-            <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar AnÃ¡lise' : 'Reprovar AnÃ¡lise'}</DialogTitle>
-            <DialogDescription>Informe a data do ComitÃª de Investimentos em que a decisÃ£o foi tomada.</DialogDescription>
+            <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
+            <DialogDescription>Informe a data do Comitê de Investimentos em que a decisão foi tomada.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label className="text-xs">Data do ComitÃª (obrigatÃ³ria)</Label>
+              <Label className="text-xs">Data do Comitê (obrigatória)</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
@@ -1255,8 +1255,8 @@ export default function PipelineResearchPage() {
             </div>
             {comiteModal?.targetStatus === 'Reprovada' && (
               <div>
-                <Label className="text-xs">Motivo da ReprovaÃ§Ã£o (obrigatÃ³rio)</Label>
-                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovaÃ§Ã£o..." />
+                <Label className="text-xs">Motivo da Reprovação (obrigatório)</Label>
+                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovação..." />
               </div>
             )}
             <Button
@@ -1267,7 +1267,7 @@ export default function PipelineResearchPage() {
               disabled={!dataComite || (comiteModal?.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) || updateStatus.isPending}
             >
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar AprovaÃ§Ã£o' : 'Confirmar ReprovaÃ§Ã£o'}
+              {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}
             </Button>
           </div>
         </DialogContent>
@@ -1278,7 +1278,7 @@ export default function PipelineResearchPage() {
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
             <DialogTitle>Reatribuir Analista</DialogTitle>
-            <DialogDescription>Selecione o novo analista responsÃ¡vel.</DialogDescription>
+            <DialogDescription>Selecione o novo analista responsável.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Select value={novoAnalista} onValueChange={setNovoAnalista}>
@@ -1296,9 +1296,9 @@ export default function PipelineResearchPage() {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir AnÃ¡lise</AlertDialogTitle>
+            <AlertDialogTitle>Excluir Análise</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir esta anÃ¡lise? Esta aÃ§Ã£o nÃ£o pode ser desfeita.
+              Tem certeza que deseja excluir esta análise? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
