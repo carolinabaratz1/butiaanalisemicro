@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { analistas } from '@/data/analistas';
+
 
 const statusClass: Record<string, string> = {
   'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
@@ -46,10 +46,11 @@ function getDisplayStatus(status: string, dataConclusao: string | null): string 
   return status;
 }
 
-function getAnalistaNome(id: string): string {
+function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []): string {
   if (!id) return '—';
-  const a = analistas.find(an => an.id === id);
-  return a?.nome || id;
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  if (p) return p.nome;
+  return id;
 }
 
 export default function AnalisesPage() {
