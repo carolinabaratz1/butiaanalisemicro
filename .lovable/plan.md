@@ -2,66 +2,73 @@
 
 ## Diagnóstico
 
-Há duas inconsistências distintas entre as métricas.
+Três problemas, todos relacionados à **corrupção UTF-8 → Latin-1 → UTF-8** (mojibake) no arquivo `src/pages/PipelineResearchPage.tsx`:
 
-### Causa raiz #1 (Dashboard): falta de deduplicação por versão
+### 1. Dados NÃO foram perdidos
+Verifiquei direto no banco: existem **10 análises com status `Em Análise`**, 161 `Aprovada`, 2 `Reprovada`. O celular (que renderiza outra view ou cache antigo) mostra corretamente "Em Análise (10)". O desktop mostra "0" porque o código do Pipeline compara com a string corrompida `'Em AnÃ¡lise'` e nunca casa com o valor real do banco `'Em Análise'`.
 
-O Dashboard (`DashboardPage.tsx`, linhas 129–147) classifica e conta **todas as análises da tabela**, incluindo versões antigas/superseded. O Pipeline Research (`PipelineResearchPage.tsx`, linhas 274–310) corretamente agrupa por `empresa_id + tipo` e mantém apenas a `MAX(versao)`.
+### 2. Erro de build TS2367 (Pipeline)
+Linha 135: `currentUser?.funcao === 'CoordenaÃ§Ã£o/Especialista'`. O tipo `UserRole` define `'Coordenação/Especialista'` (correto), por isso o TypeScript reclama que "não há overlap". Mesma causa: encoding corrompido.
 
-**Verificação direta no banco:**
-- Total bruto (Dashboard): **50** Vencidas c/ Alocação
-- Após dedup por `empresa_id + tipo` (Pipeline): **42**
+### 3. Erros de build TS18046 (edge functions)
+`supabase/functions/create-user/index.ts:99` e `supabase/functions/manage-user/index.ts:186`: `catch (err)` retorna `err.message` sem narrowing. No Deno strict, `err` é `unknown`.
 
-Diferença = 8 análises antigas (v1) que já foram substituídas por uma v2 ativa (em Análise/Aprovada), mas o Dashboard ainda está contando ambas.
+## Escopo da corrupção
 
-**Conclusão:** o **Pipeline Research está correto (42)**. O Dashboard está inflando o contador.
-
-### Causa raiz #2 (dados): duplicatas com mesma versão
-
-Encontrei 2 pares `empresa_id + tipo` com **dois registros ambos com `versao = 1`** (versionamento foi bypassado, provavelmente em ações de "Reabrir" antes da correção anterior):
-
-| empresa | tipo | versões |
-|---|---|---|
-| `50.258.089/0001-69` | Crédito Privado | [1, 1] — ambas Vencida c/ Alocação |
-| `30.306.294/0001-45` | Crédito Privado | [1, 1] — Aprovada + Vencida c/ Alocação |
-
-Hoje o Pipeline mostra apenas uma delas (a primeira do `sort` desempate), mas a outra fica órfã no banco.
+- `src/pages/PipelineResearchPage.tsx` — **110 ocorrências** de mojibake (tipo `AnaliseStatus`, comparações de status, comparações de role, labels de UI, comentários, ícones de emoji virando "ð"). Todas as colunas do Kanban com texto corrompido (`AnÃ¡lise`, `ConcluÃda`, `PosiÃ§Ã£o Ativa`, `AlocaÃ§Ã£o`, `Nova AnÃ¡lise`).
+- `src/data/emissores.ts` — **falso positivo**, os "Ã" são parte legítima de palavras como "LOCAÇÃO".
+- Demais arquivos limpos.
 
 ## Correção
 
-### 1. Aplicar deduplicação por versão no Dashboard
+### Passo 1 — Restaurar encoding em `PipelineResearchPage.tsx`
+Reescrever o arquivo substituindo todos os mojibakes pelas strings UTF-8 corretas. Mapeamento aplicado:
 
-Em `src/pages/DashboardPage.tsx`, antes dos filtros das linhas 141–147, replicar a lógica do Pipeline:
-- Agrupar `computedAnalises` por `${empresa_id}::${tipo}`
-- Ordenar por `versao DESC` e manter apenas o primeiro
-- Exceção: se o mais recente for `Reprovada`, incluir também a anterior `Aprovada/Vencida` (mesma regra do Pipeline, para coerência)
+| Corrompido | Correto |
+|---|---|
+| `Em AnÃ¡lise` | `Em Análise` |
+| `ConcluÃ­da` / `ConcluÃda` | `Concluída` |
+| `Vencida c/ AlocaÃ§Ã£o` | `Vencida c/ Alocação` |
+| `Vencida s/ AlocaÃ§Ã£o` | `Vencida s/ Alocação` |
+| `CoordenaÃ§Ã£o/Especialista` | `Coordenação/Especialista` |
+| `PosiÃ§Ã£o Ativa` | `Posição Ativa` |
+| `RejeiÃ§Ã£o` | `Rejeição` |
+| `ComitÃª` | `Comitê` |
+| `Nova AnÃ¡lise` | `Nova Análise` |
+| `â` (em comentário de seta) | `→` |
+| `ð...` (ícone de calendário corrompido) | `📅` |
+| Demais acentos `Ã£`/`Ã§`/`Ã©`/`Ã¡` etc. | recompor para `ã`/`ç`/`é`/`á` etc. |
 
-Após isso, recalcular `pendentes`, `emAnalise`, `aprovadas`, `vencidasComAlocacao` etc. sobre o conjunto deduplicado. Resultado esperado: Dashboard passa a mostrar **42** (alinhado ao Pipeline).
+Após o fix, o tipo `AnaliseStatus` voltará a casar com os valores que vêm do banco — as 10 análises "Em Análise" voltam a aparecer no desktop, e o erro TS2367 some.
 
-### 2. Corrigir os 2 pares com `versao` duplicada (data fix via migration)
-
-Para cada par `(empresa_id, tipo)` com duas linhas em `versao = 1`, manter a mais recente (`updated_at` maior) como `versao = 2` e deixar a antiga como `versao = 1`. SQL:
-
-```sql
-WITH dups AS (
-  SELECT id, empresa_id, tipo,
-    ROW_NUMBER() OVER (PARTITION BY empresa_id, tipo ORDER BY updated_at ASC) AS rn
-  FROM analises
-  WHERE (empresa_id, tipo) IN (
-    SELECT empresa_id, tipo FROM analises
-    GROUP BY empresa_id, tipo, versao HAVING COUNT(*) > 1
-  )
-)
-UPDATE analises a SET versao = d.rn, updated_at = now()
-FROM dups d WHERE a.id = d.id;
+### Passo 2 — Corrigir tipagem em `catch (err)` nas duas edge functions
+Em ambos os arquivos, trocar:
+```ts
+} catch (err) {
+  return new Response(JSON.stringify({ error: err.message }), { ... });
+}
+```
+por:
+```ts
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return new Response(JSON.stringify({ error: message }), { ... });
+}
 ```
 
-### 3. (Opcional, recomendado) Constraint para prevenir recorrência
+### Passo 3 — Não tocar no banco
+Nenhuma migration, nenhum UPDATE/INSERT/DELETE. Os dados estão íntegros; só o frontend estava lendo as strings erradas.
 
-Adicionar índice único `UNIQUE (empresa_id, tipo, versao)` na tabela `analises` para impedir futuros bypasses do versionamento.
+## Resultado esperado
+
+- Build verde (TS2367 e dois TS18046 resolvidos).
+- Coluna "Em Análise" do Pipeline volta a mostrar **10** (consistente com o celular e com o banco).
+- Labels da UI em português correto: "Em Análise", "Concluída", "Vencida c/ Alocação", "Posição Ativa", "Comitê", "Nova Análise", ícone 📅.
+- Comparações de role (`'Coordenação/Especialista'`) voltam a funcionar — analistas/coordenadores não ficam mais sem permissão por causa do mismatch de string.
 
 ## Arquivos modificados
 
-- `src/pages/DashboardPage.tsx` — deduplicação por `empresa_id + tipo` mantendo `MAX(versao)`
-- Nova migration SQL — corrige 2 duplicatas e (opcional) cria índice único
+- `src/pages/PipelineResearchPage.tsx` — reescrita completa do arquivo com encoding UTF-8 restaurado
+- `supabase/functions/create-user/index.ts` — narrowing de `err` no catch
+- `supabase/functions/manage-user/index.ts` — narrowing de `err` no catch
 
