@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { analistas } from '@/data/analistas';
+
 
 const statusClass: Record<string, string> = {
   'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
@@ -46,10 +46,11 @@ function getDisplayStatus(status: string, dataConclusao: string | null): string 
   return status;
 }
 
-function getAnalistaNome(id: string): string {
+function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []): string {
   if (!id) return '—';
-  const a = analistas.find(an => an.id === id);
-  return a?.nome || id;
+  const p = profiles.find(p => p.id === id || p.nome === id);
+  if (p) return p.nome;
+  return id;
 }
 
 export default function AnalisesPage() {
@@ -62,6 +63,17 @@ export default function AnalisesPage() {
     queryKey: ['empresas-lookup'],
     queryFn: async () => {
       const { data, error } = await supabase.from('empresas').select('cnpj, nome');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-lookup-analises'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, funcao, status');
       if (error) throw error;
       return data || [];
     },
@@ -95,7 +107,9 @@ export default function AnalisesPage() {
     ? analises.filter(a => a.empresa_id === selected.empresa_id && a.tipo === selected.tipo)
     : [];
 
-  const analistasAtivos = analistas.filter(a => a.ativo);
+  const analistasAtivos = allProfiles.filter(p =>
+    p.status === 'Ativo' && (p.funcao === 'Analista' || p.funcao === 'Coordenação/Especialista')
+  );
 
   if (isLoading) {
     return (
@@ -169,7 +183,7 @@ export default function AnalisesPage() {
                     <TableRow key={a.id} className="border-border">
                       <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
                       <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                      <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel)}</TableCell>
+                      <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel, allProfiles)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_inicio)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_conclusao)}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></TableCell>
@@ -207,8 +221,8 @@ export default function AnalisesPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div><span className="text-muted-foreground text-xs">Tipo:</span> <span>{selected.tipo}</span></div>
                     <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></div>
-                    <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel)}</span></div>
-                    <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '')}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel, allProfiles)}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '', allProfiles)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Início:</span> <span>{fmtDateBR(selected.data_inicio)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Conclusão:</span> <span>{fmtDateBR(selected.data_conclusao)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Decisão:</span> <span>{selected.decisao || '—'}</span></div>
