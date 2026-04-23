@@ -68,6 +68,17 @@ export default function AnalisesPage() {
     },
   });
 
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['profiles-lookup-analises'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nome, funcao, status');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   function getEmpresaNome(id: string): string {
     const e = empresas.find(em => em.cnpj === id);
     return e?.nome || id;
@@ -96,7 +107,9 @@ export default function AnalisesPage() {
     ? analises.filter(a => a.empresa_id === selected.empresa_id && a.tipo === selected.tipo)
     : [];
 
-  const analistasAtivos = analistas.filter(a => a.ativo);
+  const analistasAtivos = allProfiles.filter(p =>
+    p.status === 'Ativo' && (p.funcao === 'Analista' || p.funcao === 'Coordenação/Especialista')
+  );
 
   if (isLoading) {
     return (
@@ -170,7 +183,7 @@ export default function AnalisesPage() {
                     <TableRow key={a.id} className="border-border">
                       <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
                       <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                      <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel)}</TableCell>
+                      <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel, allProfiles)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_inicio)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_conclusao)}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></TableCell>
@@ -208,8 +221,8 @@ export default function AnalisesPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div><span className="text-muted-foreground text-xs">Tipo:</span> <span>{selected.tipo}</span></div>
                     <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></div>
-                    <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel)}</span></div>
-                    <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '')}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel, allProfiles)}</span></div>
+                    <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '', allProfiles)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Início:</span> <span>{fmtDateBR(selected.data_inicio)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Conclusão:</span> <span>{fmtDateBR(selected.data_conclusao)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Decisão:</span> <span>{selected.decisao || '—'}</span></div>
