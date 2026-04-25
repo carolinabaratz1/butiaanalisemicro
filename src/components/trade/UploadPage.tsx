@@ -180,7 +180,7 @@ export function UploadPage() {
           {progress > 0 && (
             <div className="mt-4 space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{progress < 100 ? "Processando…" : "Concluído"}</span>
+                <span>{statusLabel || (progress < 100 ? "Processando…" : "Concluído")}</span>
                 <span>{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
