@@ -16,6 +16,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Background task API exposed by Supabase Edge Runtime
+// deno-lint-ignore no-explicit-any
+declare const EdgeRuntime: { waitUntil(p: Promise<any>): void };
+
 // ── Helpers ────────────────────────────────────────────────
 
 function parseNomeAtivo(nome: string) {
