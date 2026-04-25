@@ -33,6 +33,12 @@ type UploadSummary = {
   linhas_atualizadas?: number | null;
 };
 
+type IpcaBatchResult = {
+  processed_count?: number | string | null;
+  next_after_ticker?: string | null;
+  has_more?: boolean | null;
+};
+
 const tableConfig: Record<UploadTable, { onConflict: string }> = {
   trade_taxas: { onConflict: "ticker,data" },
   trade_ativos: { onConflict: "ticker" },
@@ -195,13 +201,14 @@ async function recalcMetrics(supabase: any) {
   let guard = 0;
 
   while (hasMore) {
-    const { data, error: errIpca } = await supabase.rpc("recalc_trade_metricas_ipca_batch", {
+    const response: { data: IpcaBatchResult[] | IpcaBatchResult | null; error: { message: string } | null } = await supabase.rpc("recalc_trade_metricas_ipca_batch", {
       p_after_ticker: afterTicker,
       p_limit: 100,
     });
+    const { data, error: errIpca } = response;
     if (errIpca) throw new Error(`recalc_trade_metricas_ipca_batch: ${errIpca.message}`);
 
-    const batch = Array.isArray(data) ? data[0] : data;
+    const batch: IpcaBatchResult | null | undefined = Array.isArray(data) ? data[0] : data;
     const processedCount = Number(batch?.processed_count ?? 0);
     afterTicker = batch?.next_after_ticker ?? afterTicker;
     hasMore = Boolean(batch?.has_more) && processedCount > 0;
