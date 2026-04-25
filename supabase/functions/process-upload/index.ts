@@ -103,6 +103,8 @@ serve(async (req) => {
     return jsonResponse({ success: false, error: "Sessão inválida. Faça login novamente." }, 401);
   }
 
+  let body: Record<string, unknown> | null = null;
+
   try {
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
@@ -112,7 +114,7 @@ serve(async (req) => {
       }, 400);
     }
 
-    const body = await req.json();
+    body = await req.json();
     const action = body?.action;
 
     if (action === "start") {
@@ -150,17 +152,13 @@ serve(async (req) => {
     throw new Error("Ação inválida.");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const maybeLogId = Number((await safeJsonClone(req).catch(() => null))?.log_id);
+    const maybeLogId = Number(body?.log_id);
     if (Number.isInteger(maybeLogId) && maybeLogId > 0) {
       await supabase.from("trade_upload_log").update({ status: "error", erro_msg: msg }).eq("id", maybeLogId);
     }
     return jsonResponse({ success: false, error: msg }, 500);
   }
 });
-
-async function safeJsonClone(_req: Request) {
-  return null;
-}
 
 // deno-lint-ignore no-explicit-any
 async function finalizeUpload(supabase: any, logId: number, summary: UploadSummary) {
