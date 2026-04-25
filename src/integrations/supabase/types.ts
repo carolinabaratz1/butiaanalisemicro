@@ -398,6 +398,264 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_ativos: {
+        Row: {
+          anos_venc: number | null
+          data_rating: string | null
+          emissor_cnpj: string | null
+          emissor_nome: string | null
+          indexador: string | null
+          nome_completo: string | null
+          rating: string | null
+          spread_emissao: number | null
+          taxa_emissao: string | null
+          ticker: string
+          updated_at: string | null
+          venc_date: string | null
+        }
+        Insert: {
+          anos_venc?: number | null
+          data_rating?: string | null
+          emissor_cnpj?: string | null
+          emissor_nome?: string | null
+          indexador?: string | null
+          nome_completo?: string | null
+          rating?: string | null
+          spread_emissao?: number | null
+          taxa_emissao?: string | null
+          ticker: string
+          updated_at?: string | null
+          venc_date?: string | null
+        }
+        Update: {
+          anos_venc?: number | null
+          data_rating?: string | null
+          emissor_cnpj?: string | null
+          emissor_nome?: string | null
+          indexador?: string | null
+          nome_completo?: string | null
+          rating?: string | null
+          spread_emissao?: number | null
+          taxa_emissao?: string | null
+          ticker?: string
+          updated_at?: string | null
+          venc_date?: string | null
+        }
+        Relationships: []
+      }
+      trade_ipca_ref: {
+        Row: {
+          emissao: string | null
+          ntnb_ref: string
+          ticker: string
+          updated_at: string | null
+        }
+        Insert: {
+          emissao?: string | null
+          ntnb_ref: string
+          ticker: string
+          updated_at?: string | null
+        }
+        Update: {
+          emissao?: string | null
+          ntnb_ref?: string
+          ticker?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      trade_metricas: {
+        Row: {
+          avg_10d: number | null
+          avg_21d: number | null
+          avg_30d: number | null
+          avg_5d: number | null
+          avg_90d: number | null
+          change_bps: number | null
+          indexador: string | null
+          last_date: string | null
+          last_qtd: number | null
+          last_val: number | null
+          last_vol_fin: number | null
+          ntnb_ref: string | null
+          ntnb_taxa: number | null
+          pu_curva: number | null
+          pu_indicativo: number | null
+          pu_ratio: number | null
+          std_90d: number | null
+          ticker: string
+          total_qtd: number | null
+          total_vol_fin: number | null
+          updated_at: string | null
+          z_score: number | null
+          z_score_10d: number | null
+          z_score_21d: number | null
+          z_score_5d: number | null
+        }
+        Insert: {
+          avg_10d?: number | null
+          avg_21d?: number | null
+          avg_30d?: number | null
+          avg_5d?: number | null
+          avg_90d?: number | null
+          change_bps?: number | null
+          indexador?: string | null
+          last_date?: string | null
+          last_qtd?: number | null
+          last_val?: number | null
+          last_vol_fin?: number | null
+          ntnb_ref?: string | null
+          ntnb_taxa?: number | null
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          pu_ratio?: number | null
+          std_90d?: number | null
+          ticker: string
+          total_qtd?: number | null
+          total_vol_fin?: number | null
+          updated_at?: string | null
+          z_score?: number | null
+          z_score_10d?: number | null
+          z_score_21d?: number | null
+          z_score_5d?: number | null
+        }
+        Update: {
+          avg_10d?: number | null
+          avg_21d?: number | null
+          avg_30d?: number | null
+          avg_5d?: number | null
+          avg_90d?: number | null
+          change_bps?: number | null
+          indexador?: string | null
+          last_date?: string | null
+          last_qtd?: number | null
+          last_val?: number | null
+          last_vol_fin?: number | null
+          ntnb_ref?: string | null
+          ntnb_taxa?: number | null
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          pu_ratio?: number | null
+          std_90d?: number | null
+          ticker?: string
+          total_qtd?: number | null
+          total_vol_fin?: number | null
+          updated_at?: string | null
+          z_score?: number | null
+          z_score_10d?: number | null
+          z_score_21d?: number | null
+          z_score_5d?: number | null
+        }
+        Relationships: []
+      }
+      trade_ntnb: {
+        Row: {
+          bond_name: string
+          created_at: string | null
+          data: string
+          id: number
+          pu_indicativo: number | null
+          taxa_indicativa: number | null
+        }
+        Insert: {
+          bond_name: string
+          created_at?: string | null
+          data: string
+          id?: number
+          pu_indicativo?: number | null
+          taxa_indicativa?: number | null
+        }
+        Update: {
+          bond_name?: string
+          created_at?: string | null
+          data?: string
+          id?: number
+          pu_indicativo?: number | null
+          taxa_indicativa?: number | null
+        }
+        Relationships: []
+      }
+      trade_taxas: {
+        Row: {
+          created_at: string | null
+          data: string
+          id: number
+          pu_curva: number | null
+          pu_indicativo: number | null
+          qtd_negociada: number | null
+          taxa_indicativa: number | null
+          ticker: string
+          vol_financeiro: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          data: string
+          id?: number
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          qtd_negociada?: number | null
+          taxa_indicativa?: number | null
+          ticker: string
+          vol_financeiro?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: string
+          id?: number
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          qtd_negociada?: number | null
+          taxa_indicativa?: number | null
+          ticker?: string
+          vol_financeiro?: number | null
+        }
+        Relationships: []
+      }
+      trade_upload_log: {
+        Row: {
+          ativos_di: number | null
+          ativos_ipca: number | null
+          created_at: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          erro_msg: string | null
+          filename: string
+          id: number
+          linhas_atualizadas: number | null
+          linhas_inseridas: number | null
+          status: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          ativos_di?: number | null
+          ativos_ipca?: number | null
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          erro_msg?: string | null
+          filename: string
+          id?: number
+          linhas_atualizadas?: number | null
+          linhas_inseridas?: number | null
+          status?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          ativos_di?: number | null
+          ativos_ipca?: number | null
+          created_at?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          erro_msg?: string | null
+          filename?: string
+          id?: number
+          linhas_atualizadas?: number | null
+          linhas_inseridas?: number | null
+          status?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -439,8 +697,58 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_monitor_view: {
+        Row: {
+          anos_venc: number | null
+          avg_10d: number | null
+          avg_21d: number | null
+          avg_30d: number | null
+          avg_5d: number | null
+          avg_90d: number | null
+          change_bps: number | null
+          data_rating: string | null
+          emissor_cnpj: string | null
+          emissor_nome: string | null
+          indexador: string | null
+          indexador_ativo: string | null
+          last_date: string | null
+          last_qtd: number | null
+          last_val: number | null
+          last_vol_fin: number | null
+          nome_completo: string | null
+          ntnb_ref: string | null
+          ntnb_taxa: number | null
+          pu_curva: number | null
+          pu_indicativo: number | null
+          pu_ratio: number | null
+          rating: string | null
+          spread_emissao: number | null
+          std_90d: number | null
+          taxa_emissao: string | null
+          ticker: string | null
+          total_qtd: number | null
+          total_vol_fin: number | null
+          updated_at: string | null
+          venc_date: string | null
+          z_score: number | null
+          z_score_10d: number | null
+          z_score_21d: number | null
+          z_score_5d: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      get_ipca_history: {
+        Args: { p_cutoff?: string }
+        Returns: {
+          data: string
+          pu_curva: number
+          pu_indicativo: number
+          spread: number
+          ticker: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -448,6 +756,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      recalc_trade_metricas: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role:
