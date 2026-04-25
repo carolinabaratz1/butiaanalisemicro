@@ -81,7 +81,7 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
     return {
       total: data.length,
       hot: data.filter(t => t.z_score > 1.5).length,
-      median: median(vals),
+      median: median(vals) ?? 0,
       wide: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 > 5).length,
       narrow: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 < -5).length,
       totalVolFin: data.reduce((s, t) => s + (t.total_vol_fin ?? 0), 0),
