@@ -757,6 +757,8 @@ export type Database = {
         Returns: boolean
       }
       recalc_trade_metricas: { Args: never; Returns: undefined }
+      recalc_trade_metricas_di: { Args: never; Returns: undefined }
+      recalc_trade_metricas_ipca: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role:
