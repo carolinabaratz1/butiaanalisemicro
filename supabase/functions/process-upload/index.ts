@@ -183,6 +183,12 @@ async function finalizeUpload(supabase: any, logId: number, summary: UploadSumma
 
 // deno-lint-ignore no-explicit-any
 async function recalcMetrics(supabase: any) {
-  const { error } = await supabase.rpc("recalc_trade_metricas");
-  if (error) throw new Error(`recalc_trade_metricas: ${error.message}`);
+  // Quebra o recálculo em duas RPCs separadas para evitar timeout no plano gratuito.
+  // Primeiro DI/PRE/OUTRO, depois IPCA — cada uma roda em transação própria com
+  // statement_timeout = 120s definido dentro da função.
+  const { error: errDi } = await supabase.rpc("recalc_trade_metricas_di");
+  if (errDi) throw new Error(`recalc_trade_metricas_di: ${errDi.message}`);
+
+  const { error: errIpca } = await supabase.rpc("recalc_trade_metricas_ipca");
+  if (errIpca) throw new Error(`recalc_trade_metricas_ipca: ${errIpca.message}`);
 }
