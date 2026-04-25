@@ -22,6 +22,7 @@ interface UploadLog {
   ativos_di: number | null;
   ativos_ipca: number | null;
   linhas_inseridas: number | null;
+  linhas_atualizadas: number | null;
   erro_msg: string | null;
 }
 
