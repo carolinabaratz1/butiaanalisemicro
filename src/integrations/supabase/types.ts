@@ -759,6 +759,14 @@ export type Database = {
       recalc_trade_metricas: { Args: never; Returns: undefined }
       recalc_trade_metricas_di: { Args: never; Returns: undefined }
       recalc_trade_metricas_ipca: { Args: never; Returns: undefined }
+      recalc_trade_metricas_ipca_batch: {
+        Args: { p_after_ticker?: string; p_limit?: number }
+        Returns: {
+          has_more: boolean
+          next_after_ticker: string
+          processed_count: number
+        }[]
+      }
     }
     Enums: {
       app_role:
