@@ -199,11 +199,12 @@ export function UploadPage() {
                 : <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />}
               <div>
                 <p className="font-semibold">{result.success ? "Upload realizado com sucesso" : "Erro no processamento"}</p>
-                {result.success && result.resumo && (
+                {result.success && result.log && (
                   <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground">
-                    <span>Linhas de taxa:   <strong className="text-foreground">{result.resumo.taxas.toLocaleString("pt-BR")}</strong></span>
-                    <span>Ativos:          <strong className="text-foreground">{result.resumo.ativos.toLocaleString("pt-BR")}</strong></span>
-                    <span>Período:         <strong className="text-foreground">{result.resumo.data_inicio} → {result.resumo.data_fim}</strong></span>
+                    <span>Linhas de taxa:   <strong className="text-foreground">{(result.log.linhas_inseridas ?? 0).toLocaleString("pt-BR")}</strong></span>
+                    <span>Ativos:          <strong className="text-foreground">{(result.log.linhas_atualizadas ?? 0).toLocaleString("pt-BR")}</strong></span>
+                    <span>DI / IPCA:       <strong className="text-foreground">{result.log.ativos_di ?? 0} / {result.log.ativos_ipca ?? 0}</strong></span>
+                    <span>Período:         <strong className="text-foreground">{result.log.data_inicio} → {result.log.data_fim}</strong></span>
                   </div>
                 )}
                 {!result.success && (
