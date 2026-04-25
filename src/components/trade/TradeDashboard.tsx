@@ -373,8 +373,8 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono text-sm font-semibold">{t.last_val.toFixed(3)}%</div>
-                  <div className="text-[10px] text-orange-400">Z={t.z_score.toFixed(2)} · +{t.change_bps.toFixed(0)}bps</div>
+                  <div className="font-mono text-sm font-semibold">{(t.last_val ?? 0).toFixed(3)}%</div>
+                  <div className="text-[10px] text-orange-400">Z={(t.z_score ?? 0).toFixed(2)} · +{(t.change_bps ?? 0).toFixed(0)}bps</div>
                 </div>
               </button>
             ))}
