@@ -71,8 +71,9 @@ function num(val: unknown): number | null {
 }
 
 // Batch upsert helper (Supabase has 1000-row limit per call)
+// deno-lint-ignore no-explicit-any
 async function batchUpsert(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   table: string,
   rows: Record<string, unknown>[],
   onConflict: string,
@@ -269,7 +270,8 @@ serve(async (req) => {
 // ── Metrics recalculation ──────────────────────────────────
 // Runs a SQL RPC to avoid pulling all data to the Edge Function.
 // The function "recalc_trade_metricas" is defined below in SQL.
-async function recalcMetrics(supabase: ReturnType<typeof createClient>) {
+// deno-lint-ignore no-explicit-any
+async function recalcMetrics(supabase: any) {
   const { error } = await supabase.rpc("recalc_trade_metricas");
   if (error) throw new Error(`recalc_trade_metricas: ${error.message}`);
 }
