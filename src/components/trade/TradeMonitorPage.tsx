@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useMemo } from "react";
-import { useTradeData, TradeAtivo, Indexador } from "@/hooks/useTradeData";
+import { useTradeData, TradeAtivo } from "@/hooks/useTradeData";
 import { TradeTable } from "./TradeTable";
 import { TradeDashboard } from "./TradeDashboard";
 import { TradeDetail } from "./TradeDetail";
@@ -25,7 +25,7 @@ interface TradeMonitorPageProps {
 type View = "dashboard" | "table";
 
 export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPageProps) {
-  const [mode, setMode] = useState<Indexador | null>(null);
+  const [mode, setMode] = useState<"DI" | "IPCA" | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(initialTicker ?? null);
 
