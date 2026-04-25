@@ -207,7 +207,7 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           { label: "Emissões",     val: kpis.total,              color: modeColor,  sub: `${mode} ativos` },
           { label: "Oportunidades",val: kpis.hot,                color: "#ff4d2e",  sub: "Z-Score > 1.5" },
           { label: isIPCA ? "Spread Mediano" : "Taxa Mediana",
-                                   val: kpis.median.toFixed(2)+"%", color: modeColor, sub: isIPCA ? "% spread cap." : "% a.a. hoje" },
+                                   val: (kpis.median ?? 0).toFixed(2)+"%", color: modeColor, sub: isIPCA ? "% spread cap." : "% a.a. hoje" },
           { label: "Alarg. 21d",   val: kpis.wide,               color: "#fbbf24",  sub: "acima da média" },
           { label: "Estreit. 21d", val: kpis.narrow,             color: "#34d399",  sub: "abaixo da média" },
           { label: "Vol. Fin. 90d",val: fv(kpis.totalVolFin),    color: modeColor,  sub: "R$ Qtd × PU Ind." },
