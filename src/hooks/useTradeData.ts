@@ -1,0 +1,216 @@
+// ============================================================
+// src/hooks/useTradeData.ts
+// Hook central para o Trade Monitor.
+// Lê trade_monitor_view + histórico paginado do Supabase.
+// ============================================================
+
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client"; // ajuste o path
+
+// ── Types ────────────────────────────────────────────────────
+
+export type Indexador = "DI" | "IPCA" | "PRE" | "OUTRO";
+
+export interface TradeAtivo {
+  ticker: string;
+  indexador: Indexador;
+  last_date: string;
+  last_val: number;          // taxa (DI) ou spread cap. (IPCA)
+  last_qtd: number | null;
+  last_vol_fin: number | null;
+  pu_curva: number | null;
+  pu_indicativo: number | null;
+  pu_ratio: number | null;
+  avg_5d: number;
+  avg_10d: number;
+  avg_21d: number;
+  avg_30d: number;
+  avg_90d: number;
+  std_90d: number;
+  z_score: number;
+  z_score_5d: number;
+  z_score_10d: number;
+  z_score_21d: number;
+  change_bps: number;
+  total_qtd: number | null;
+  total_vol_fin: number | null;
+  ntnb_ref: string | null;
+  ntnb_taxa: number | null;
+  // from trade_ativos join
+  nome_completo: string | null;
+  emissor_nome: string | null;
+  emissor_cnpj: string | null;
+  venc_date: string | null;
+  anos_venc: number | null;
+  taxa_emissao: string | null;
+  spread_emissao: number | null;
+  rating: string | null;
+  data_rating: string | null;
+}
+
+export interface HistoryPoint {
+  d: string;
+  r: number;       // spread or taxa
+  pc: number | null;  // pu_curva
+  pi: number | null;  // pu_indicativo
+}
+
+export interface NTNBPoint {
+  d: string;
+  r: number;
+}
+
+export interface TradeDataState {
+  data: TradeAtivo[];
+  history: Record<string, HistoryPoint[]>;
+  ntnbHist: Record<string, NTNBPoint[]>;
+  lastDate: string | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => void;
+}
+
+// ── Hook ─────────────────────────────────────────────────────
+
+export function useTradeData(indexador: Indexador | null): TradeDataState {
+  const [data, setData] = useState<TradeAtivo[]>([]);
+  const [history, setHistory] = useState<Record<string, HistoryPoint[]>>({});
+  const [ntnbHist, setNtnbHist] = useState<Record<string, NTNBPoint[]>>({});
+  const [lastDate, setLastDate] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!indexador) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Fetch metrics
+      const { data: metrics, error: metricsErr } = await supabase
+        .from("trade_monitor_view")
+        .select("*")
+        .eq("indexador", indexador)
+        .order("z_score", { ascending: false });
+
+      if (metricsErr) throw metricsErr;
+      setData((metrics ?? []) as TradeAtivo[]);
+
+      const latest = metrics?.[0]?.last_date ?? null;
+      setLastDate(latest);
+
+      // 2. Fetch historical rates (last 90 trading rows per ticker)
+      // We only fetch for tickers in the current metrics result.
+      const tickers = (metrics ?? []).map((m) => m.ticker as string);
+      if (tickers.length === 0) { setLoading(false); return; }
+
+      // Get 90d cutoff
+      const { data: dates } = await supabase
+        .from("trade_taxas")
+        .select("data")
+        .order("data", { ascending: false })
+        .limit(90);
+      const cutoff = dates?.at(-1)?.data ?? "2000-01-01";
+
+      if (indexador === "IPCA") {
+        // For IPCA we need to compute spread on the fly from the raw table
+        // Fetch taxas + ntnb joins via a RPC for performance
+        const { data: hist, error: histErr } = await supabase
+          .rpc("get_ipca_history", { p_cutoff: cutoff })
+          .select();
+        if (histErr) throw histErr;
+        const byTicker: Record<string, HistoryPoint[]> = {};
+        for (const row of hist ?? []) {
+          const t = row.ticker as string;
+          if (!byTicker[t]) byTicker[t] = [];
+          byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
+        }
+        setHistory(byTicker);
+      } else {
+        // DI: raw taxas
+        const batchSize = 200;
+        const byTicker: Record<string, HistoryPoint[]> = {};
+
+        for (let i = 0; i < tickers.length; i += batchSize) {
+          const batch = tickers.slice(i, i + batchSize);
+          const { data: hist, error: histErr } = await supabase
+            .from("trade_taxas")
+            .select("ticker, data, taxa_indicativa, pu_curva, pu_indicativo")
+            .in("ticker", batch)
+            .gte("data", cutoff)
+            .order("data", { ascending: true });
+          if (histErr) throw histErr;
+          for (const row of hist ?? []) {
+            const t = row.ticker as string;
+            if (!byTicker[t]) byTicker[t] = [];
+            byTicker[t].push({
+              d:  row.data,
+              r:  (row.taxa_indicativa ?? 0) * 100,
+              pc: row.pu_curva,
+              pi: row.pu_indicativo,
+            });
+          }
+        }
+        setHistory(byTicker);
+      }
+
+      // 3. NTN-B history (IPCA only)
+      if (indexador === "IPCA") {
+        const { data: ntnb, error: ntnbErr } = await supabase
+          .from("trade_ntnb")
+          .select("bond_name, data, taxa_indicativa, pu_indicativo")
+          .like("bond_name", "NTN-B%")
+          .gte("data", cutoff)
+          .order("data", { ascending: true });
+        if (ntnbErr) throw ntnbErr;
+        const byBond: Record<string, NTNBPoint[]> = {};
+        for (const row of ntnb ?? []) {
+          if (!byBond[row.bond_name]) byBond[row.bond_name] = [];
+          byBond[row.bond_name].push({ d: row.data, r: (row.taxa_indicativa ?? 0) * 100 });
+        }
+        setNtnbHist(byBond);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar dados");
+    } finally {
+      setLoading(false);
+    }
+  }, [indexador]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return { data, history, ntnbHist, lastDate, loading, error, refresh: load };
+}
+
+// ── Hook de detalhe por ticker (para ficha do emissor) ───────
+
+export function useTickerDetail(ticker: string | null) {
+  const [detail, setDetail] = useState<TradeAtivo | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!ticker) return;
+    setLoading(true);
+
+    (async () => {
+      const [{ data: m }, { data: h }] = await Promise.all([
+        supabase.from("trade_monitor_view").select("*").eq("ticker", ticker).single(),
+        supabase.from("trade_taxas")
+          .select("data, taxa_indicativa, pu_curva, pu_indicativo")
+          .eq("ticker", ticker)
+          .order("data", { ascending: true })
+          .limit(120),
+      ]);
+      setDetail((m ?? null) as TradeAtivo | null);
+      setHistory(
+        (h ?? []).map((r) => ({
+          d: r.data, r: (r.taxa_indicativa ?? 0) * 100, pc: r.pu_curva, pi: r.pu_indicativo,
+        }))
+      );
+      setLoading(false);
+    })();
+  }, [ticker]);
+
+  return { detail, history, loading };
+}

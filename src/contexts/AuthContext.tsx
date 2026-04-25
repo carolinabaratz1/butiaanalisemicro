@@ -127,7 +127,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? rolePermissions[currentUser.funcao] ?? defaultPermissions
     : defaultPermissions;
 
+  // Paths that require an explicit grant (no prefix-match shortcut).
+  // Without this, granting '/trade' (read access) would also grant '/trade/upload' (write).
+  const EXACT_MATCH_PATHS = new Set(["/trade/upload"]);
+
   const hasAccess = (path: string) => {
+    if (EXACT_MATCH_PATHS.has(path)) {
+      return permissions.sections.includes(path);
+    }
     return permissions.sections.some(s => {
       if (path === s) return true;
       if (s !== '/' && path.startsWith(s)) return true;
