@@ -3,13 +3,13 @@
 // Página de upload do Excel — integra ao sistema Lovable.
 // ============================================================
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw } from "lucide-react";
+import * as XLSX from "xlsx";
+import { CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
 interface UploadLog {
@@ -32,8 +32,27 @@ interface UploadResult {
   error?: string;
 }
 
+type UploadTable = "trade_taxas" | "trade_ativos" | "trade_ntnb" | "trade_ipca_ref";
+
+type UploadRows = Record<UploadTable, Record<string, unknown>[]>;
+
+interface ParsedTradeUpload {
+  rows: UploadRows;
+  summary: {
+    data_inicio: string | null;
+    data_fim: string | null;
+    ativos_di: number;
+    ativos_ipca: number;
+    linhas_inseridas: number;
+    linhas_atualizadas: number;
+  };
+}
+
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
+const UPLOAD_BATCH_SIZE = 400;
+const PROCESS_UPLOAD_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-upload`;
+const UPLOAD_TABLES: UploadTable[] = ["trade_taxas", "trade_ativos", "trade_ntnb", "trade_ipca_ref"];
 
 export function UploadPage() {
   const [uploading, setUploading] = useState(false);
@@ -43,9 +62,23 @@ export function UploadPage() {
   const [logs, setLogs] = useState<UploadLog[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
 
+  const loadLogs = useCallback(async () => {
+    const { data } = await supabase
+      .from("trade_upload_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    setLogs((data ?? []) as UploadLog[]);
+    setLogsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
   async function pollUploadLog(logId: number): Promise<UploadLog> {
     const started = Date.now();
-    let pct = 50;
+    let pct = 85;
     while (Date.now() - started < POLL_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       const { data, error } = await supabase
@@ -56,17 +89,37 @@ export function UploadPage() {
       if (error) throw new Error(error.message);
       const log = data as UploadLog;
       if (log.status === "success" || log.status === "error") return log;
-      pct = Math.min(95, pct + 5);
+      pct = Math.min(95, pct + 2);
       setProgress(pct);
-      setStatusLabel("Processando no servidor…");
+      setStatusLabel("Recalculando métricas…");
     }
     throw new Error("Tempo limite excedido aguardando processamento.");
+  }
+
+  async function invokeProcessUpload(
+    accessToken: string,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const res = await fetch(PROCESS_UPLOAD_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.success) {
+      throw new Error(String(json?.error || `Falha no envio (HTTP ${res.status}).`));
+    }
+    return json;
   }
 
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0];
     if (!file) return;
-    if (!file.name.endsWith(".xlsx")) {
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setResult({ success: false, error: "Apenas arquivos .xlsx são aceitos." });
       return;
     }
@@ -74,36 +127,54 @@ export function UploadPage() {
     setUploading(true);
     setResult(null);
     setProgress(10);
-    setStatusLabel("Enviando arquivo…");
+    setStatusLabel("Lendo planilha…");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Sessão não encontrada. Faça login novamente.");
 
-      const formData = new FormData();
-      formData.append("file", file);
+      const parsed = await parseTradeWorkbook(file);
+      const totalRows = UPLOAD_TABLES.reduce((sum, table) => sum + parsed.rows[table].length, 0);
+      if (totalRows === 0) throw new Error("Nenhuma linha válida encontrada na planilha.");
 
       setProgress(30);
+      setStatusLabel("Criando registro de upload…");
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-upload`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          body: formData,
+      const start = await invokeProcessUpload(session.access_token, {
+        action: "start",
+        filename: file.name,
+      });
+      const logId = Number(start.log_id);
+      if (!Number.isInteger(logId)) throw new Error("A função não retornou um log_id válido.");
+
+      await loadLogs();
+
+      let sentRows = 0;
+      for (const table of UPLOAD_TABLES) {
+        const rows = parsed.rows[table];
+        for (let i = 0; i < rows.length; i += UPLOAD_BATCH_SIZE) {
+          const batch = rows.slice(i, i + UPLOAD_BATCH_SIZE);
+          setStatusLabel(`Gravando ${table.replace("trade_", "")}…`);
+          await invokeProcessUpload(session.access_token, {
+            action: "upsert",
+            log_id: logId,
+            table,
+            rows: batch,
+          });
+          sentRows += batch.length;
+          setProgress(Math.min(80, 30 + Math.round((sentRows / totalRows) * 50)));
         }
-      );
-
-      const json = await res.json();
-      if (!res.ok || !json?.success || !json?.log_id) {
-        throw new Error(json?.error || `Falha no envio (HTTP ${res.status}).`);
       }
 
-      setProgress(50);
-      setStatusLabel("Aguardando processamento…");
-      loadLogs();
+      setProgress(85);
+      setStatusLabel("Recalculando métricas…");
+      await invokeProcessUpload(session.access_token, {
+        action: "finish",
+        log_id: logId,
+        summary: parsed.summary,
+      });
 
-      const finalLog = await pollUploadLog(json.log_id);
+      const finalLog = await pollUploadLog(logId);
       setProgress(100);
       setStatusLabel(finalLog.status === "success" ? "Concluído" : "Erro");
 
@@ -113,7 +184,7 @@ export function UploadPage() {
         setResult({ success: false, error: finalLog.erro_msg ?? "Erro no processamento." });
       }
 
-      loadLogs();
+      await loadLogs();
     } catch (e) {
       setResult({ success: false, error: e instanceof Error ? e.message : "Erro desconhecido" });
     } finally {
@@ -123,7 +194,7 @@ export function UploadPage() {
         setStatusLabel("");
       }, 1500);
     }
-  }, []);
+  }, [loadLogs]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -131,18 +202,6 @@ export function UploadPage() {
     maxFiles: 1,
     disabled: uploading,
   });
-
-  async function loadLogs() {
-    const { data } = await supabase
-      .from("trade_upload_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(10);
-    setLogs((data ?? []) as UploadLog[]);
-    setLogsLoaded(true);
-  }
-
-  if (!logsLoaded) loadLogs();
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 p-6">
@@ -153,7 +212,6 @@ export function UploadPage() {
         </p>
       </div>
 
-      {/* Dropzone */}
       <Card>
         <CardContent className="pt-6">
           <div
@@ -190,14 +248,13 @@ export function UploadPage() {
         </CardContent>
       </Card>
 
-      {/* Result */}
       {result && (
-        <Card className={result.success ? "border-green-500/40 bg-green-500/5" : "border-red-500/40 bg-red-500/5"}>
+        <Card className={result.success ? "border-primary/40 bg-primary/5" : "border-destructive/40 bg-destructive/5"}>
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               {result.success
-                ? <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-                : <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />}
+                ? <CheckCircle className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                : <XCircle className="w-5 h-5 text-destructive mt-0.5 flex-shrink-0" />}
               <div>
                 <p className="font-semibold">{result.success ? "Upload realizado com sucesso" : "Erro no processamento"}</p>
                 {result.success && result.log && (
@@ -209,7 +266,7 @@ export function UploadPage() {
                   </div>
                 )}
                 {!result.success && (
-                  <p className="mt-1 text-sm text-red-600">{result.error}</p>
+                  <p className="mt-1 text-sm text-destructive">{result.error}</p>
                 )}
               </div>
             </div>
@@ -217,7 +274,6 @@ export function UploadPage() {
         </Card>
       )}
 
-      {/* Upload history */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -241,7 +297,7 @@ export function UploadPage() {
                       {log.data_inicio && ` · ${log.data_inicio} → ${log.data_fim}`}
                     </p>
                     {log.erro_msg && (
-                      <p className="text-xs text-red-500 mt-0.5 truncate">{log.erro_msg}</p>
+                      <p className="text-xs text-destructive mt-0.5 truncate">{log.erro_msg}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
@@ -262,8 +318,168 @@ export function UploadPage() {
   );
 }
 
+function parseNomeAtivo(nome: string) {
+  const parts = nome.split(" - ");
+  const vencStr = parts[2]?.trim() ?? "";
+  const taxaEmissao = parts[3]?.trim() ?? "";
+
+  let vencDate: string | null = null;
+  let anosVenc: number | null = null;
+  const hoje = new Date("2026-04-25");
+
+  if (/^\d{8}$/.test(vencStr)) {
+    const y = vencStr.slice(0, 4);
+    const m = vencStr.slice(4, 6);
+    const d = vencStr.slice(6, 8);
+    vencDate = `${y}-${m}-${d}`;
+    const diff = (new Date(vencDate).getTime() - hoje.getTime()) / (365.25 * 24 * 3600 * 1000);
+    anosVenc = Math.round(diff * 10) / 10;
+  }
+
+  const u = taxaEmissao.toUpperCase();
+  let indexador: "DI" | "IPCA" | "PRE" | "OUTRO" = "OUTRO";
+  if (u.includes("IPCA")) indexador = "IPCA";
+  else if (u.includes("PRÉ") || u.includes("PRE")) indexador = "PRE";
+  else if (u.includes("DI") || u.includes("CDI")) indexador = "DI";
+
+  const spreadMatch = taxaEmissao.match(/[\+\s]+([\d.]+)%/);
+  const spreadEmissao = spreadMatch ? parseFloat(spreadMatch[1]) : null;
+
+  return { venc_date: vencDate, anos_venc: anosVenc, indexador, taxa_emissao: taxaEmissao, spread_emissao: spreadEmissao };
+}
+
+function excelDateToISO(val: unknown): string | null {
+  if (!val) return null;
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val.toISOString().slice(0, 10);
+  if (typeof val === "string") {
+    const d = new Date(val);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    return null;
+  }
+  if (typeof val === "number") {
+    const d = new Date((val - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+function num(val: unknown): number | null {
+  if (val === null || val === undefined || val === "") return null;
+  const n = Number(val);
+  return Number.isNaN(n) ? null : n;
+}
+
+async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
+  const arrayBuffer = await file.arrayBuffer();
+  const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+
+  const sheetTaxas = wb.Sheets["Taxas dos Titulos"];
+  const sheetEmissao = wb.Sheets["Dados Emissao e emissor"];
+  const sheetIPCARef = wb.Sheets["IPCA e NTN-B referencia"];
+  const sheetNTNB = wb.Sheets["TAXA NTN-B"];
+
+  if (!sheetTaxas) throw new Error("Aba 'Taxas dos Titulos' não encontrada.");
+
+  const rawTaxas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetTaxas, { defval: null });
+  const taxasRows: Record<string, unknown>[] = [];
+  const ativosMap = new Map<string, Record<string, unknown>>();
+  let dataInicio: string | null = null;
+  let dataFim: string | null = null;
+
+  for (const r of rawTaxas) {
+    const ticker = String(r["Ticker"] ?? "").trim();
+    const nomeCompleto = String(r["Nome do Ativo"] ?? "").trim();
+    const dataISO = excelDateToISO(r["Data"]);
+    if (!ticker || !dataISO) continue;
+
+    if (!dataInicio || dataISO < dataInicio) dataInicio = dataISO;
+    if (!dataFim || dataISO > dataFim) dataFim = dataISO;
+
+    taxasRows.push({
+      ticker,
+      data: dataISO,
+      taxa_indicativa: num(r["Taxa Indicativa"]),
+      qtd_negociada: num(r["Quantidade Negociada"]),
+      vol_financeiro: num(r["Volume Financeiro"]),
+      pu_curva: num(r["PU Curva"]),
+      pu_indicativo: num(r["PU Indicativo"]),
+    });
+
+    if (!ativosMap.has(ticker) && nomeCompleto) {
+      const parsed = parseNomeAtivo(nomeCompleto);
+      ativosMap.set(ticker, { ticker, nome_completo: nomeCompleto, ...parsed });
+    }
+  }
+
+  if (sheetEmissao) {
+    const rawEmissao: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetEmissao, { defval: null });
+    for (const r of rawEmissao) {
+      const ticker = String(r["Código CETIP"] ?? "").trim();
+      if (!ticker) continue;
+      const existing = ativosMap.get(ticker) ?? { ticker };
+      ativosMap.set(ticker, {
+        ...existing,
+        emissor_nome: r["Emissor Nome"] ?? existing["emissor_nome"],
+        emissor_cnpj: r["Emissor CNPJ"] ?? existing["emissor_cnpj"],
+        rating: r["Rating 1"] ?? existing["rating"],
+        data_rating: excelDateToISO(r["Data do Rating 1"]) ?? existing["data_rating"],
+      });
+    }
+  }
+
+  const ipcaRefRows: Record<string, unknown>[] = [];
+  if (sheetIPCARef) {
+    const rawRef: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetIPCARef, { defval: null });
+    for (const r of rawRef) {
+      const ticker = String(r["Ticker"] ?? "").trim();
+      const ntnbRef = String(r["NTN's Referencia"] ?? "").trim();
+      if (!ticker || !ntnbRef) continue;
+      ipcaRefRows.push({ ticker, emissao: r["Emissao"], ntnb_ref: ntnbRef });
+    }
+  }
+
+  const ntnbRows: Record<string, unknown>[] = [];
+  if (sheetNTNB) {
+    const rawNTNB: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetNTNB, { defval: null });
+    for (const r of rawNTNB) {
+      const nome = String(r["Nome do Ativo"] ?? "").trim();
+      const dataISO = excelDateToISO(r["Data"]);
+      if (!nome.startsWith("NTN-B") || !dataISO) continue;
+      ntnbRows.push({
+        bond_name: nome,
+        data: dataISO,
+        taxa_indicativa: num(r["Taxa Indicativa"]),
+        pu_indicativo: num(r["PU Indicativo"]),
+      });
+    }
+  }
+
+  const ativosRows = Array.from(ativosMap.values());
+
+  return {
+    rows: {
+      trade_taxas: taxasRows,
+      trade_ativos: ativosRows,
+      trade_ntnb: ntnbRows,
+      trade_ipca_ref: ipcaRefRows,
+    },
+    summary: {
+      data_inicio: dataInicio,
+      data_fim: dataFim,
+      ativos_di: ativosRows.filter((a) => a.indexador === "DI").length,
+      ativos_ipca: ativosRows.filter((a) => a.indexador === "IPCA").length,
+      linhas_inseridas: taxasRows.length,
+      linhas_atualizadas: ativosRows.length,
+    },
+  };
+}
+
 function StatusBadge({ status }: { status: UploadLog["status"] }) {
-  if (status === "success") return <Badge variant="outline" className="border-green-500 text-green-600 gap-1"><CheckCircle className="w-3 h-3" /> OK</Badge>;
-  if (status === "error")   return <Badge variant="outline" className="border-red-500 text-red-600 gap-1"><XCircle className="w-3 h-3" /> Erro</Badge>;
-  return <Badge variant="outline" className="gap-1"><Clock className="w-3 h-3" /> Processando</Badge>;
+  if (status === "success") {
+    return <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 px-2.5 py-0.5 text-xs font-semibold text-primary"><CheckCircle className="w-3 h-3" /> OK</span>;
+  }
+  if (status === "error") {
+    return <span className="inline-flex items-center gap-1 rounded-full border border-destructive/40 px-2.5 py-0.5 text-xs font-semibold text-destructive"><XCircle className="w-3 h-3" /> Erro</span>;
+  }
+  return <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground"><Clock className="w-3 h-3" /> Processando</span>;
 }
