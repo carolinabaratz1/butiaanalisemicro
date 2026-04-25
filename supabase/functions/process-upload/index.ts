@@ -71,8 +71,9 @@ function num(val: unknown): number | null {
 }
 
 // Batch upsert helper (Supabase has 1000-row limit per call)
+// deno-lint-ignore no-explicit-any
 async function batchUpsert(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   table: string,
   rows: Record<string, unknown>[],
   onConflict: string,
