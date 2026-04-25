@@ -22,26 +22,46 @@ interface UploadLog {
   ativos_di: number | null;
   ativos_ipca: number | null;
   linhas_inseridas: number | null;
+  linhas_atualizadas: number | null;
   erro_msg: string | null;
 }
 
 interface UploadResult {
   success: boolean;
-  resumo?: {
-    taxas: number;
-    ativos: number;
-    data_inicio: string;
-    data_fim: string;
-  };
+  log?: UploadLog;
   error?: string;
 }
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
 
 export function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusLabel, setStatusLabel] = useState<string>("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [logs, setLogs] = useState<UploadLog[]>([]);
   const [logsLoaded, setLogsLoaded] = useState(false);
+
+  async function pollUploadLog(logId: number): Promise<UploadLog> {
+    const started = Date.now();
+    let pct = 50;
+    while (Date.now() - started < POLL_TIMEOUT_MS) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      const { data, error } = await supabase
+        .from("trade_upload_log")
+        .select("*")
+        .eq("id", logId)
+        .single();
+      if (error) throw new Error(error.message);
+      const log = data as UploadLog;
+      if (log.status === "success" || log.status === "error") return log;
+      pct = Math.min(95, pct + 5);
+      setProgress(pct);
+      setStatusLabel("Processando no servidor…");
+    }
+    throw new Error("Tempo limite excedido aguardando processamento.");
+  }
 
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0];
@@ -54,6 +74,7 @@ export function UploadPage() {
     setUploading(true);
     setResult(null);
     setProgress(10);
+    setStatusLabel("Enviando arquivo…");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -73,18 +94,34 @@ export function UploadPage() {
         }
       );
 
-      setProgress(80);
-      const json: UploadResult = await res.json();
-      setProgress(100);
-      setResult(json);
+      const json = await res.json();
+      if (!res.ok || !json?.success || !json?.log_id) {
+        throw new Error(json?.error || `Falha no envio (HTTP ${res.status}).`);
+      }
 
-      // Refresh logs
+      setProgress(50);
+      setStatusLabel("Aguardando processamento…");
+      loadLogs();
+
+      const finalLog = await pollUploadLog(json.log_id);
+      setProgress(100);
+      setStatusLabel(finalLog.status === "success" ? "Concluído" : "Erro");
+
+      if (finalLog.status === "success") {
+        setResult({ success: true, log: finalLog });
+      } else {
+        setResult({ success: false, error: finalLog.erro_msg ?? "Erro no processamento." });
+      }
+
       loadLogs();
     } catch (e) {
       setResult({ success: false, error: e instanceof Error ? e.message : "Erro desconhecido" });
     } finally {
       setUploading(false);
-      setTimeout(() => setProgress(0), 1500);
+      setTimeout(() => {
+        setProgress(0);
+        setStatusLabel("");
+      }, 1500);
     }
   }, []);
 
@@ -144,7 +181,7 @@ export function UploadPage() {
           {progress > 0 && (
             <div className="mt-4 space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{progress < 100 ? "Processando…" : "Concluído"}</span>
+                <span>{statusLabel || (progress < 100 ? "Processando…" : "Concluído")}</span>
                 <span>{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
@@ -163,11 +200,12 @@ export function UploadPage() {
                 : <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />}
               <div>
                 <p className="font-semibold">{result.success ? "Upload realizado com sucesso" : "Erro no processamento"}</p>
-                {result.success && result.resumo && (
+                {result.success && result.log && (
                   <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground">
-                    <span>Linhas de taxa:   <strong className="text-foreground">{result.resumo.taxas.toLocaleString("pt-BR")}</strong></span>
-                    <span>Ativos:          <strong className="text-foreground">{result.resumo.ativos.toLocaleString("pt-BR")}</strong></span>
-                    <span>Período:         <strong className="text-foreground">{result.resumo.data_inicio} → {result.resumo.data_fim}</strong></span>
+                    <span>Linhas de taxa:   <strong className="text-foreground">{(result.log.linhas_inseridas ?? 0).toLocaleString("pt-BR")}</strong></span>
+                    <span>Ativos:          <strong className="text-foreground">{(result.log.linhas_atualizadas ?? 0).toLocaleString("pt-BR")}</strong></span>
+                    <span>DI / IPCA:       <strong className="text-foreground">{result.log.ativos_di ?? 0} / {result.log.ativos_ipca ?? 0}</strong></span>
+                    <span>Período:         <strong className="text-foreground">{result.log.data_inicio} → {result.log.data_fim}</strong></span>
                   </div>
                 )}
                 {!result.success && (
