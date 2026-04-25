@@ -115,7 +115,7 @@ serve(async (req) => {
     const file = formData.get("file") as File;
     if (!file) throw new Error("Nenhum arquivo recebido.");
 
-    // Create upload log entry
+    // Create upload log entry (sync, fast)
     const { data: logRow } = await supabase
       .from("trade_upload_log")
       .insert({ filename: file.name, uploaded_by: user?.id, status: "processing" })
@@ -123,137 +123,29 @@ serve(async (req) => {
       .single();
     logId = logRow?.id ?? null;
 
-    // Parse Excel
+    // Capture file bytes before backgrounding (req body closes after response)
     const arrayBuffer = await file.arrayBuffer();
-    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: "array", cellDates: true });
+    const bytes = new Uint8Array(arrayBuffer);
 
-    const sheetTaxas   = wb.Sheets["Taxas dos Titulos"];
-    const sheetEmissao = wb.Sheets["Dados Emissao e emissor"];
-    const sheetIPCARef = wb.Sheets["IPCA e NTN-B referencia"];
-    const sheetNTNB    = wb.Sheets["TAXA NTN-B"];
+    // Offload heavy work (XLSX parse + upserts + RPC) to background
+    // so we don't blow the 2s CPU limit on the request handler.
+    EdgeRuntime.waitUntil(
+      processWorkbook(supabase, bytes, logId).catch(async (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("process-upload background error:", msg);
+        if (logId) {
+          await supabase
+            .from("trade_upload_log")
+            .update({ status: "error", erro_msg: msg })
+            .eq("id", logId);
+        }
+      })
+    );
 
-    if (!sheetTaxas) throw new Error("Aba 'Taxas dos Titulos' não encontrada.");
-
-    // ── ABA 1: Taxas dos Titulos ──────────────────────────
-    const rawTaxas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetTaxas, { defval: null });
-
-    const taxasRows: Record<string, unknown>[] = [];
-    const ativosMap = new Map<string, Record<string, unknown>>();
-    let dataInicio: string | null = null;
-    let dataFim: string | null = null;
-
-    for (const r of rawTaxas) {
-      const ticker = String(r["Ticker"] ?? "").trim();
-      const nomeCompleto = String(r["Nome do Ativo"] ?? "").trim();
-      const dataISO = excelDateToISO(r["Data"]);
-      if (!ticker || !dataISO) continue;
-
-      if (!dataInicio || dataISO < dataInicio) dataInicio = dataISO;
-      if (!dataFim   || dataISO > dataFim)   dataFim   = dataISO;
-
-      taxasRows.push({
-        ticker,
-        data:            dataISO,
-        taxa_indicativa: num(r["Taxa Indicativa"]),
-        qtd_negociada:   num(r["Quantidade Negociada"]),
-        pu_curva:        num(r["PU Curva"]),
-        pu_indicativo:   num(r["PU Indicativo"]),
-      });
-
-      // Build ativo metadata from Nome do Ativo (once per ticker)
-      if (!ativosMap.has(ticker) && nomeCompleto) {
-        const parsed = parseNomeAtivo(nomeCompleto);
-        ativosMap.set(ticker, {
-          ticker,
-          nome_completo: nomeCompleto,
-          ...parsed,
-        });
-      }
-    }
-
-    // ── ABA 2: Dados Emissão e Emissor ────────────────────
-    if (sheetEmissao) {
-      const rawEmissao: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetEmissao, { defval: null });
-      for (const r of rawEmissao) {
-        const ticker = String(r["Código CETIP"] ?? "").trim();
-        if (!ticker) continue;
-        const existing = ativosMap.get(ticker) ?? { ticker };
-        ativosMap.set(ticker, {
-          ...existing,
-          emissor_nome: r["Emissor Nome"] ?? existing["emissor_nome"],
-          emissor_cnpj: r["Emissor CNPJ"] ?? existing["emissor_cnpj"],
-          rating:       r["Rating 1"]    ?? existing["rating"],
-          data_rating:  excelDateToISO(r["Data do Rating 1"]) ?? existing["data_rating"],
-        });
-      }
-    }
-
-    // ── ABA 3: IPCA e NTN-B referência ────────────────────
-    const ipcaRefRows: Record<string, unknown>[] = [];
-    if (sheetIPCARef) {
-      const rawRef: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetIPCARef, { defval: null });
-      for (const r of rawRef) {
-        const ticker  = String(r["Ticker"] ?? "").trim();
-        const ntnbRef = String(r["NTN's Referencia"] ?? "").trim();
-        if (!ticker || !ntnbRef) continue;
-        ipcaRefRows.push({ ticker, emissao: r["Emissao"], ntnb_ref: ntnbRef });
-      }
-    }
-
-    // ── ABA 4: TAXA NTN-B ─────────────────────────────────
-    const ntnbRows: Record<string, unknown>[] = [];
-    if (sheetNTNB) {
-      const rawNTNB: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetNTNB, { defval: null });
-      for (const r of rawNTNB) {
-        const nome = String(r["Nome do Ativo"] ?? "").trim();
-        const dataISO = excelDateToISO(r["Data"]);
-        if (!nome.startsWith("NTN-B") || !dataISO) continue;
-        ntnbRows.push({
-          bond_name:       nome,
-          data:            dataISO,
-          taxa_indicativa: num(r["Taxa Indicativa"]),
-          pu_indicativo:   num(r["PU Indicativo"]),
-        });
-      }
-    }
-
-    // ── Upsert all tables ─────────────────────────────────
-    const ativosRows = Array.from(ativosMap.values());
-
-    const [nTaxas, nAtivos, nNTNB, nRef] = await Promise.all([
-      batchUpsert(supabase, "trade_taxas",    taxasRows,   "ticker,data"),
-      batchUpsert(supabase, "trade_ativos",   ativosRows,  "ticker"),
-      batchUpsert(supabase, "trade_ntnb",     ntnbRows,    "bond_name,data"),
-      batchUpsert(supabase, "trade_ipca_ref", ipcaRefRows, "ticker"),
-    ]);
-
-    // ── Recalculate metrics ───────────────────────────────
-    await recalcMetrics(supabase);
-
-    // Update upload log
-    await supabase.from("trade_upload_log").update({
-      status: "success",
-      data_inicio: dataInicio,
-      data_fim: dataFim,
-      ativos_di:   ativosRows.filter(a => a["indexador"] === "DI").length,
-      ativos_ipca: ativosRows.filter(a => a["indexador"] === "IPCA").length,
-      linhas_inseridas:   nTaxas,
-      linhas_atualizadas: nAtivos,
-    }).eq("id", logId);
-
+    // Respond immediately; client polls trade_upload_log for status.
     return new Response(
-      JSON.stringify({
-        success: true,
-        resumo: {
-          taxas: nTaxas,
-          ativos: nAtivos,
-          ntnb: nNTNB,
-          ipca_ref: nRef,
-          data_inicio: dataInicio,
-          data_fim: dataFim,
-        },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: true, log_id: logId, status: "processing" }),
+      { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -266,6 +158,121 @@ serve(async (req) => {
     );
   }
 });
+
+// ── Background worker ─────────────────────────────────────
+// deno-lint-ignore no-explicit-any
+async function processWorkbook(supabase: any, bytes: Uint8Array, logId: number | null) {
+  const wb = XLSX.read(bytes, { type: "array", cellDates: true });
+
+  const sheetTaxas   = wb.Sheets["Taxas dos Titulos"];
+  const sheetEmissao = wb.Sheets["Dados Emissao e emissor"];
+  const sheetIPCARef = wb.Sheets["IPCA e NTN-B referencia"];
+  const sheetNTNB    = wb.Sheets["TAXA NTN-B"];
+
+  if (!sheetTaxas) throw new Error("Aba 'Taxas dos Titulos' não encontrada.");
+
+  // ── ABA 1: Taxas dos Titulos ──────────────────────────
+  const rawTaxas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetTaxas, { defval: null });
+
+  const taxasRows: Record<string, unknown>[] = [];
+  const ativosMap = new Map<string, Record<string, unknown>>();
+  let dataInicio: string | null = null;
+  let dataFim: string | null = null;
+
+  for (const r of rawTaxas) {
+    const ticker = String(r["Ticker"] ?? "").trim();
+    const nomeCompleto = String(r["Nome do Ativo"] ?? "").trim();
+    const dataISO = excelDateToISO(r["Data"]);
+    if (!ticker || !dataISO) continue;
+
+    if (!dataInicio || dataISO < dataInicio) dataInicio = dataISO;
+    if (!dataFim   || dataISO > dataFim)   dataFim   = dataISO;
+
+    taxasRows.push({
+      ticker,
+      data:            dataISO,
+      taxa_indicativa: num(r["Taxa Indicativa"]),
+      qtd_negociada:   num(r["Quantidade Negociada"]),
+      pu_curva:        num(r["PU Curva"]),
+      pu_indicativo:   num(r["PU Indicativo"]),
+    });
+
+    if (!ativosMap.has(ticker) && nomeCompleto) {
+      const parsed = parseNomeAtivo(nomeCompleto);
+      ativosMap.set(ticker, { ticker, nome_completo: nomeCompleto, ...parsed });
+    }
+  }
+
+  // ── ABA 2: Dados Emissão e Emissor ────────────────────
+  if (sheetEmissao) {
+    const rawEmissao: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetEmissao, { defval: null });
+    for (const r of rawEmissao) {
+      const ticker = String(r["Código CETIP"] ?? "").trim();
+      if (!ticker) continue;
+      const existing = ativosMap.get(ticker) ?? { ticker };
+      ativosMap.set(ticker, {
+        ...existing,
+        emissor_nome: r["Emissor Nome"] ?? existing["emissor_nome"],
+        emissor_cnpj: r["Emissor CNPJ"] ?? existing["emissor_cnpj"],
+        rating:       r["Rating 1"]    ?? existing["rating"],
+        data_rating:  excelDateToISO(r["Data do Rating 1"]) ?? existing["data_rating"],
+      });
+    }
+  }
+
+  // ── ABA 3: IPCA e NTN-B referência ────────────────────
+  const ipcaRefRows: Record<string, unknown>[] = [];
+  if (sheetIPCARef) {
+    const rawRef: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetIPCARef, { defval: null });
+    for (const r of rawRef) {
+      const ticker  = String(r["Ticker"] ?? "").trim();
+      const ntnbRef = String(r["NTN's Referencia"] ?? "").trim();
+      if (!ticker || !ntnbRef) continue;
+      ipcaRefRows.push({ ticker, emissao: r["Emissao"], ntnb_ref: ntnbRef });
+    }
+  }
+
+  // ── ABA 4: TAXA NTN-B ─────────────────────────────────
+  const ntnbRows: Record<string, unknown>[] = [];
+  if (sheetNTNB) {
+    const rawNTNB: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetNTNB, { defval: null });
+    for (const r of rawNTNB) {
+      const nome = String(r["Nome do Ativo"] ?? "").trim();
+      const dataISO = excelDateToISO(r["Data"]);
+      if (!nome.startsWith("NTN-B") || !dataISO) continue;
+      ntnbRows.push({
+        bond_name:       nome,
+        data:            dataISO,
+        taxa_indicativa: num(r["Taxa Indicativa"]),
+        pu_indicativo:   num(r["PU Indicativo"]),
+      });
+    }
+  }
+
+  const ativosRows = Array.from(ativosMap.values());
+
+  // Sequential (not Promise.all) to spread CPU over time
+  const nTaxas  = await batchUpsert(supabase, "trade_taxas",    taxasRows,   "ticker,data");
+  const nAtivos = await batchUpsert(supabase, "trade_ativos",   ativosRows,  "ticker");
+  const nNTNB   = await batchUpsert(supabase, "trade_ntnb",     ntnbRows,    "bond_name,data");
+  const nRef    = await batchUpsert(supabase, "trade_ipca_ref", ipcaRefRows, "ticker");
+
+  await recalcMetrics(supabase);
+
+  if (logId) {
+    await supabase.from("trade_upload_log").update({
+      status: "success",
+      data_inicio: dataInicio,
+      data_fim: dataFim,
+      ativos_di:   ativosRows.filter(a => a["indexador"] === "DI").length,
+      ativos_ipca: ativosRows.filter(a => a["indexador"] === "IPCA").length,
+      linhas_inseridas:   nTaxas,
+      linhas_atualizadas: nAtivos,
+    }).eq("id", logId);
+  }
+
+  console.log("process-upload done:", { nTaxas, nAtivos, nNTNB, nRef });
+}
 
 // ── Metrics recalculation ──────────────────────────────────
 // Runs a SQL RPC to avoid pulling all data to the Edge Function.
