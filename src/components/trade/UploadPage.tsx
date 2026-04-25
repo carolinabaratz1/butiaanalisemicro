@@ -400,7 +400,6 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
       data: dataISO,
       taxa_indicativa: num(r["Taxa Indicativa"]),
       qtd_negociada: num(r["Quantidade Negociada"]),
-      vol_financeiro: num(r["Volume Financeiro"]),
       pu_curva: num(r["PU Curva"]),
       pu_indicativo: num(r["PU Indicativo"]),
     });
