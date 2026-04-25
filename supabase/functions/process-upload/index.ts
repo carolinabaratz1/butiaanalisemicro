@@ -33,6 +33,12 @@ type UploadSummary = {
   linhas_atualizadas?: number | null;
 };
 
+type IpcaBatchResult = {
+  processed_count?: number | string | null;
+  next_after_ticker?: string | null;
+  has_more?: boolean | null;
+};
+
 const tableConfig: Record<UploadTable, { onConflict: string }> = {
   trade_taxas: { onConflict: "ticker,data" },
   trade_ativos: { onConflict: "ticker" },
@@ -184,11 +190,30 @@ async function finalizeUpload(supabase: any, logId: number, summary: UploadSumma
 // deno-lint-ignore no-explicit-any
 async function recalcMetrics(supabase: any) {
   // Quebra o recálculo em duas RPCs separadas para evitar timeout no plano gratuito.
-  // Primeiro DI/PRE/OUTRO, depois IPCA — cada uma roda em transação própria com
-  // statement_timeout = 120s definido dentro da função.
+  // Primeiro DI/PRE/OUTRO, depois IPCA em lotes de 100 tickers. Cada chamada RPC
+  // do batch IPCA roda em uma transação própria, então o banco faz commit ao fim
+  // de cada lote e libera locks antes do próximo.
   const { error: errDi } = await supabase.rpc("recalc_trade_metricas_di");
   if (errDi) throw new Error(`recalc_trade_metricas_di: ${errDi.message}`);
 
-  const { error: errIpca } = await supabase.rpc("recalc_trade_metricas_ipca");
-  if (errIpca) throw new Error(`recalc_trade_metricas_ipca: ${errIpca.message}`);
+  let afterTicker: string | null = null;
+  let hasMore = true;
+  let guard = 0;
+
+  while (hasMore) {
+    const response: { data: IpcaBatchResult[] | IpcaBatchResult | null; error: { message: string } | null } = await supabase.rpc("recalc_trade_metricas_ipca_batch", {
+      p_after_ticker: afterTicker,
+      p_limit: 100,
+    });
+    const { data, error: errIpca } = response;
+    if (errIpca) throw new Error(`recalc_trade_metricas_ipca_batch: ${errIpca.message}`);
+
+    const batch: IpcaBatchResult | null | undefined = Array.isArray(data) ? data[0] : data;
+    const processedCount = Number(batch?.processed_count ?? 0);
+    afterTicker = batch?.next_after_ticker ?? afterTicker;
+    hasMore = Boolean(batch?.has_more) && processedCount > 0;
+
+    guard += 1;
+    if (guard > 1000) throw new Error("recalc_trade_metricas_ipca_batch: limite de segurança excedido.");
+  }
 }
