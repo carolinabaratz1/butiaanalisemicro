@@ -77,7 +77,10 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
 
   // KPIs
   const kpis = useMemo(() => {
-    const vals = data.map(t => t.last_val).sort((a, b) => a - b);
+    const vals = data
+      .map(t => t.last_val)
+      .filter((v): v is number => v != null && v > 0)
+      .sort((a, b) => a - b);
     return {
       total: data.length,
       hot: data.filter(t => t.z_score > 1.5).length,
