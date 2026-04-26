@@ -42,11 +42,14 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
 
       if (all.length === 0) { setLoading(false); return; }
 
-      const diRows  = all.filter(r => r.indexador === "DI" || r.indexador === "PRE" || r.indexador === "OUTRO");
+      const diRows  = all.filter(r => r.indexador === "DI");
       const ipcaRows = all.filter(r => r.indexador === "IPCA");
 
       const med = (rows: Row[]) => {
-        const sorted = rows.map(r => r.last_val ?? 0).sort((a, b) => a - b);
+        const sorted = rows
+          .map(r => r.last_val)
+          .filter((v): v is number => v != null && v > 0)
+          .sort((a, b) => a - b);
         return sorted[Math.floor(sorted.length / 2)] ?? 0;
       };
 
