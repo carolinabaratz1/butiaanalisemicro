@@ -112,6 +112,8 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
         .limit(90);
       const cutoff = dates?.at(-1)?.data ?? "2000-01-01";
 
+      const PAGE = 1000;
+
       if (indexador === "IPCA") {
         // For IPCA we need to compute spread on the fly from the raw table
         // Fetch taxas + ntnb joins via a RPC for performance
@@ -127,46 +129,58 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
         }
         setHistory(byTicker);
       } else {
-        // DI: raw taxas
+        // DI: raw taxas — paginate to bypass 1000-row PostgREST limit
         const batchSize = 200;
         const byTicker: Record<string, HistoryPoint[]> = {};
 
         for (let i = 0; i < tickers.length; i += batchSize) {
           const batch = tickers.slice(i, i + batchSize);
-          const { data: hist, error: histErr } = await supabase
-            .from("trade_taxas")
-            .select("ticker, data, taxa_indicativa, pu_curva, pu_indicativo")
-            .in("ticker", batch)
-            .gte("data", cutoff)
-            .order("data", { ascending: true });
-          if (histErr) throw histErr;
-          for (const row of hist ?? []) {
-            const t = row.ticker as string;
-            if (!byTicker[t]) byTicker[t] = [];
-            byTicker[t].push({
-              d:  row.data,
-              r:  (row.taxa_indicativa ?? 0) * 100,
-              pc: row.pu_curva,
-              pi: row.pu_indicativo,
-            });
+          let from = 0;
+          while (true) {
+            const { data: hist, error: histErr } = await supabase
+              .from("trade_taxas")
+              .select("ticker, data, taxa_indicativa, pu_curva, pu_indicativo")
+              .in("ticker", batch)
+              .gte("data", cutoff)
+              .order("data", { ascending: true })
+              .range(from, from + PAGE - 1);
+            if (histErr) throw histErr;
+            for (const row of hist ?? []) {
+              const t = row.ticker as string;
+              if (!byTicker[t]) byTicker[t] = [];
+              byTicker[t].push({
+                d:  row.data,
+                r:  (row.taxa_indicativa ?? 0) * 100,
+                pc: row.pu_curva,
+                pi: row.pu_indicativo,
+              });
+            }
+            if (!hist || hist.length < PAGE) break;
+            from += PAGE;
           }
         }
         setHistory(byTicker);
       }
 
-      // 3. NTN-B history (IPCA only)
+      // 3. NTN-B history (IPCA only) — paginated
       if (indexador === "IPCA") {
-        const { data: ntnb, error: ntnbErr } = await supabase
-          .from("trade_ntnb")
-          .select("bond_name, data, taxa_indicativa, pu_indicativo")
-          .like("bond_name", "NTN-B%")
-          .gte("data", cutoff)
-          .order("data", { ascending: true });
-        if (ntnbErr) throw ntnbErr;
         const byBond: Record<string, NTNBPoint[]> = {};
-        for (const row of ntnb ?? []) {
-          if (!byBond[row.bond_name]) byBond[row.bond_name] = [];
-          byBond[row.bond_name].push({ d: row.data, r: (row.taxa_indicativa ?? 0) * 100 });
+        let from = 0;
+        while (true) {
+          const { data: ntnb, error: ntnbErr } = await supabase
+            .from("trade_ntnb")
+            .select("bond_name, data, taxa_indicativa, pu_indicativo")
+            .like("bond_name", "NTN-B%")
+            .gte("data", cutoff)
+            .order("data", { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (ntnbErr) throw ntnbErr;
+          for (const row of ntnb ?? []) {
+            if (!byBond[row.bond_name]) byBond[row.bond_name] = [];
+            byBond[row.bond_name].push({ d: row.data, r: (row.taxa_indicativa ?? 0) * 100 });
+          }
+          if (!ntnb || ntnb.length < PAGE) break;
+          from += PAGE;
         }
         setNtnbHist(byBond);
       }
@@ -194,17 +208,30 @@ export function useTickerDetail(ticker: string | null) {
     setLoading(true);
 
     (async () => {
-      const [{ data: m }, { data: h }] = await Promise.all([
-        supabase.from("trade_monitor_view").select("*").eq("ticker", ticker).single(),
-        supabase.from("trade_taxas")
+      const PAGE = 1000;
+      const detailPromise = supabase
+        .from("trade_monitor_view").select("*").eq("ticker", ticker).single();
+
+      // Paginate the full history for this ticker (bypass 1000-row PostgREST limit)
+      const allHist: { data: string; taxa_indicativa: number | null; pu_curva: number | null; pu_indicativo: number | null }[] = [];
+      let from = 0;
+      while (true) {
+        const { data: page } = await supabase
+          .from("trade_taxas")
           .select("data, taxa_indicativa, pu_curva, pu_indicativo")
           .eq("ticker", ticker)
           .order("data", { ascending: true })
-          .limit(120),
-      ]);
+          .range(from, from + PAGE - 1);
+        if (!page || page.length === 0) break;
+        allHist.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
+
+      const { data: m } = await detailPromise;
       setDetail((m ?? null) as TradeAtivo | null);
       setHistory(
-        (h ?? []).map((r) => ({
+        allHist.map((r) => ({
           d: r.data, r: (r.taxa_indicativa ?? 0) * 100, pc: r.pu_curva, pi: r.pu_indicativo,
         }))
       );
