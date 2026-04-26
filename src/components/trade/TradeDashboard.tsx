@@ -142,14 +142,19 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
     return buckets.map(b => ({ name: b.name, count: data.filter(t => b.fn(t.last_val)).length }));
   }, [data, isIPCA]);
 
-  // Evolution by window
+  // Evolution by window — filter null/<=0 before median
   const evoData = useMemo(() => {
+    const pick = (key: keyof TradeAtivo) =>
+      data
+        .map(t => (t[key] as number | null | undefined))
+        .filter((v): v is number => v != null && v > 0);
+    const lastVals = data.map(t => t.last_val).filter((v): v is number => v != null && v > 0);
     return [
-      { name: "5d",   val: median(data.map(t => t.avg_5d ?? t.last_val)) },
-      { name: "10d",  val: median(data.map(t => t.avg_10d ?? t.last_val)) },
-      { name: "21d",  val: median(data.map(t => t.avg_21d ?? t.last_val)) },
-      { name: "30d",  val: median(data.map(t => t.avg_30d ?? t.last_val)) },
-      { name: "Hoje", val: median(data.map(t => t.last_val)) },
+      { name: "5d",   val: median(pick("avg_5d")) },
+      { name: "10d",  val: median(pick("avg_10d")) },
+      { name: "21d",  val: median(pick("avg_21d")) },
+      { name: "30d",  val: median(pick("avg_30d")) },
+      { name: "Hoje", val: median(lastVals) },
     ];
   }, [data]);
 
