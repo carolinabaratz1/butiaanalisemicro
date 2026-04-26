@@ -23,18 +23,30 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("trade_metricas")
-        .select("indexador, last_val, z_score, last_date")
-        .in("indexador", ["DI", "IPCA", "PRE", "OUTRO"]);
+      // Paginate to overcome the default 1000-row limit (trade_metricas has ~1.7k rows)
+      const PAGE = 1000;
+      type Row = { indexador: string | null; last_val: number | null; z_score: number | null; last_date: string | null };
+      const all: Row[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("trade_metricas")
+          .select("indexador, last_val, z_score, last_date")
+          .in("indexador", ["DI", "IPCA", "PRE", "OUTRO"])
+          .range(from, from + PAGE - 1);
+        if (error || !data) break;
+        all.push(...(data as Row[]));
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
 
-      if (!data) { setLoading(false); return; }
+      if (all.length === 0) { setLoading(false); return; }
 
-      const diRows  = data.filter(r => r.indexador === "DI" || r.indexador === "PRE" || r.indexador === "OUTRO");
-      const ipcaRows = data.filter(r => r.indexador === "IPCA");
+      const diRows  = all.filter(r => r.indexador === "DI" || r.indexador === "PRE" || r.indexador === "OUTRO");
+      const ipcaRows = all.filter(r => r.indexador === "IPCA");
 
-      const med = (rows: typeof data) => {
-        const sorted = [...rows].map(r => r.last_val).sort((a, b) => a - b);
+      const med = (rows: Row[]) => {
+        const sorted = rows.map(r => r.last_val ?? 0).sort((a, b) => a - b);
         return sorted[Math.floor(sorted.length / 2)] ?? 0;
       };
 
@@ -48,7 +60,7 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
         hot: ipcaRows.filter(r => (r.z_score ?? 0) > 1.5).length,
         median: med(ipcaRows),
       });
-      setLastDate(data[0]?.last_date ?? "");
+      setLastDate(all.find(r => r.last_date)?.last_date ?? "");
       setLoading(false);
     })();
   }, []);
