@@ -208,17 +208,30 @@ export function useTickerDetail(ticker: string | null) {
     setLoading(true);
 
     (async () => {
-      const [{ data: m }, { data: h }] = await Promise.all([
-        supabase.from("trade_monitor_view").select("*").eq("ticker", ticker).single(),
-        supabase.from("trade_taxas")
+      const PAGE = 1000;
+      const detailPromise = supabase
+        .from("trade_monitor_view").select("*").eq("ticker", ticker).single();
+
+      // Paginate the full history for this ticker (bypass 1000-row PostgREST limit)
+      const allHist: { data: string; taxa_indicativa: number | null; pu_curva: number | null; pu_indicativo: number | null }[] = [];
+      let from = 0;
+      while (true) {
+        const { data: page } = await supabase
+          .from("trade_taxas")
           .select("data, taxa_indicativa, pu_curva, pu_indicativo")
           .eq("ticker", ticker)
           .order("data", { ascending: true })
-          .limit(120),
-      ]);
+          .range(from, from + PAGE - 1);
+        if (!page || page.length === 0) break;
+        allHist.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
+
+      const { data: m } = await detailPromise;
       setDetail((m ?? null) as TradeAtivo | null);
       setHistory(
-        (h ?? []).map((r) => ({
+        allHist.map((r) => ({
           d: r.data, r: (r.taxa_indicativa ?? 0) * 100, pc: r.pu_curva, pi: r.pu_indicativo,
         }))
       );
