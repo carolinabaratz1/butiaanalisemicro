@@ -1323,6 +1323,53 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Alterar Prazo Modal */}
+      <Dialog open={!!editarPrazoModal} onOpenChange={(open) => { if (!open) { setEditarPrazoModal(null); setNovoPrazoEdicao(undefined); } }}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Alterar Prazo de Entrega</DialogTitle>
+            <DialogDescription>
+              {editarPrazoModal ? `${getEmissorNome(editarPrazoModal.empresa_id, empresasMap)} · ${editarPrazoModal.tipo} · Prazo atual: ${fmtDateBR(editarPrazoModal.prazo)}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Novo prazo</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !novoPrazoEdicao && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {novoPrazoEdicao ? format(novoPrazoEdicao, 'dd/MM/yyyy') : 'Selecionar data'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={novoPrazoEdicao} onSelect={setNovoPrazoEdicao} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!novoPrazoEdicao || updateStatus.isPending}
+              onClick={() => {
+                if (!editarPrazoModal || !novoPrazoEdicao) return;
+                updateStatus.mutate({
+                  id: editarPrazoModal.id,
+                  status: editarPrazoModal.status,
+                  extras: { prazo: format(novoPrazoEdicao, 'yyyy-MM-dd') },
+                });
+                setEditarPrazoModal(null);
+                setNovoPrazoEdicao(undefined);
+                setDrawerAnalise(null);
+              }}
+            >
+              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent className="bg-card border-border">
