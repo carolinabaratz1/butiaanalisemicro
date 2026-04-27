@@ -115,17 +115,22 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
       const PAGE = 1000;
 
       if (indexador === "IPCA") {
-        // For IPCA we need to compute spread on the fly from the raw table
-        // Fetch taxas + ntnb joins via a RPC for performance
-        const { data: hist, error: histErr } = await supabase
-          .rpc("get_ipca_history", { p_cutoff: cutoff })
-          .select();
-        if (histErr) throw histErr;
+        // For IPCA we need to compute spread on the fly via RPC.
+        // Paginate to bypass PostgREST's 1000-row default limit.
         const byTicker: Record<string, HistoryPoint[]> = {};
-        for (const row of hist ?? []) {
-          const t = row.ticker as string;
-          if (!byTicker[t]) byTicker[t] = [];
-          byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
+        let from = 0;
+        while (true) {
+          const { data: hist, error: histErr } = await supabase
+            .rpc("get_ipca_history", { p_cutoff: cutoff })
+            .range(from, from + PAGE - 1);
+          if (histErr) throw histErr;
+          for (const row of hist ?? []) {
+            const t = row.ticker as string;
+            if (!byTicker[t]) byTicker[t] = [];
+            byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
+          }
+          if (!hist || hist.length < PAGE) break;
+          from += PAGE;
         }
         setHistory(byTicker);
       } else {
@@ -209,32 +214,55 @@ export function useTickerDetail(ticker: string | null) {
 
     (async () => {
       const PAGE = 1000;
-      const detailPromise = supabase
+      const { data: m } = await supabase
         .from("trade_monitor_view").select("*").eq("ticker", ticker).single();
-
-      // Paginate the full history for this ticker (bypass 1000-row PostgREST limit)
-      const allHist: { data: string; taxa_indicativa: number | null; pu_curva: number | null; pu_indicativo: number | null }[] = [];
-      let from = 0;
-      while (true) {
-        const { data: page } = await supabase
-          .from("trade_taxas")
-          .select("data, taxa_indicativa, pu_curva, pu_indicativo")
-          .eq("ticker", ticker)
-          .order("data", { ascending: true })
-          .range(from, from + PAGE - 1);
-        if (!page || page.length === 0) break;
-        allHist.push(...page);
-        if (page.length < PAGE) break;
-        from += PAGE;
-      }
-
-      const { data: m } = await detailPromise;
       setDetail((m ?? null) as TradeAtivo | null);
-      setHistory(
-        allHist.map((r) => ({
-          d: r.data, r: (r.taxa_indicativa ?? 0) * 100, pc: r.pu_curva, pi: r.pu_indicativo,
-        }))
-      );
+
+      const isIPCA = (m as TradeAtivo | null)?.indexador === "IPCA";
+
+      if (isIPCA) {
+        // For IPCA, fetch capitalized spread history via the RPC filtered by ticker
+        const allHist: HistoryPoint[] = [];
+        let from = 0;
+        while (true) {
+          const { data: page } = await supabase
+            .rpc("get_ipca_history", { p_ticker: ticker })
+            .range(from, from + PAGE - 1);
+          if (!page || page.length === 0) break;
+          for (const row of page) {
+            allHist.push({
+              d: row.data,
+              r: row.spread,
+              pc: row.pu_curva,
+              pi: row.pu_indicativo,
+            });
+          }
+          if (page.length < PAGE) break;
+          from += PAGE;
+        }
+        setHistory(allHist);
+      } else {
+        // DI/PRE/OUTRO: raw indicative rate
+        const allHist: { data: string; taxa_indicativa: number | null; pu_curva: number | null; pu_indicativo: number | null }[] = [];
+        let from = 0;
+        while (true) {
+          const { data: page } = await supabase
+            .from("trade_taxas")
+            .select("data, taxa_indicativa, pu_curva, pu_indicativo")
+            .eq("ticker", ticker)
+            .order("data", { ascending: true })
+            .range(from, from + PAGE - 1);
+          if (!page || page.length === 0) break;
+          allHist.push(...page);
+          if (page.length < PAGE) break;
+          from += PAGE;
+        }
+        setHistory(
+          allHist.map((r) => ({
+            d: r.data, r: (r.taxa_indicativa ?? 0) * 100, pc: r.pu_curva, pi: r.pu_indicativo,
+          }))
+        );
+      }
       setLoading(false);
     })();
   }, [ticker]);
