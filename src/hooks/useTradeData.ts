@@ -11,9 +11,20 @@ import { supabase } from "@/integrations/supabase/client"; // ajuste o path
 
 export type Indexador = "DI" | "IPCA" | "PRE" | "OUTRO";
 
+/**
+ * Sub-indexador analítico — separa ativos com naturezas de taxa diferentes
+ * para que Z-scores e visualizações não misturem grupos heterogêneos.
+ *  - DI_SPREAD : "DI + X%"
+ *  - CDI_PCT  : "X% do CDI" / "X% do DI"
+ *  - IPCA     : "IPCA + X%"
+ *  - PRE / OUTRO : demais
+ */
+export type TradeMode = "DI_SPREAD" | "CDI_PCT" | "IPCA";
+
 export interface TradeAtivo {
   ticker: string;
   indexador: Indexador;
+  sub_indexador: TradeMode | "PRE" | "OUTRO" | null;
   last_date: string;
   last_val: number;          // taxa (DI) ou spread cap. (IPCA)
   last_qtd: number | null;
