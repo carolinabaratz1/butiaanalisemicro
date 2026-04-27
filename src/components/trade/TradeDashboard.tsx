@@ -87,21 +87,26 @@ function fv(v: number) {
 export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
   const isIPCA = mode === "IPCA";
 
-  // KPIs
-  const kpis = useMemo(() => {
-    const vals = data
-      .map(t => t.last_val)
-      .filter((v): v is number => v != null && v > 0)
-      .sort((a, b) => a - b);
-    return {
-      total: data.length,
-      hot: data.filter(t => t.z_score > 1.5).length,
-      median: median(vals) ?? 0,
-      wide: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 > 5).length,
-      narrow: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 < -5).length,
-      totalVolFin: data.reduce((s, t) => s + (t.total_vol_fin ?? 0), 0),
-    };
-  }, [data]);
+  // Server-side aggregated summary (medians/counts) — avoids paginated row truncation in the client.
+  const [summary, setSummary] = useState<TradeSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await supabase.rpc("get_trade_summary", { p_indexador: mode });
+      if (!cancelled) setSummary((rows?.[0] as TradeSummary) ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [mode]);
+
+  // KPIs — counts/medians come from the server summary; client data is only a fallback.
+  const kpis = useMemo(() => ({
+    total: summary?.total_count ?? data.length,
+    hot: summary?.hot_count ?? data.filter(t => t.z_score > 1.5).length,
+    median: Number(summary?.median_last_val ?? 0),
+    wide: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 > 5).length,
+    narrow: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 < -5).length,
+    totalVolFin: data.reduce((s, t) => s + (t.total_vol_fin ?? 0), 0),
+  }), [data, summary]);
 
   // Rating chart
   const ratingData = useMemo(() => {
