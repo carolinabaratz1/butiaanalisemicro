@@ -240,11 +240,10 @@ export function useTickerDetail(ticker: string | null) {
       if (isIPCA) {
         // For IPCA, fetch capitalized spread history via the RPC filtered by ticker
         const allHist: HistoryPoint[] = [];
-        let from = 0;
+        let offset = 0;
         while (true) {
           const { data: page } = await supabase
-            .rpc("get_ipca_history", { p_ticker: ticker })
-            .range(from, from + PAGE - 1);
+            .rpc("get_ipca_history", { p_ticker: ticker, p_limit: PAGE, p_offset: offset });
           if (!page || page.length === 0) break;
           for (const row of page) {
             allHist.push({
@@ -255,7 +254,7 @@ export function useTickerDetail(ticker: string | null) {
             });
           }
           if (page.length < PAGE) break;
-          from += PAGE;
+          offset += PAGE;
         }
         setHistory(allHist);
       } else {
