@@ -14,22 +14,25 @@ interface TradeTableProps {
 type SortField = keyof TradeAtivo;
 
 function rBadge(r: string | null) {
-  if (!r || ["N/A","0","nan",""].includes((r ?? "").trim())) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700">—</span>;
-  const cls = r.includes("AAA") ? "bg-emerald-900/40 text-emerald-400 border-emerald-800"
-    : r.includes("AA") ? "bg-indigo-900/40 text-indigo-400 border-indigo-800"
-    : r.includes("| A") ? "bg-sky-900/40 text-sky-400 border-sky-800"
-    : r.includes("BBB") ? "bg-yellow-900/40 text-yellow-400 border-yellow-800"
-    : "bg-slate-800 text-slate-500 border-slate-700";
+  if (!r || ["N/A","0","nan",""].includes((r ?? "").trim()))
+    return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">—</span>;
+  // Solid, theme-aware colors with strong contrast in both light & dark mode
+  const cls = r.includes("AAA") ? "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700"
+    : r.includes("AA")  ? "bg-sky-600 text-white border-sky-700 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-700"
+    : r.includes("| A") ? "bg-indigo-600 text-white border-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-700"
+    : r.includes("BBB") ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
+    : "bg-muted text-muted-foreground border-border";
   const s = r.replace("MOODY'S | ","M|").replace("MOODYS | ","M|").replace("FITCH | ","F|").replace("S&P | ","S|");
-  return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
 }
 
 function vPill(a: number | null) {
   if (!a || a <= 0) return <span className="text-muted-foreground text-xs">—</span>;
-  const cls = a <= 2 ? "bg-red-900/40 text-red-400 border-red-800"
-    : a <= 7 ? "bg-yellow-900/40 text-yellow-400 border-yellow-800"
-    : "bg-emerald-900/40 text-emerald-400 border-emerald-800";
-  return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{a}a</span>;
+  // Solid pills with white text on colored bg in light mode; subtle tinted in dark mode
+  const cls = a <= 2 ? "bg-rose-600 text-white border-rose-700 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-700"
+    : a <= 7 ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
+    : "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700";
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{a}a</span>;
 }
 
 function fmtQ(v: number | null) {
@@ -131,13 +134,13 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-48 flex-shrink-0 border-r border-border bg-card p-3 overflow-y-auto space-y-4">
+      {/* Sidebar — hidden on mobile */}
+      <aside className="hidden md:block w-48 flex-shrink-0 border-r border-border bg-card p-3 overflow-y-auto space-y-4">
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Busca</div>
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Ticker ou emissor…"
-            className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-sky-400" />
+            className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Sinal</div>
@@ -158,7 +161,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Venc. máx (anos)</div>
           <input type="range" min={0} max={35} value={vencMax} onChange={e => { setVencMax(+e.target.value); setPage(1); }}
-            className="w-full accent-sky-400" style={{ accentColor: modeColor }} />
+            className="w-full" style={{ accentColor: modeColor }} />
           <div className="text-[9px] font-mono text-muted-foreground text-center mt-0.5">
             {vencMax >= 35 ? "35+a" : `≤ ${vencMax}a`}
           </div>
@@ -201,42 +204,52 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
       {/* Table area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Topbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card text-xs text-muted-foreground flex-shrink-0">
-          <span><strong className="text-foreground">{filtered.length}</strong> emissões
-            &nbsp;·&nbsp; 🔥 {filtered.filter(t => (t[zWin] as number ?? 0) > 1.5).length} oportunidades
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px]">Janela Z:</span>
-            <div className="flex gap-0.5 bg-muted p-0.5 rounded">
-              {Z_WINDOWS.map(w => (
-                <button key={w.key} onClick={() => setZWin(w.key)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all
-                    ${zWin === w.key ? "bg-card text-foreground border border-border" : "text-muted-foreground"}`}>
-                  {w.label}
-                </button>
-              ))}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-3 md:px-4 py-2 border-b border-border bg-card text-xs text-muted-foreground flex-shrink-0">
+          {/* Mobile-only quick search (sidebar is hidden on mobile) */}
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Buscar ticker ou emissor…"
+            className="md:hidden w-full bg-muted border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          />
+          <div className="flex items-center justify-between md:justify-start gap-3 w-full md:w-auto">
+            <span className="text-[11px]">
+              <strong className="text-foreground">{filtered.length}</strong> emissões
+              <span className="hidden sm:inline">&nbsp;·&nbsp; 🔥 {filtered.filter(t => (t[zWin] as number ?? 0) > 1.5).length} oportunidades</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] hidden sm:inline">Janela Z:</span>
+              <div className="flex gap-0.5 bg-muted p-0.5 rounded">
+                {Z_WINDOWS.map(w => (
+                  <button key={w.key} onClick={() => setZWin(w.key)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all
+                      ${zWin === w.key ? "bg-card text-foreground border border-border shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                    {w.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-[11px] border-collapse min-w-[950px]">
+          <table className="w-full text-[11px] border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-muted border-b border-border">
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Sinal</th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("ticker")}>Ticker <SortIcon field="ticker" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Emissor</th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("anos_venc")}>Venc. <SortIcon field="anos_venc" /></th>
-                {isIPCA && <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">NTN-B</th>}
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Rating</th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_val")}>{isIPCA ? "Spread" : "Taxa"} <SortIcon field="last_val" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_5d")}>5d <SortIcon field="avg_5d" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_21d")}>21d <SortIcon field="avg_21d" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_90d")}>90d <SortIcon field="avg_90d" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt(zWin)}>Z-Score <SortIcon field={zWin} /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("change_bps")}>Δ bps <SortIcon field="change_bps" /></th>
-                <th className="px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_qtd")}>Qtd. <SortIcon field="last_qtd" /></th>
+                <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Sinal</th>
+                <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("ticker")}>Ticker <SortIcon field="ticker" /></th>
+                <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Emissor</th>
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("anos_venc")}>Venc. <SortIcon field="anos_venc" /></th>
+                {isIPCA && <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">NTN-B</th>}
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Rating</th>
+                <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_val")}>{isIPCA ? "Spread" : "Taxa"} <SortIcon field="last_val" /></th>
+                <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_5d")}>5d <SortIcon field="avg_5d" /></th>
+                <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_21d")}>21d <SortIcon field="avg_21d" /></th>
+                <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_90d")}>90d <SortIcon field="avg_90d" /></th>
+                <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt(zWin)}>Z-Score <SortIcon field={zWin} /></th>
+                <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("change_bps")}>Δ bps <SortIcon field="change_bps" /></th>
+                <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_qtd")}>Qtd. <SortIcon field="last_qtd" /></th>
               </tr>
             </thead>
             <tbody>
@@ -246,57 +259,68 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
               {slice.map(t => {
                 const zv = (t[zWin] as number) ?? 0;
                 const isHot = zv > 1.5, isWatch = zv > 0.5;
-                const zColor = zv > 2 ? "#ff4d2e" : zv > 1 ? "#fb923c" : zv > 0 ? "#94a3b8" : "#34d399";
+                // Theme-aware Z color: use semantic destructive/warning/success cues
+                const zClass = zv > 2 ? "text-rose-600 dark:text-rose-400"
+                  : zv > 1 ? "text-amber-600 dark:text-amber-400"
+                  : zv > 0 ? "text-muted-foreground"
+                  : "text-emerald-600 dark:text-emerald-400";
+                const zBg = zv > 2 ? "bg-rose-600 dark:bg-rose-400"
+                  : zv > 1 ? "bg-amber-500 dark:bg-amber-400"
+                  : zv > 0 ? "bg-muted-foreground/60"
+                  : "bg-emerald-600 dark:bg-emerald-400";
                 const bps = t.change_bps ?? 0;
-                const ntnbS = t.ntnb_ref ? t.ntnb_ref.replace("NTN-B 760199 ","").replace(/(\d{4})(\d{2}).*/,"$1/$2") : "—";
+                const ntnbS = t.ntnb_ref ? t.ntnb_ref.replace("NTN-B 760199 ","").replace(/(\d{4})(\d{2}).*/,"$1-$2") : "—";
 
                 return (
                   <tr key={t.ticker}
                     onClick={() => onSelectTicker(t.ticker)}
                     className={`border-b border-border cursor-pointer transition-colors hover:bg-muted/50
-                      ${selectedTicker === t.ticker ? "bg-sky-400/5 border-l-2" : ""}`}
-                    style={selectedTicker === t.ticker ? { borderLeftColor: modeColor } : {}}>
-                    <td className="px-2.5 py-2">
+                      ${selectedTicker === t.ticker ? "bg-primary/5 border-l-2 border-l-primary" : ""}`}>
+                    <td className="px-2 md:px-2.5 py-2">
                       {isHot ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse shadow-[0_0_4px_#ff4d2e]" />
-                          <span className="text-[9px] font-bold text-orange-400">QUENTE</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_4px_hsl(0_84%_60%)]" />
+                          <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400">QUENTE</span>
                         </div>
                       ) : isWatch ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                          <span className="text-[9px] font-bold text-orange-400">ATENÇÃO</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">ATENÇÃO</span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          <span className="text-[9px] text-muted-foreground">NORMAL</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="text-[9px] font-semibold text-emerald-700 dark:text-emerald-400">NORMAL</span>
                         </div>
                       )}
                     </td>
-                    <td className="px-2.5 py-2">
-                      <span className="font-mono font-semibold text-xs" style={{ color: modeColor }}>{t.ticker}</span>
+                    <td className="px-2 md:px-2.5 py-2">
+                      <span className="font-mono font-semibold text-xs text-primary">{t.ticker}</span>
                     </td>
-                    <td className="px-2.5 py-2 max-w-[150px] truncate text-foreground">{t.emissor_nome ?? "—"}</td>
-                    <td className="px-2.5 py-2">{vPill(t.anos_venc)}</td>
-                    {isIPCA && <td className="px-2.5 py-2"><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-violet-900/40 text-violet-300 border border-violet-800">{ntnbS}</span></td>}
-                    <td className="px-2.5 py-2">{rBadge(t.rating)}</td>
-                    <td className="px-2.5 py-2 font-mono font-semibold text-xs">{(t.last_val ?? 0).toFixed(3)}%</td>
-                    <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_5d ?? 0).toFixed(3)}%</td>
-                    <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_21d ?? 0).toFixed(3)}%</td>
-                    <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_90d ?? 0).toFixed(3)}%</td>
-                    <td className="px-2.5 py-2">
+                    <td className="px-2 md:px-2.5 py-2 max-w-[120px] md:max-w-[150px] truncate text-foreground">{t.emissor_nome ?? "—"}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">{vPill(t.anos_venc)}</td>
+                    {isIPCA && (
+                      <td className="hidden md:table-cell px-2.5 py-2">
+                        <span className="text-[10px] font-mono text-muted-foreground">{ntnbS}</span>
+                      </td>
+                    )}
+                    <td className="hidden md:table-cell px-2.5 py-2">{rBadge(t.rating)}</td>
+                    <td className="px-2 md:px-2.5 py-2 font-mono font-semibold text-xs text-foreground">{(t.last_val ?? 0).toFixed(3)}%</td>
+                    <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_5d ?? 0).toFixed(3)}%</td>
+                    <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_21d ?? 0).toFixed(3)}%</td>
+                    <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_90d ?? 0).toFixed(3)}%</td>
+                    <td className="px-2 md:px-2.5 py-2">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs min-w-[34px]" style={{ color: zColor }}>{zv.toFixed(2)}</span>
-                        <div className="w-9 h-0.5 bg-border rounded overflow-hidden">
-                          <div className="h-full rounded" style={{ width: `${Math.min(Math.abs(zv)/3*100,100)}%`, background: zColor }} />
+                        <span className={`font-mono text-xs font-semibold min-w-[34px] ${zClass}`}>{zv.toFixed(2)}</span>
+                        <div className="hidden sm:block w-9 h-1 bg-border rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${zBg}`} style={{ width: `${Math.min(Math.abs(zv)/3*100,100)}%` }} />
                         </div>
                       </div>
                     </td>
-                    <td className={`px-2.5 py-2 font-mono text-[10px] ${bps > 5 ? "text-red-400" : bps < -5 ? "text-emerald-400" : "text-muted-foreground"}`}>
+                    <td className={`hidden lg:table-cell px-2.5 py-2 font-mono text-[10px] font-semibold ${bps > 5 ? "text-rose-600 dark:text-rose-400" : bps < -5 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
                       {bps > 0 ? "+" : ""}{bps.toFixed(0)}
                     </td>
-                    <td className="px-2.5 py-2 font-mono text-muted-foreground text-[10px]">{fmtQ(t.last_qtd)}</td>
+                    <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[10px]">{fmtQ(t.last_qtd)}</td>
                   </tr>
                 );
               })}
