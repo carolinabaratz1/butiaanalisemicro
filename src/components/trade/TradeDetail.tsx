@@ -1,6 +1,6 @@
 // src/components/trade/TradeDetail.tsx
 import { useState } from "react";
-import { TradeAtivo, HistoryPoint, NTNBPoint, useTickerDetail } from "@/hooks/useTradeData";
+import { TradeAtivo, HistoryPoint, NTNBPoint, TradeMode, useTickerDetail } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import { X, ExternalLink } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -10,7 +10,7 @@ interface TradeDetailProps {
   data: TradeAtivo[];
   history: Record<string, HistoryPoint[]>;
   ntnbHist: Record<string, NTNBPoint[]>;
-  mode: "DI" | "IPCA";
+  mode: TradeMode;
   modeColor: string;
   onClose: () => void;
   onViewEmissor?: (cnpj: string) => void;
