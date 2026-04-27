@@ -96,7 +96,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
             </div>
             {isIPCA && t.ntnb_ref && (
               <div className="text-[9px] text-violet-300 font-mono mt-1">
-                NTN-B: {t.ntnb_ref.replace("NTN-B 760199 ","")} · {(t.ntnb_taxa ?? 0).toFixed(4)}%
+                {fmtNTNB(t.ntnb_ref)} · {(t.ntnb_taxa ?? 0).toFixed(4)}%
               </div>
             )}
           </div>
