@@ -23,47 +23,32 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
 
   useEffect(() => {
     (async () => {
-      // Paginate to overcome the default 1000-row limit (trade_metricas has ~1.7k rows)
-      const PAGE = 1000;
-      type Row = { indexador: string | null; last_val: number | null; z_score: number | null; last_date: string | null };
-      const all: Row[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
+      // Use server-side aggregation via RPC so paginated row limits don't skew medians.
+      const [diRes, ipcaRes, dateRes] = await Promise.all([
+        supabase.rpc("get_trade_summary", { p_indexador: "DI" }),
+        supabase.rpc("get_trade_summary", { p_indexador: "IPCA" }),
+        supabase
           .from("trade_metricas")
-          .select("indexador, last_val, z_score, last_date")
-          .in("indexador", ["DI", "IPCA", "PRE", "OUTRO"])
-          .range(from, from + PAGE - 1);
-        if (error || !data) break;
-        all.push(...(data as Row[]));
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
+          .select("last_date")
+          .order("last_date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
 
-      if (all.length === 0) { setLoading(false); return; }
-
-      const diRows  = all.filter(r => r.indexador === "DI");
-      const ipcaRows = all.filter(r => r.indexador === "IPCA");
-
-      const med = (rows: Row[]) => {
-        const sorted = rows
-          .map(r => r.last_val)
-          .filter((v): v is number => v != null && v > 0)
-          .sort((a, b) => a - b);
-        return sorted[Math.floor(sorted.length / 2)] ?? 0;
-      };
+      const di0 = diRes.data?.[0];
+      const ipca0 = ipcaRes.data?.[0];
 
       setDi({
-        count: diRows.length,
-        hot: diRows.filter(r => (r.z_score ?? 0) > 1.5).length,
-        median: med(diRows),
+        count: di0?.total_count ?? 0,
+        hot: di0?.hot_count ?? 0,
+        median: Number(di0?.median_last_val ?? 0),
       });
       setIpca({
-        count: ipcaRows.length,
-        hot: ipcaRows.filter(r => (r.z_score ?? 0) > 1.5).length,
-        median: med(ipcaRows),
+        count: ipca0?.total_count ?? 0,
+        hot: ipca0?.hot_count ?? 0,
+        median: Number(ipca0?.median_last_val ?? 0),
       });
-      setLastDate(all.find(r => r.last_date)?.last_date ?? "");
+      setLastDate(dateRes.data?.last_date ?? "");
       setLoading(false);
     })();
   }, []);
