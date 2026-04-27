@@ -176,9 +176,9 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
             </thead>
             <tbody>
               {WINDOWS.map(w => {
-                const avg = (t[w.avg] as number) ?? t.last_val;
-                const z   = (t[w.key] as number) ?? 0;
-                const db  = ((t.last_val - avg) * 100).toFixed(1);
+                const avg = (t[w.avg] as number | null) ?? (t.last_val ?? 0);
+                const z   = (t[w.key] as number | null) ?? 0;
+                const db  = (((t.last_val ?? 0) - avg) * 100).toFixed(1);
                 const zc  = z > 1.5 ? "#ff4d2e" : z > 0.5 ? "#fb923c" : z > 0 ? "#94a3b8" : "#34d399";
                 return (
                   <tr key={w.label} className="border-b border-border last:border-0">
