@@ -212,9 +212,23 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
     });
   }, [data]);
 
-  // Daily mean spread series — universe vs AAA, last N days from history
+  // Daily mean spread series — universe vs AAA, last N days.
+  // Prefer the materialized aggregate table (instant, ~120 rows). Fallback to
+  // re-computing from the per-ticker `history` blob if the table is empty.
   const spreadSeries = useMemo(() => {
-    if (!history) return { aaa: [] as { d: string; val: number }[], universe: [] as { d: string; val: number }[], aaaAvg: 0, uniAvg: 0 };
+    const empty = { aaa: [] as { d: string; val: number }[], universe: [] as { d: string; val: number }[], aaaAvg: 0, uniAvg: 0 };
+
+    const meanOf = (arr: { val: number }[]) =>
+      arr.length ? arr.reduce((s, p) => s + p.val, 0) / arr.length : 0;
+
+    // Fast path: pre-aggregated table (IPCA only).
+    if (aggSeries && (aggSeries.AAA.length > 0 || aggSeries.UNIVERSO.length > 0)) {
+      const universe = aggSeries.UNIVERSO.slice(-spreadWindow);
+      const aaa = aggSeries.AAA.slice(-spreadWindow);
+      return { universe, aaa, uniAvg: meanOf(universe.filter(p => p.val > 0)), aaaAvg: meanOf(aaa.filter(p => p.val > 0)) };
+    }
+
+    if (!history) return empty;
 
     // Restrict to tickers in the current mode (data is already filtered by sub_indexador upstream).
     // This prevents %CDI series (e.g. 104 = 104% CDI) from polluting the IPCA+ universe.
@@ -222,13 +236,6 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
     const aaaTickers = new Set(
       data.filter(t => normRating(t.rating ?? null) === "AAA").map(t => t.ticker)
     );
-
-    // Diagnostic: log a sample of ratings for the current mode to confirm parsing.
-    if (import.meta.env.DEV) {
-      const sample = data.slice(0, 10).map(t => t.rating);
-       
-      console.log(`[spreadSeries ${mode}] tickers=${modeTickers.size} aaa=${aaaTickers.size} ratings sample:`, sample);
-    }
 
     // Aggregate by date — only points whose ticker belongs to the current mode.
     const uniByDate: Record<string, number[]> = {};
@@ -252,10 +259,8 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
       const arr = aaaByDate[d] ?? [];
       return { d, val: arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0 };
     });
-    const meanOf = (arr: { val: number }[]) =>
-      arr.length ? arr.reduce((s, p) => s + p.val, 0) / arr.length : 0;
     return { universe, aaa, uniAvg: meanOf(universe.filter(p => p.val > 0)), aaaAvg: meanOf(aaa.filter(p => p.val > 0)) };
-  }, [history, data, spreadWindow, mode]);
+  }, [aggSeries, history, data, spreadWindow, mode]);
 
   const spreadYDomain = useMemo<[number, number] | undefined>(() => {
     const all = [...spreadSeries.aaa, ...spreadSeries.universe].map(p => p.val).filter(v => v > 0);
