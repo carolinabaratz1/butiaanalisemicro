@@ -713,29 +713,7 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                                const { data: maxRows } = await supabase
-                                  .from('analises')
-                                  .select('versao')
-                                  .eq('empresa_id', item.empresa_id)
-                                  .eq('tipo', item.tipo)
-                                  .order('versao', { ascending: false })
-                                  .limit(1);
-                                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
-                                createAnalise.mutate({
-                                  empresa_id: item.empresa_id,
-                                  tipo: item.tipo,
-                                  analista_responsavel: item.analista_responsavel,
-                                  isin: item.isin || '',
-                                  status: 'Pendente',
-                                  data_inicio: new Date().toISOString().split('T')[0],
-                                  prazo: item.prazo,
-                                  versao: novaVersao,
-                                  solicitante_id: currentUser?.id || '',
-                                });
-                                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
-                                toast({ title: `Nova análise v${novaVersao} criada` });
-                              }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
                             )}
