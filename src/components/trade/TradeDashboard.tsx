@@ -83,11 +83,17 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
   const chartTheme = useChartTheme();
 
   // Server-side aggregated summary (medians/counts) — avoids paginated row truncation in the client.
+  // Map the analytical mode (sub_indexador) to the underlying indexador used by the RPC.
   const [summary, setSummary] = useState<TradeSummary | null>(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: rows } = await supabase.rpc("get_trade_summary", { p_indexador: mode });
+      const indexador =
+        mode === "IPCA" ? "IPCA" : "DI"; // both DI_SPREAD and CDI_PCT live under indexador='DI'
+      const { data: rows } = await supabase.rpc("get_trade_summary", {
+        p_indexador: indexador,
+        p_sub_indexador: mode,
+      });
       if (!cancelled) setSummary((rows?.[0] as TradeSummary) ?? null);
     })();
     return () => { cancelled = true; };
