@@ -131,6 +131,10 @@ export default function PipelineResearchPage() {
   const [dataComite, setDataComite] = useState<Date>();
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
+  // Reabrir modal (com novo prazo)
+  const [reabrirModal, setReabrirModal] = useState<any | null>(null);
+  const [novoPrazoReabrir, setNovoPrazoReabrir] = useState<Date | undefined>();
+
   const isGestor = currentUser?.funcao === 'Gestor';
   const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
@@ -709,29 +713,7 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                                const { data: maxRows } = await supabase
-                                  .from('analises')
-                                  .select('versao')
-                                  .eq('empresa_id', item.empresa_id)
-                                  .eq('tipo', item.tipo)
-                                  .order('versao', { ascending: false })
-                                  .limit(1);
-                                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
-                                createAnalise.mutate({
-                                  empresa_id: item.empresa_id,
-                                  tipo: item.tipo,
-                                  analista_responsavel: item.analista_responsavel,
-                                  isin: item.isin || '',
-                                  status: 'Pendente',
-                                  data_inicio: new Date().toISOString().split('T')[0],
-                                  prazo: item.prazo,
-                                  versao: novaVersao,
-                                  solicitante_id: currentUser?.id || '',
-                                });
-                                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
-                                toast({ title: `Nova análise v${novaVersao} criada` });
-                              }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
                             )}
@@ -864,28 +846,7 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
-                                const { data: maxRows } = await supabase
-                                  .from('analises')
-                                  .select('versao')
-                                  .eq('empresa_id', item.empresa_id)
-                                  .eq('tipo', item.tipo)
-                                  .order('versao', { ascending: false })
-                                  .limit(1);
-                                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
-                                createAnalise.mutate({
-                                  empresa_id: item.empresa_id,
-                                  tipo: item.tipo,
-                                  analista_responsavel: item.analista_responsavel,
-                                  isin: item.isin || '',
-                                  status: 'Pendente',
-                                  data_inicio: new Date().toISOString().split('T')[0],
-                                  prazo: item.prazo,
-                                  versao: novaVersao,
-                                  solicitante_id: currentUser?.id || '',
-                                });
-                                toast({ title: `Nova análise v${novaVersao} criada` });
-                              }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
                             )}
@@ -1020,7 +981,7 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
-                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { registrarEvento({ analise_id: drawerAnalise.id, acao: 'reaberta', etapa_nova: 'Pendente' }); updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
                   )}
@@ -1288,6 +1249,69 @@ export default function PipelineResearchPage() {
               </SelectContent>
             </Select>
             <Button size="sm" className="w-full" onClick={handleReatribuir}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reabrir Análise Modal */}
+      <Dialog open={!!reabrirModal} onOpenChange={(open) => { if (!open) { setReabrirModal(null); setNovoPrazoReabrir(undefined); } }}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Reabrir Análise</DialogTitle>
+            <DialogDescription>
+              {reabrirModal ? `${getEmissorNome(reabrirModal.empresa_id, empresasMap)} · ${reabrirModal.tipo}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Novo prazo de entrega (obrigatório)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !novoPrazoReabrir && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {novoPrazoReabrir ? format(novoPrazoReabrir, 'dd/MM/yyyy') : 'Selecionar data'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={novoPrazoReabrir} onSelect={setNovoPrazoReabrir} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!novoPrazoReabrir || createAnalise.isPending}
+              onClick={async () => {
+                if (!reabrirModal || !novoPrazoReabrir) return;
+                const item = reabrirModal;
+                const { data: maxRows } = await supabase
+                  .from('analises')
+                  .select('versao')
+                  .eq('empresa_id', item.empresa_id)
+                  .eq('tipo', item.tipo)
+                  .order('versao', { ascending: false })
+                  .limit(1);
+                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
+                createAnalise.mutate({
+                  empresa_id: item.empresa_id,
+                  tipo: item.tipo,
+                  analista_responsavel: item.analista_responsavel,
+                  isin: item.isin || '',
+                  status: 'Pendente',
+                  data_inicio: new Date().toISOString().split('T')[0],
+                  prazo: format(novoPrazoReabrir, 'yyyy-MM-dd'),
+                  versao: novaVersao,
+                  solicitante_id: currentUser?.id || '',
+                });
+                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
+                toast({ title: `Nova análise v${novaVersao} criada` });
+                setReabrirModal(null);
+                setNovoPrazoReabrir(undefined);
+              }}
+            >
+              {createAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Reabertura
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
