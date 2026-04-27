@@ -1,6 +1,7 @@
 // src/components/trade/TradeDetail.tsx
 import { useState } from "react";
 import { TradeAtivo, HistoryPoint, NTNBPoint, useTickerDetail } from "@/hooks/useTradeData";
+import { useChartTheme } from "@/hooks/useChartTheme";
 import { X, ExternalLink } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -35,16 +36,15 @@ function fmtNTNB(ref: string | null | undefined): string {
   return `NTN-B ${code.slice(0, 4)}-${code.slice(4, 6)}`;
 }
 
-const TOOLTIP_STYLE = {
-  backgroundColor: "#0c1018", border: "1px solid #1c2840", borderRadius: 6,
-  fontSize: 11, fontFamily: "DM Mono, monospace", color: "#dde6f0",
-};
+// Tooltip / axis colors are now derived from CSS tokens via useChartTheme()
+
 
 type ChartWin = "90d" | "30d" | "21d" | "10d" | "pu";
 
 export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, onViewEmissor }: TradeDetailProps) {
   const [chartWin, setChartWin] = useState<ChartWin>("90d");
   const t = data.find(x => x.ticker === ticker);
+  const chartTheme = useChartTheme();
 
   // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
   // Falls back to the global `history` map if the per-ticker fetch is empty.
@@ -215,23 +215,24 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
             <ResponsiveContainer width="100%" height="100%">
               {chartWin === "pu" ? (
                 <LineChart data={chartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                  <XAxis dataKey="d" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono" }} axisLine={false} tickLine={false}
+                  <XAxis dataKey="d" tick={{ fontSize: 8, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                     tickFormatter={v => "R$"+Math.round(v)} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, name: string) => ["R$ "+v?.toFixed(2), name === "pc" ? "PU Curva" : "PU Indicativo"]} />
-                  <Legend iconSize={6} wrapperStyle={{ fontSize: 9 }} />
-                  <Line type="monotone" dataKey="pc" stroke="#475569" strokeWidth={1.5} dot={false} name="PU Curva" strokeDasharray="4 3" connectNulls />
+                  <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem}
+                    formatter={(v: number, name: string) => ["R$ "+v?.toFixed(2), name === "pc" ? "PU Curva" : "PU Indicativo"]} />
+                  <Legend iconSize={6} wrapperStyle={{ fontSize: 9, color: chartTheme.muted }} />
+                  <Line type="monotone" dataKey="pc" stroke={chartTheme.muted} strokeWidth={1.5} dot={false} name="PU Curva" strokeDasharray="4 3" connectNulls />
                   <Line type="monotone" dataKey="pi" stroke={modeColor} strokeWidth={2} dot={false} name="PU Indicativo" connectNulls />
                 </LineChart>
               ) : (
                 <LineChart data={chartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                  <XAxis dataKey="d" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono" }} axisLine={false} tickLine={false}
+                  <XAxis dataKey="d" tick={{ fontSize: 8, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                     tickFormatter={v => v.toFixed(2)+"%"} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE}
+                  <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem}
                     formatter={(v: number, name: string) => [v.toFixed(4)+"%", name === "val" ? (isIPCA ? "Spread" : "Taxa") : "Média 90d"]} />
                   <Line type="monotone" dataKey="val" stroke={modeColor} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="avg90" stroke="#2d4060" strokeWidth={1} strokeDasharray="4 3" dot={false} />
+                  <Line type="monotone" dataKey="avg90" stroke={chartTheme.border} strokeWidth={1} strokeDasharray="4 3" dot={false} />
                 </LineChart>
               )}
             </ResponsiveContainer>
