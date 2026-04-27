@@ -131,6 +131,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
             {view === "dashboard" ? (
               <TradeDashboard
                 data={filteredData}
+                history={history}
                 mode={mode}
                 modeColor={modeCfg.color}
                 onSelectTicker={(t) => { setSelectedTicker(t); setView("table"); }}
