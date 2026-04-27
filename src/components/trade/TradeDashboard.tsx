@@ -191,13 +191,26 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
   // Daily mean spread series — universe vs AAA, last N days from history
   const spreadSeries = useMemo(() => {
     if (!history) return { aaa: [] as { d: string; val: number }[], universe: [] as { d: string; val: number }[], aaaAvg: 0, uniAvg: 0 };
+
+    // Restrict to tickers in the current mode (data is already filtered by sub_indexador upstream).
+    // This prevents %CDI series (e.g. 104 = 104% CDI) from polluting the IPCA+ universe.
+    const modeTickers = new Set(data.map(t => t.ticker));
     const aaaTickers = new Set(
       data.filter(t => normRating(t.rating ?? null) === "AAA").map(t => t.ticker)
     );
-    // Aggregate by date
+
+    // Diagnostic: log a sample of ratings for the current mode to confirm parsing.
+    if (import.meta.env.DEV) {
+      const sample = data.slice(0, 10).map(t => t.rating);
+       
+      console.log(`[spreadSeries ${mode}] tickers=${modeTickers.size} aaa=${aaaTickers.size} ratings sample:`, sample);
+    }
+
+    // Aggregate by date — only points whose ticker belongs to the current mode.
     const uniByDate: Record<string, number[]> = {};
     const aaaByDate: Record<string, number[]> = {};
     for (const [ticker, points] of Object.entries(history)) {
+      if (!modeTickers.has(ticker)) continue;
       const isAaa = aaaTickers.has(ticker);
       for (const p of points) {
         if (p.r == null || !isFinite(p.r)) continue;
@@ -217,8 +230,8 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
     });
     const meanOf = (arr: { val: number }[]) =>
       arr.length ? arr.reduce((s, p) => s + p.val, 0) / arr.length : 0;
-    return { universe, aaa, uniAvg: meanOf(universe), aaaAvg: meanOf(aaa.filter(p => p.val > 0)) };
-  }, [history, data, spreadWindow]);
+    return { universe, aaa, uniAvg: meanOf(universe.filter(p => p.val > 0)), aaaAvg: meanOf(aaa.filter(p => p.val > 0)) };
+  }, [history, data, spreadWindow, mode]);
 
   const spreadYDomain = useMemo<[number, number] | undefined>(() => {
     const all = [...spreadSeries.aaa, ...spreadSeries.universe].map(p => p.val).filter(v => v > 0);
