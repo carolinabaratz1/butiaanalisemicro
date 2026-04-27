@@ -688,7 +688,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && item.displayStatus === 'Concluída' && (
+                            {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                                   <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
@@ -698,7 +698,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
@@ -708,7 +708,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
                                 const { data: maxRows } = await supabase
                                   .from('analises')
@@ -853,7 +853,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && item.displayStatus === 'Concluída' && (
+                            {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                                   <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
@@ -863,7 +863,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {isGestor && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={async () => {
                                 const { data: maxRows } = await supabase
                                   .from('analises')
@@ -1004,7 +1004,7 @@ export default function PipelineResearchPage() {
                       </Button>
                     </>
                   )}
-                  {isGestor && drawerAnalise.status === 'Concluída' && (
+                  {(isGestor || isCoord) && drawerAnalise.status === 'Concluída' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
                         <ThumbsUp className="h-3 w-3" /> Aprovar
@@ -1014,12 +1014,12 @@ export default function PipelineResearchPage() {
                       </Button>
                     </>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
                     <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
-                  {isGestor && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { registrarEvento({ analise_id: drawerAnalise.id, acao: 'reaberta', etapa_nova: 'Pendente' }); updateStatus.mutate({ id: drawerAnalise.id, status: 'Pendente', extras: { data_inicio: new Date().toISOString().split('T')[0], data_conclusao: null, data_comite: null, recomendacao: null, justificativa_rejeicao: null } }); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
