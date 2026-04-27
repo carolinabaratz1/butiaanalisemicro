@@ -262,6 +262,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
