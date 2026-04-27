@@ -134,6 +134,8 @@ export default function PipelineResearchPage() {
   // Reabrir modal (com novo prazo)
   const [reabrirModal, setReabrirModal] = useState<any | null>(null);
   const [novoPrazoReabrir, setNovoPrazoReabrir] = useState<Date | undefined>();
+  const [editarPrazoModal, setEditarPrazoModal] = useState<any | null>(null);
+  const [novoPrazoEdicao, setNovoPrazoEdicao] = useState<Date | undefined>();
 
   const isGestor = currentUser?.funcao === 'Gestor';
   const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
