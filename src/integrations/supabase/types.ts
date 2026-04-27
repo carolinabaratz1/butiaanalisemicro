@@ -749,6 +749,19 @@ export type Database = {
           ticker: string
         }[]
       }
+      get_trade_summary: {
+        Args: { p_indexador: string }
+        Returns: {
+          hot_count: number
+          median_avg_10d: number
+          median_avg_21d: number
+          median_avg_30d: number
+          median_avg_5d: number
+          median_avg_90d: number
+          median_last_val: number
+          total_count: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
