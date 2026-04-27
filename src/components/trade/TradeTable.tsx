@@ -281,7 +281,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                     <td className="px-2.5 py-2">{vPill(t.anos_venc)}</td>
                     {isIPCA && <td className="px-2.5 py-2"><span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-violet-900/40 text-violet-300 border border-violet-800">{ntnbS}</span></td>}
                     <td className="px-2.5 py-2">{rBadge(t.rating)}</td>
-                    <td className="px-2.5 py-2 font-mono font-semibold text-xs">{t.last_val.toFixed(3)}%</td>
+                    <td className="px-2.5 py-2 font-mono font-semibold text-xs">{(t.last_val ?? 0).toFixed(3)}%</td>
                     <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_5d ?? 0).toFixed(3)}%</td>
                     <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_21d ?? 0).toFixed(3)}%</td>
                     <td className="px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_90d ?? 0).toFixed(3)}%</td>
