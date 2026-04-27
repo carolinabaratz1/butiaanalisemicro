@@ -189,6 +189,13 @@ async function finalizeUpload(supabase: any, logId: number, summary: UploadSumma
 
 // deno-lint-ignore no-explicit-any
 async function recalcMetrics(supabase: any) {
+  // Forward fill: preenche taxas faltantes com a taxa do dia anterior
+  // para tickers com >= 90% de cobertura. Roda ANTES do recálculo para
+  // que as médias móveis e z-scores usem séries contínuas.
+  const { data: ffCount, error: errFf } = await supabase.rpc("apply_forward_fill");
+  if (errFf) throw new Error(`apply_forward_fill: ${errFf.message}`);
+  console.log(`apply_forward_fill: ${ffCount ?? 0} linhas preenchidas`);
+
   // Quebra o recálculo em duas RPCs separadas para evitar timeout no plano gratuito.
   // Primeiro DI/PRE/OUTRO, depois IPCA em lotes de 100 tickers. Cada chamada RPC
   // do batch IPCA roda em uma transação própria, então o banco faz commit ao fim

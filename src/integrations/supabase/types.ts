@@ -743,6 +743,7 @@ export type Database = {
       }
     }
     Functions: {
+      apply_forward_fill: { Args: never; Returns: number }
       derive_sub_indexador: {
         Args: { p_indexador: string; p_taxa_emissao: string }
         Returns: string
