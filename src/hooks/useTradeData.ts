@@ -126,7 +126,7 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
 
       const PAGE = 1000;
 
-      if (indexador === "IPCA") {
+      if (mode === "IPCA") {
         // For IPCA we need to compute spread on the fly via RPC.
         // Paginate to bypass PostgREST's 1000-row default limit.
         const byTicker: Record<string, HistoryPoint[]> = {};
@@ -180,7 +180,7 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
       }
 
       // 3. NTN-B history (IPCA only) — paginated
-      if (indexador === "IPCA") {
+      if (mode === "IPCA") {
         const byBond: Record<string, NTNBPoint[]> = {};
         let from = 0;
         while (true) {
@@ -206,7 +206,7 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
     } finally {
       setLoading(false);
     }
-  }, [indexador]);
+  }, [mode]);
 
   useEffect(() => { load(); }, [load]);
 
