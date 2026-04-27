@@ -14,22 +14,25 @@ interface TradeTableProps {
 type SortField = keyof TradeAtivo;
 
 function rBadge(r: string | null) {
-  if (!r || ["N/A","0","nan",""].includes((r ?? "").trim())) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700">—</span>;
-  const cls = r.includes("AAA") ? "bg-emerald-900/40 text-emerald-400 border-emerald-800"
-    : r.includes("AA") ? "bg-indigo-900/40 text-indigo-400 border-indigo-800"
-    : r.includes("| A") ? "bg-sky-900/40 text-sky-400 border-sky-800"
-    : r.includes("BBB") ? "bg-yellow-900/40 text-yellow-400 border-yellow-800"
-    : "bg-slate-800 text-slate-500 border-slate-700";
+  if (!r || ["N/A","0","nan",""].includes((r ?? "").trim()))
+    return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">—</span>;
+  // Solid, theme-aware colors with strong contrast in both light & dark mode
+  const cls = r.includes("AAA") ? "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700"
+    : r.includes("AA")  ? "bg-sky-600 text-white border-sky-700 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-700"
+    : r.includes("| A") ? "bg-indigo-600 text-white border-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-700"
+    : r.includes("BBB") ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
+    : "bg-muted text-muted-foreground border-border";
   const s = r.replace("MOODY'S | ","M|").replace("MOODYS | ","M|").replace("FITCH | ","F|").replace("S&P | ","S|");
-  return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
 }
 
 function vPill(a: number | null) {
   if (!a || a <= 0) return <span className="text-muted-foreground text-xs">—</span>;
-  const cls = a <= 2 ? "bg-red-900/40 text-red-400 border-red-800"
-    : a <= 7 ? "bg-yellow-900/40 text-yellow-400 border-yellow-800"
-    : "bg-emerald-900/40 text-emerald-400 border-emerald-800";
-  return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{a}a</span>;
+  // Solid pills with white text on colored bg in light mode; subtle tinted in dark mode
+  const cls = a <= 2 ? "bg-rose-600 text-white border-rose-700 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-700"
+    : a <= 7 ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
+    : "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700";
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{a}a</span>;
 }
 
 function fmtQ(v: number | null) {
