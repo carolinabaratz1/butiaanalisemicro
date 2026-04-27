@@ -1,11 +1,11 @@
 // src/components/trade/TradeTable.tsx
 import { useState, useMemo } from "react";
-import { TradeAtivo } from "@/hooks/useTradeData";
+import { TradeAtivo, TradeMode } from "@/hooks/useTradeData";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface TradeTableProps {
   data: TradeAtivo[];
-  mode: "DI" | "IPCA";
+  mode: TradeMode;
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
   selectedTicker: string | null;
