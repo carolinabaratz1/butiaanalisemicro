@@ -116,13 +116,19 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
       const tickers = (metrics ?? []).map((m) => m.ticker as string);
       if (tickers.length === 0) { setLoading(false); return; }
 
-      // Get 90d cutoff
-      const { data: dates } = await supabase
+      // Get 90 trading-day cutoff. Selecting plain `data` returns one row
+      // per (ticker,date), so we need DISTINCT dates — fetch the latest date
+      // and walk back ~135 calendar days (~90 trading days w/ slack).
+      const { data: latestRow } = await supabase
         .from("trade_taxas")
         .select("data")
         .order("data", { ascending: false })
-        .limit(90);
-      const cutoff = dates?.at(-1)?.data ?? "2000-01-01";
+        .limit(1)
+        .maybeSingle();
+      const latestDate = latestRow?.data ? new Date(latestRow.data) : new Date();
+      const cutoffDate = new Date(latestDate);
+      cutoffDate.setDate(cutoffDate.getDate() - 135);
+      const cutoff = cutoffDate.toISOString().slice(0, 10);
 
       const PAGE = 1000;
 
