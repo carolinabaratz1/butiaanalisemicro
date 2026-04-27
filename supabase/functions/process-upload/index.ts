@@ -223,4 +223,18 @@ async function recalcMetrics(supabase: any) {
     guard += 1;
     if (guard > 1000) throw new Error("recalc_trade_metricas_ipca_batch: limite de segurança excedido.");
   }
+
+  // Pré-calcula séries e snapshots usados pelos gráficos do Trade Monitor.
+  // Roda DEPOIS do recálculo de métricas para que rating/indexador estejam atualizados.
+  const { data: histRows, error: errHist } = await supabase.rpc("refresh_spread_historico");
+  if (errHist) throw new Error(`refresh_spread_historico: ${errHist.message}`);
+  console.log(`refresh_spread_historico: ${histRows ?? 0} linhas`);
+
+  const { data: aggRows, error: errAgg } = await supabase.rpc("refresh_spread_agg_diario");
+  if (errAgg) throw new Error(`refresh_spread_agg_diario: ${errAgg.message}`);
+  console.log(`refresh_spread_agg_diario: ${aggRows ?? 0} linhas`);
+
+  const { data: snapRows, error: errSnap } = await supabase.rpc("refresh_ticker_snapshots");
+  if (errSnap) throw new Error(`refresh_ticker_snapshots: ${errSnap.message}`);
+  console.log(`refresh_ticker_snapshots: ${snapRows ?? 0} tickers`);
 }
