@@ -1,15 +1,16 @@
 // src/components/trade/TradeDashboard.tsx
 import { useEffect, useMemo, useState } from "react";
-import { TradeAtivo, TradeMode } from "@/hooks/useTradeData";
+import { TradeAtivo, TradeMode, HistoryPoint } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, Cell, PieChart, Pie, Legend
+  ResponsiveContainer, Cell, PieChart, Pie, Legend, ReferenceLine
 } from "recharts";
 
 interface TradeDashboardProps {
   data: TradeAtivo[];
+  history?: Record<string, HistoryPoint[]>;
   mode: TradeMode;
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
@@ -78,9 +79,10 @@ function fv(v: number) {
   return v.toFixed(0);
 }
 
-export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
+export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
   const isIPCA = mode === "IPCA";
   const chartTheme = useChartTheme();
+  const [spreadWindow, setSpreadWindow] = useState<90 | 30 | 21 | 10>(90);
 
   // Server-side aggregated summary (medians/counts) — avoids paginated row truncation in the client.
   // Map the analytical mode (sub_indexador) to the underlying indexador used by the RPC.
