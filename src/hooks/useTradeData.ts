@@ -83,7 +83,7 @@ export interface TradeDataState {
 
 // ── Hook ─────────────────────────────────────────────────────
 
-export function useTradeData(indexador: Indexador | null): TradeDataState {
+export function useTradeData(mode: TradeMode | null): TradeDataState {
   const [data, setData] = useState<TradeAtivo[]>([]);
   const [history, setHistory] = useState<Record<string, HistoryPoint[]>>({});
   const [ntnbHist, setNtnbHist] = useState<Record<string, NTNBPoint[]>>({});
@@ -92,16 +92,16 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!indexador) return;
+    if (!mode) return;
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Fetch metrics — exclude ativos sem negociação (last_val nulo ou zero)
+      // 1. Fetch metrics — filter by sub_indexador (DI_SPREAD, CDI_PCT, IPCA)
       const { data: metrics, error: metricsErr } = await supabase
         .from("trade_monitor_view")
         .select("*")
-        .eq("indexador", indexador)
+        .eq("sub_indexador", mode)
         .not("last_val", "is", null)
         .neq("last_val", 0)
         .order("z_score", { ascending: false });
@@ -113,7 +113,6 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
       setLastDate(latest);
 
       // 2. Fetch historical rates (last 90 trading rows per ticker)
-      // We only fetch for tickers in the current metrics result.
       const tickers = (metrics ?? []).map((m) => m.ticker as string);
       if (tickers.length === 0) { setLoading(false); return; }
 
