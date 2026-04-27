@@ -86,11 +86,13 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
     setError(null);
 
     try {
-      // 1. Fetch metrics
+      // 1. Fetch metrics — exclude ativos sem negociação (last_val nulo ou zero)
       const { data: metrics, error: metricsErr } = await supabase
         .from("trade_monitor_view")
         .select("*")
         .eq("indexador", indexador)
+        .not("last_val", "is", null)
+        .neq("last_val", 0)
         .order("z_score", { ascending: false });
 
       if (metricsErr) throw metricsErr;
