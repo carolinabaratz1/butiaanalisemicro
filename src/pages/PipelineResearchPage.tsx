@@ -952,12 +952,12 @@ export default function PipelineResearchPage() {
 
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
+                  {(isAnalista || isCoord) && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
                     <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: drawerAnalise.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); setDrawerAnalise(null); }}>
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
+                  {(isAnalista || isCoord) && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
                         <CheckCircle className="h-3 w-3" /> Entregar Análise
