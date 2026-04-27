@@ -131,6 +131,10 @@ export default function PipelineResearchPage() {
   const [dataComite, setDataComite] = useState<Date>();
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
+  // Reabrir modal (com novo prazo)
+  const [reabrirModal, setReabrirModal] = useState<any | null>(null);
+  const [novoPrazoReabrir, setNovoPrazoReabrir] = useState<Date | undefined>();
+
   const isGestor = currentUser?.funcao === 'Gestor';
   const isCoord = currentUser?.funcao === 'Coordenação/Especialista';
   const isRC = currentUser?.funcao === 'Risco e Compliance';
