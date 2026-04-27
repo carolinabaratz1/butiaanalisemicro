@@ -36,10 +36,8 @@ function fmtNTNB(ref: string | null | undefined): string {
   return `NTN-B ${code.slice(0, 4)}-${code.slice(4, 6)}`;
 }
 
-const TOOLTIP_STYLE = {
-  backgroundColor: "#0c1018", border: "1px solid #1c2840", borderRadius: 6,
-  fontSize: 11, fontFamily: "DM Mono, monospace", color: "#dde6f0",
-};
+// Tooltip / axis colors are now derived from CSS tokens via useChartTheme()
+
 
 type ChartWin = "90d" | "30d" | "21d" | "10d" | "pu";
 
