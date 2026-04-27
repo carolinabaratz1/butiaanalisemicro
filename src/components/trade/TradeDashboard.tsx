@@ -1,6 +1,7 @@
 // src/components/trade/TradeDashboard.tsx
 import { useEffect, useMemo, useState } from "react";
 import { TradeAtivo } from "@/hooks/useTradeData";
+import { useChartTheme } from "@/hooks/useChartTheme";
 import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
@@ -31,14 +32,7 @@ const CHART_STYLE = {
   fontFamily: "DM Mono, monospace",
 };
 
-const TOOLTIP_STYLE = {
-  backgroundColor: "#0c1018",
-  border: "1px solid #1c2840",
-  borderRadius: 6,
-  fontSize: 11,
-  fontFamily: "DM Mono, monospace",
-  color: "#dde6f0",
-};
+// Tooltip / axis colors come from useChartTheme() (theme-aware)
 
 const VENC_COLORS: Record<string, string> = {
   "0–2a": "#f87171", "2–5a": "#fbbf24", "5–10a": "#34d399",
@@ -249,10 +243,10 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ratingData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Bar dataKey="total" name="Total" radius={[3,3,0,0]} fill="#1c284066" />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
+                <Bar dataKey="total" name="Total" radius={[3,3,0,0]} fill={chartTheme.border} />
                 <Bar dataKey="hot" name="Z>1.5" radius={[3,3,0,0]}>
                   {ratingData.map((entry, i) => <Cell key={i} fill={entry.fill + "cc"} />)}
                 </Bar>
@@ -270,7 +264,7 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
                   {vencData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                 </Pie>
                 <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -280,9 +274,9 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={spreadData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
                 <Bar dataKey="count" name="Emissões" radius={[3,3,0,0]} fill={modeColor + "88"} stroke={modeColor} strokeWidth={1} />
               </BarChart>
             </ResponsiveContainer>
@@ -298,9 +292,9 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 160 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={puDist} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <XAxis dataKey="name" tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
                 <Bar dataKey="count" name="Emissões" radius={[3,3,0,0]}>
                   {puDist.map((entry, i) => <Cell key={i} fill={entry.fill + "cc"} />)}
                 </Bar>
@@ -313,10 +307,10 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 160 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={evoData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fontFamily: "DM Mono, monospace" }} axisLine={false} tickLine={false}
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fontFamily: "DM Mono, monospace", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                   tickFormatter={v => v.toFixed(2) + "%"} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [v.toFixed(4) + "%", "Mediana"]} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} formatter={(v: number) => [v.toFixed(4) + "%", "Mediana"]} />
                 <Line type="monotone" dataKey="val" stroke={modeColor} strokeWidth={2}
                   dot={{ fill: modeColor, r: 4 }} />
               </LineChart>
@@ -328,10 +322,10 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 160 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={deltaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fontFamily: "DM Mono, monospace" }} axisLine={false} tickLine={false}
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fontFamily: "DM Mono, monospace", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                   tickFormatter={v => v.toFixed(0) + " bps"} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number) => [v.toFixed(1) + " bps", "Δ médio"]} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} formatter={(v: number) => [v.toFixed(1) + " bps", "Δ médio"]} />
                 <Bar dataKey="val" name="bps" radius={[3,3,0,0]}>
                   {deltaData.map((entry, i) => <Cell key={i} fill={entry.val > 0 ? "#f87171cc" : "#34d399cc"} />)}
                 </Bar>
@@ -348,9 +342,9 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ratingData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
                 <Bar dataKey="hot" name="Z>1.5" radius={[3,3,0,0]}>
                   {ratingData.map((e, i) => <Cell key={i} fill={e.fill + "cc"} />)}
                 </Bar>
@@ -369,9 +363,9 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
                   fill: VENC_COLORS[v],
                 }))}
                 margin={{ top: 4, right: 4, left: -20, bottom: 0 }} style={CHART_STYLE}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem} />
                 <Bar dataKey="hot" name="Z>1.5" radius={[3,3,0,0]}>
                   {["0–2a","2–5a","5–10a","10–20a","20a+"].map((v, i) => <Cell key={i} fill={VENC_COLORS[v] + "cc"} />)}
                 </Bar>
