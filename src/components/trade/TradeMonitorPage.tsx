@@ -64,11 +64,11 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
           <Badge
             variant="outline"
             className="cursor-pointer gap-1.5 font-mono text-xs"
-            style={{ borderColor: cfg.color, color: cfg.color }}
+            style={{ borderColor: modeCfg.color, color: modeCfg.color }}
             onClick={() => setMode(null)}
           >
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: cfg.color }} />
-            {cfg.label}
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: modeCfg.color }} />
+            {modeCfg.label}
           </Badge>
           {emissorCnpj && (
             <Badge variant="secondary" className="text-xs">
@@ -132,14 +132,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               <TradeDashboard
                 data={filteredData}
                 mode={mode}
-                modeColor={cfg.color}
+                modeColor={modeCfg.color}
                 onSelectTicker={(t) => { setSelectedTicker(t); setView("table"); }}
               />
             ) : (
               <TradeTable
                 data={filteredData}
                 mode={mode}
-                modeColor={cfg.color}
+                modeColor={modeCfg.color}
                 onSelectTicker={setSelectedTicker}
                 selectedTicker={selectedTicker}
               />
@@ -154,7 +154,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               history={history}
               ntnbHist={ntnbHist}
               mode={mode}
-              modeColor={cfg.color}
+              modeColor={modeCfg.color}
               onClose={() => setSelectedTicker(null)}
               // Integration: link to emissor profile
               onViewEmissor={(cnpj) => {
