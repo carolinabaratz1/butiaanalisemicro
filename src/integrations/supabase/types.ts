@@ -739,16 +739,27 @@ export type Database = {
       }
     }
     Functions: {
-      get_ipca_history: {
-        Args: { p_cutoff?: string }
-        Returns: {
-          data: string
-          pu_curva: number
-          pu_indicativo: number
-          spread: number
-          ticker: string
-        }[]
-      }
+      get_ipca_history:
+        | {
+            Args: { p_cutoff?: string }
+            Returns: {
+              data: string
+              pu_curva: number
+              pu_indicativo: number
+              spread: number
+              ticker: string
+            }[]
+          }
+        | {
+            Args: { p_cutoff?: string; p_ticker?: string }
+            Returns: {
+              data: string
+              pu_curva: number
+              pu_indicativo: number
+              spread: number
+              ticker: string
+            }[]
+          }
       get_trade_summary: {
         Args: { p_indexador: string }
         Returns: {
