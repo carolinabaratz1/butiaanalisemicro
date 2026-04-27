@@ -101,6 +101,30 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
     return () => { cancelled = true; };
   }, [mode]);
 
+  // Pre-aggregated daily spread series (median by date) — IPCA only.
+  // Read from materialized table populated during upload. Avoids re-aggregating
+  // ~30k rows on the client every render.
+  const [aggSeries, setAggSeries] = useState<Record<"AAA" | "UNIVERSO", { d: string; val: number }[]> | null>(null);
+  useEffect(() => {
+    if (mode !== "IPCA") { setAggSeries(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("trade_spread_agg_diario")
+        .select("data, grupo, spread_mediano")
+        .order("data", { ascending: true });
+      if (cancelled || !rows) return;
+      const out: Record<"AAA" | "UNIVERSO", { d: string; val: number }[]> = { AAA: [], UNIVERSO: [] };
+      for (const r of rows) {
+        const g = r.grupo as "AAA" | "UNIVERSO";
+        if (g !== "AAA" && g !== "UNIVERSO") continue;
+        out[g].push({ d: r.data as string, val: Number(r.spread_mediano ?? 0) });
+      }
+      setAggSeries(out);
+    })();
+    return () => { cancelled = true; };
+  }, [mode]);
+
   // KPIs — counts/medians come from the server summary; client data is only a fallback.
   const kpis = useMemo(() => ({
     total: summary?.total_count ?? data.length,
