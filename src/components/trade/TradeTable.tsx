@@ -134,13 +134,13 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-48 flex-shrink-0 border-r border-border bg-card p-3 overflow-y-auto space-y-4">
+      {/* Sidebar — hidden on mobile */}
+      <aside className="hidden md:block w-48 flex-shrink-0 border-r border-border bg-card p-3 overflow-y-auto space-y-4">
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Busca</div>
           <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Ticker ou emissor…"
-            className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-sky-400" />
+            className="w-full bg-muted border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
         </div>
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Sinal</div>
@@ -161,7 +161,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         <div>
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-1">Venc. máx (anos)</div>
           <input type="range" min={0} max={35} value={vencMax} onChange={e => { setVencMax(+e.target.value); setPage(1); }}
-            className="w-full accent-sky-400" style={{ accentColor: modeColor }} />
+            className="w-full" style={{ accentColor: modeColor }} />
           <div className="text-[9px] font-mono text-muted-foreground text-center mt-0.5">
             {vencMax >= 35 ? "35+a" : `≤ ${vencMax}a`}
           </div>
@@ -200,6 +200,9 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
           </select>
         </div>
       </aside>
+
+      {/* Mobile search bar — replaces the sidebar */}
+      <div className="md:hidden absolute top-0 left-0 right-0 z-20" />
 
       {/* Table area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
