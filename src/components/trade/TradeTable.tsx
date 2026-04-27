@@ -201,9 +201,6 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         </div>
       </aside>
 
-      {/* Mobile search bar — replaces the sidebar */}
-      <div className="md:hidden absolute top-0 left-0 right-0 z-20" />
-
       {/* Table area */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Topbar */}
