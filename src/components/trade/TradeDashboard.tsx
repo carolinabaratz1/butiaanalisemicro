@@ -192,7 +192,7 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
   const spreadSeries = useMemo(() => {
     if (!history) return { aaa: [] as { d: string; val: number }[], universe: [] as { d: string; val: number }[], aaaAvg: 0, uniAvg: 0 };
     const aaaTickers = new Set(
-      data.filter(t => (t.rating ?? "").includes("AAA")).map(t => t.ticker)
+      data.filter(t => normRating(t.rating ?? null) === "AAA").map(t => t.ticker)
     );
     // Aggregate by date
     const uniByDate: Record<string, number[]> = {};
