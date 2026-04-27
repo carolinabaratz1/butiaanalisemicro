@@ -1,7 +1,8 @@
 // src/components/trade/TradeLanding.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, Building2 } from "lucide-react";
+import { TrendingUp, Building2, Percent } from "lucide-react";
+import type { TradeMode } from "@/hooks/useTradeData";
 
 interface LandingStat {
   count: number;
@@ -10,23 +11,85 @@ interface LandingStat {
 }
 
 interface TradeLandingProps {
-  onSelect: (mode: "DI" | "IPCA") => void;
-  diData: unknown[];
-  ipcaData: unknown[];
+  onSelect: (mode: TradeMode) => void;
+  /** kept for API compatibility — not used (KPIs come from RPC) */
+  diData?: unknown[];
+  ipcaData?: unknown[];
 }
 
+interface ModeDescriptor {
+  mode: TradeMode;
+  /** indexador filter passed to get_trade_summary */
+  indexador: "DI" | "IPCA";
+  /** sub_indexador filter passed to get_trade_summary */
+  sub: TradeMode;
+  label: string;
+  short: string;
+  description: string;
+  color: string;
+  hexBtnText: string;
+  Icon: typeof TrendingUp;
+  medianSuffix: string;
+  medianLabel: string;
+}
+
+const MODES: ModeDescriptor[] = [
+  {
+    mode: "DI_SPREAD",
+    indexador: "DI",
+    sub: "DI_SPREAD",
+    label: "DI+",
+    short: "DI + spread",
+    description: "Debêntures DI + X%\nScore por taxa indicativa % a.a.",
+    color: "text-sky-400",
+    hexBtnText: "bg-sky-400",
+    Icon: TrendingUp,
+    medianSuffix: "%",
+    medianLabel: "Mediana",
+  },
+  {
+    mode: "CDI_PCT",
+    indexador: "DI",
+    sub: "CDI_PCT",
+    label: "%CDI",
+    short: "% do CDI",
+    description: "Debêntures X% do CDI\nScore sobre o percentual do CDI",
+    color: "text-cyan-400",
+    hexBtnText: "bg-cyan-400",
+    Icon: Percent,
+    medianSuffix: "%",
+    medianLabel: "Med. %CDI",
+  },
+  {
+    mode: "IPCA",
+    indexador: "IPCA",
+    sub: "IPCA",
+    label: "IPCA+",
+    short: "IPCA + spread",
+    description: "Debêntures IPCA + X%\nScore por spread capitalizado vs NTN-B",
+    color: "text-violet-400",
+    hexBtnText: "bg-violet-400",
+    Icon: Building2,
+    medianSuffix: "%",
+    medianLabel: "Spread Med.",
+  },
+];
+
 export function TradeLanding({ onSelect }: TradeLandingProps) {
-  const [di, setDi] = useState<LandingStat>({ count: 0, hot: 0, median: 0 });
-  const [ipca, setIpca] = useState<LandingStat>({ count: 0, hot: 0, median: 0 });
+  const [stats, setStats] = useState<Record<TradeMode, LandingStat>>({
+    DI_SPREAD: { count: 0, hot: 0, median: 0 },
+    CDI_PCT:   { count: 0, hot: 0, median: 0 },
+    IPCA:      { count: 0, hot: 0, median: 0 },
+  });
   const [lastDate, setLastDate] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      // Use server-side aggregation via RPC so paginated row limits don't skew medians.
-      const [diRes, ipcaRes, dateRes] = await Promise.all([
-        supabase.rpc("get_trade_summary", { p_indexador: "DI" }),
-        supabase.rpc("get_trade_summary", { p_indexador: "IPCA" }),
+      const [diSpread, cdiPct, ipca, dateRes] = await Promise.all([
+        supabase.rpc("get_trade_summary", { p_indexador: "DI",   p_sub_indexador: "DI_SPREAD" }),
+        supabase.rpc("get_trade_summary", { p_indexador: "DI",   p_sub_indexador: "CDI_PCT"   }),
+        supabase.rpc("get_trade_summary", { p_indexador: "IPCA", p_sub_indexador: "IPCA"      }),
         supabase
           .from("trade_metricas")
           .select("last_date")
@@ -35,18 +98,16 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
           .maybeSingle(),
       ]);
 
-      const di0 = diRes.data?.[0];
-      const ipca0 = ipcaRes.data?.[0];
-
-      setDi({
-        count: di0?.total_count ?? 0,
-        hot: di0?.hot_count ?? 0,
-        median: Number(di0?.median_last_val ?? 0),
+      const toStat = (row: { total_count?: number; hot_count?: number; median_last_val?: number | string | null } | undefined): LandingStat => ({
+        count:  row?.total_count ?? 0,
+        hot:    row?.hot_count   ?? 0,
+        median: Number(row?.median_last_val ?? 0),
       });
-      setIpca({
-        count: ipca0?.total_count ?? 0,
-        hot: ipca0?.hot_count ?? 0,
-        median: Number(ipca0?.median_last_val ?? 0),
+
+      setStats({
+        DI_SPREAD: toStat(diSpread.data?.[0]),
+        CDI_PCT:   toStat(cdiPct.data?.[0]),
+        IPCA:      toStat(ipca.data?.[0]),
       });
       setLastDate(dateRes.data?.last_date ?? "");
       setLoading(false);
@@ -68,65 +129,47 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
       </div>
 
       <div className="flex gap-5 flex-wrap justify-center">
-        {/* DI Card */}
-        <button
-          onClick={() => onSelect("DI")}
-          disabled={loading}
-          className="w-64 p-7 rounded-2xl border border-border bg-card text-left hover:border-sky-400 hover:shadow-[0_0_30px_rgba(56,189,248,0.12)] transition-all group"
-        >
-          <TrendingUp className="w-9 h-9 text-sky-400 mb-4" />
-          <div className="text-xl font-extrabold text-sky-400 mb-1">DI+</div>
-          <p className="text-xs text-muted-foreground mb-5 leading-relaxed">
-            Debêntures indexadas ao CDI<br />Score por taxa indicativa % a.a.
-          </p>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-lg font-bold font-mono text-sky-400">{loading ? "…" : di.count}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Emissões</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold font-mono text-orange-400">{loading ? "…" : di.hot}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Z &gt; 1.5</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold font-mono text-sky-400">{loading ? "…" : di.median.toFixed(2)}%</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Mediana</div>
-            </div>
-          </div>
-          <div className="mt-5 w-full py-2 rounded-lg bg-sky-400 text-slate-900 text-xs font-bold text-center group-hover:brightness-110 transition-all">
-            Abrir DI →
-          </div>
-        </button>
-
-        {/* IPCA Card */}
-        <button
-          onClick={() => onSelect("IPCA")}
-          disabled={loading}
-          className="w-64 p-7 rounded-2xl border border-border bg-card text-left hover:border-violet-400 hover:shadow-[0_0_30px_rgba(167,139,250,0.12)] transition-all group"
-        >
-          <Building2 className="w-9 h-9 text-violet-400 mb-4" />
-          <div className="text-xl font-extrabold text-violet-400 mb-1">IPCA+</div>
-          <p className="text-xs text-muted-foreground mb-5 leading-relaxed">
-            Debêntures indexadas ao IPCA<br />Score por spread capitalizado vs NTN-B
-          </p>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-lg font-bold font-mono text-violet-400">{loading ? "…" : ipca.count}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Emissões</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold font-mono text-orange-400">{loading ? "…" : ipca.hot}</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Z &gt; 1.5</div>
-            </div>
-            <div>
-              <div className="text-lg font-bold font-mono text-violet-400">{loading ? "…" : ipca.median.toFixed(2)}%</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Spread Med.</div>
-            </div>
-          </div>
-          <div className="mt-5 w-full py-2 rounded-lg bg-violet-400 text-slate-900 text-xs font-bold text-center group-hover:brightness-110 transition-all">
-            Abrir IPCA →
-          </div>
-        </button>
+        {MODES.map((m) => {
+          const s = stats[m.mode];
+          const Icon = m.Icon;
+          return (
+            <button
+              key={m.mode}
+              onClick={() => onSelect(m.mode)}
+              disabled={loading}
+              className="w-64 p-7 rounded-2xl border border-border bg-card text-left hover:border-primary hover:shadow-lg transition-all group"
+            >
+              <Icon className={`w-9 h-9 mb-4 ${m.color}`} />
+              <div className={`text-xl font-extrabold mb-1 ${m.color}`}>{m.label}</div>
+              <p className="text-xs text-muted-foreground mb-5 leading-relaxed whitespace-pre-line">
+                {m.description}
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className={`text-lg font-bold font-mono ${m.color}`}>
+                    {loading ? "…" : s.count}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Emissões</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold font-mono text-orange-400">
+                    {loading ? "…" : s.hot}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Z &gt; 1.5</div>
+                </div>
+                <div>
+                  <div className={`text-lg font-bold font-mono ${m.color}`}>
+                    {loading ? "…" : `${s.median.toFixed(2)}${m.medianSuffix}`}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.medianLabel}</div>
+                </div>
+              </div>
+              <div className={`mt-5 w-full py-2 rounded-lg ${m.hexBtnText} text-slate-900 text-xs font-bold text-center group-hover:brightness-110 transition-all`}>
+                Abrir {m.label} →
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

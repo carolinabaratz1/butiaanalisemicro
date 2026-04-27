@@ -408,6 +408,7 @@ export type Database = {
           nome_completo: string | null
           rating: string | null
           spread_emissao: number | null
+          sub_indexador: string | null
           taxa_emissao: string | null
           ticker: string
           updated_at: string | null
@@ -422,6 +423,7 @@ export type Database = {
           nome_completo?: string | null
           rating?: string | null
           spread_emissao?: number | null
+          sub_indexador?: string | null
           taxa_emissao?: string | null
           ticker: string
           updated_at?: string | null
@@ -436,6 +438,7 @@ export type Database = {
           nome_completo?: string | null
           rating?: string | null
           spread_emissao?: number | null
+          sub_indexador?: string | null
           taxa_emissao?: string | null
           ticker?: string
           updated_at?: string | null
@@ -724,6 +727,7 @@ export type Database = {
           rating: string | null
           spread_emissao: number | null
           std_90d: number | null
+          sub_indexador: string | null
           taxa_emissao: string | null
           ticker: string | null
           total_qtd: number | null
@@ -739,6 +743,10 @@ export type Database = {
       }
     }
     Functions: {
+      derive_sub_indexador: {
+        Args: { p_indexador: string; p_taxa_emissao: string }
+        Returns: string
+      }
       get_ipca_history: {
         Args: { p_cutoff?: string; p_ticker?: string }
         Returns: {
@@ -750,7 +758,7 @@ export type Database = {
         }[]
       }
       get_trade_summary: {
-        Args: { p_indexador: string }
+        Args: { p_indexador: string; p_sub_indexador?: string }
         Returns: {
           hot_count: number
           median_avg_10d: number

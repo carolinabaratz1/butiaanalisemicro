@@ -11,9 +11,20 @@ import { supabase } from "@/integrations/supabase/client"; // ajuste o path
 
 export type Indexador = "DI" | "IPCA" | "PRE" | "OUTRO";
 
+/**
+ * Sub-indexador analítico — separa ativos com naturezas de taxa diferentes
+ * para que Z-scores e visualizações não misturem grupos heterogêneos.
+ *  - DI_SPREAD : "DI + X%"
+ *  - CDI_PCT  : "X% do CDI" / "X% do DI"
+ *  - IPCA     : "IPCA + X%"
+ *  - PRE / OUTRO : demais
+ */
+export type TradeMode = "DI_SPREAD" | "CDI_PCT" | "IPCA";
+
 export interface TradeAtivo {
   ticker: string;
   indexador: Indexador;
+  sub_indexador: TradeMode | "PRE" | "OUTRO" | null;
   last_date: string;
   last_val: number;          // taxa (DI) ou spread cap. (IPCA)
   last_qtd: number | null;
@@ -72,7 +83,7 @@ export interface TradeDataState {
 
 // ── Hook ─────────────────────────────────────────────────────
 
-export function useTradeData(indexador: Indexador | null): TradeDataState {
+export function useTradeData(mode: TradeMode | null): TradeDataState {
   const [data, setData] = useState<TradeAtivo[]>([]);
   const [history, setHistory] = useState<Record<string, HistoryPoint[]>>({});
   const [ntnbHist, setNtnbHist] = useState<Record<string, NTNBPoint[]>>({});
@@ -81,16 +92,16 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!indexador) return;
+    if (!mode) return;
     setLoading(true);
     setError(null);
 
     try {
-      // 1. Fetch metrics — exclude ativos sem negociação (last_val nulo ou zero)
+      // 1. Fetch metrics — filter by sub_indexador (DI_SPREAD, CDI_PCT, IPCA)
       const { data: metrics, error: metricsErr } = await supabase
         .from("trade_monitor_view")
         .select("*")
-        .eq("indexador", indexador)
+        .eq("sub_indexador", mode)
         .not("last_val", "is", null)
         .neq("last_val", 0)
         .order("z_score", { ascending: false });
@@ -102,7 +113,6 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
       setLastDate(latest);
 
       // 2. Fetch historical rates (last 90 trading rows per ticker)
-      // We only fetch for tickers in the current metrics result.
       const tickers = (metrics ?? []).map((m) => m.ticker as string);
       if (tickers.length === 0) { setLoading(false); return; }
 
@@ -116,7 +126,7 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
 
       const PAGE = 1000;
 
-      if (indexador === "IPCA") {
+      if (mode === "IPCA") {
         // For IPCA we need to compute spread on the fly via RPC.
         // Paginate to bypass PostgREST's 1000-row default limit.
         const byTicker: Record<string, HistoryPoint[]> = {};
@@ -170,7 +180,7 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
       }
 
       // 3. NTN-B history (IPCA only) — paginated
-      if (indexador === "IPCA") {
+      if (mode === "IPCA") {
         const byBond: Record<string, NTNBPoint[]> = {};
         let from = 0;
         while (true) {
@@ -196,7 +206,7 @@ export function useTradeData(indexador: Indexador | null): TradeDataState {
     } finally {
       setLoading(false);
     }
-  }, [indexador]);
+  }, [mode]);
 
   useEffect(() => { load(); }, [load]);
 

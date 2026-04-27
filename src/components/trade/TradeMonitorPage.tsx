@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useMemo } from "react";
-import { useTradeData, TradeAtivo } from "@/hooks/useTradeData";
+import { useTradeData, TradeAtivo, TradeMode } from "@/hooks/useTradeData";
 import { TradeTable } from "./TradeTable";
 import { TradeDashboard } from "./TradeDashboard";
 import { TradeDetail } from "./TradeDetail";
@@ -25,7 +25,7 @@ interface TradeMonitorPageProps {
 type View = "dashboard" | "table";
 
 export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPageProps) {
-  const [mode, setMode] = useState<"DI" | "IPCA" | null>(null);
+  const [mode, setMode] = useState<TradeMode | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(initialTicker ?? null);
 
@@ -42,15 +42,18 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
     return (
       <TradeLanding
         onSelect={(m) => { setMode(m); setSelectedTicker(null); }}
-        diData={[]}   // Pre-populated in TradeLanding via separate lightweight query
+        diData={[]}
         ipcaData={[]}
       />
     );
   }
 
-  const cfg = mode === "DI"
-    ? { color: "#38bdf8", label: "DI+", unit: "taxa" }
-    : { color: "#b78cf7", label: "IPCA+", unit: "spread cap." };
+  const cfg: Record<TradeMode, { color: string; label: string; unit: string }> = {
+    DI_SPREAD: { color: "#38bdf8", label: "DI+",   unit: "taxa" },
+    CDI_PCT:   { color: "#22d3ee", label: "%CDI",  unit: "% CDI" },
+    IPCA:      { color: "#b78cf7", label: "IPCA+", unit: "spread cap." },
+  };
+  const modeCfg = cfg[mode];
 
   return (
     <div className="flex flex-col h-full">
@@ -61,11 +64,11 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
           <Badge
             variant="outline"
             className="cursor-pointer gap-1.5 font-mono text-xs"
-            style={{ borderColor: cfg.color, color: cfg.color }}
+            style={{ borderColor: modeCfg.color, color: modeCfg.color }}
             onClick={() => setMode(null)}
           >
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: cfg.color }} />
-            {cfg.label}
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: modeCfg.color }} />
+            {modeCfg.label}
           </Badge>
           {emissorCnpj && (
             <Badge variant="secondary" className="text-xs">
@@ -129,14 +132,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               <TradeDashboard
                 data={filteredData}
                 mode={mode}
-                modeColor={cfg.color}
+                modeColor={modeCfg.color}
                 onSelectTicker={(t) => { setSelectedTicker(t); setView("table"); }}
               />
             ) : (
               <TradeTable
                 data={filteredData}
                 mode={mode}
-                modeColor={cfg.color}
+                modeColor={modeCfg.color}
                 onSelectTicker={setSelectedTicker}
                 selectedTicker={selectedTicker}
               />
@@ -151,7 +154,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               history={history}
               ntnbHist={ntnbHist}
               mode={mode}
-              modeColor={cfg.color}
+              modeColor={modeCfg.color}
               onClose={() => setSelectedTicker(null)}
               // Integration: link to emissor profile
               onViewEmissor={(cnpj) => {

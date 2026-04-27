@@ -1,6 +1,6 @@
 // src/components/trade/TradeDashboard.tsx
 import { useEffect, useMemo, useState } from "react";
-import { TradeAtivo } from "@/hooks/useTradeData";
+import { TradeAtivo, TradeMode } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -10,7 +10,7 @@ import {
 
 interface TradeDashboardProps {
   data: TradeAtivo[];
-  mode: "DI" | "IPCA";
+  mode: TradeMode;
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
 }
