@@ -221,7 +221,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
           {isIPCA ? (
             <><strong className="text-foreground">Spread capitalizado</strong> = (1+taxa_ativo) ÷ (1+taxa_NTN-B) − 1<br />
             {t.ntnb_ref && (
-              <>Ref: <span className="text-foreground">{t.ntnb_ref.replace("NTN-B 760199 ", "")}</span> · NTN-B atual: <span className="text-foreground">{(t.ntnb_taxa ?? 0).toFixed(4)}%</span><br /></>
+              <>Ref: <span className="text-foreground">{fmtNTNB(t.ntnb_ref)}</span> · NTN-B atual: <span className="text-foreground">{(t.ntnb_taxa ?? 0).toFixed(4)}%</span><br /></>
             )}
             Z-Score calculado sobre o spread, não sobre a taxa bruta.</>
           ) : (
