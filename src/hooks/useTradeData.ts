@@ -134,13 +134,12 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
 
       if (mode === "IPCA") {
         // For IPCA we need to compute spread on the fly via RPC.
-        // Paginate to bypass PostgREST's 1000-row default limit.
+        // Use real LIMIT/OFFSET inside the function (pushdown) to avoid timeouts.
         const byTicker: Record<string, HistoryPoint[]> = {};
-        let from = 0;
+        let offset = 0;
         while (true) {
           const { data: hist, error: histErr } = await supabase
-            .rpc("get_ipca_history", { p_cutoff: cutoff })
-            .range(from, from + PAGE - 1);
+            .rpc("get_ipca_history", { p_cutoff: cutoff, p_limit: PAGE, p_offset: offset });
           if (histErr) throw histErr;
           for (const row of hist ?? []) {
             const t = row.ticker as string;
@@ -148,7 +147,7 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
             byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
           }
           if (!hist || hist.length < PAGE) break;
-          from += PAGE;
+          offset += PAGE;
         }
         setHistory(byTicker);
       } else {
