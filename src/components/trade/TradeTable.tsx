@@ -15,24 +15,24 @@ type SortField = keyof TradeAtivo;
 
 function rBadge(r: string | null) {
   if (!r || ["N/A","0","nan",""].includes((r ?? "").trim()))
-    return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">—</span>;
-  // Solid, theme-aware colors with strong contrast in both light & dark mode
-  const cls = r.includes("AAA") ? "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700"
-    : r.includes("AA")  ? "bg-sky-600 text-white border-sky-700 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-700"
-    : r.includes("| A") ? "bg-indigo-600 text-white border-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-700"
-    : r.includes("BBB") ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
-    : "bg-muted text-muted-foreground border-border";
+    return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground bg-transparent">—</span>;
+  // Outline-style badge: colored border + matching text, transparent background
+  const cls = r.includes("AAA") ? "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400"
+    : r.includes("AA")  ? "border-sky-600 text-sky-700 dark:border-sky-500 dark:text-sky-400"
+    : r.includes("| A") ? "border-indigo-600 text-indigo-700 dark:border-indigo-500 dark:text-indigo-400"
+    : r.includes("BBB") ? "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400"
+    : "border-border text-muted-foreground";
   const s = r.replace("MOODY'S | ","M|").replace("MOODYS | ","M|").replace("FITCH | ","F|").replace("S&P | ","S|");
-  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border bg-transparent ${cls}`}>{s}</span>;
 }
 
 function vPill(a: number | null) {
   if (!a || a <= 0) return <span className="text-muted-foreground text-xs">—</span>;
-  // Solid pills with white text on colored bg in light mode; subtle tinted in dark mode
-  const cls = a <= 2 ? "bg-rose-600 text-white border-rose-700 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-700"
-    : a <= 7 ? "bg-amber-500 text-white border-amber-600 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-700"
-    : "bg-emerald-600 text-white border-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-700";
-  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{a}a</span>;
+  // Outline-style pill: colored border + matching text, transparent background
+  const cls = a <= 2 ? "border-rose-600 text-rose-700 dark:border-rose-500 dark:text-rose-400"
+    : a <= 7 ? "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400"
+    : "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400";
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border bg-transparent ${cls}`}>{a}a</span>;
 }
 
 function fmtQ(v: number | null) {
