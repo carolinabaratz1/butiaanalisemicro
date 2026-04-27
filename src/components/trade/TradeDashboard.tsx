@@ -188,6 +188,52 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
     });
   }, [data]);
 
+  // Daily mean spread series — universe vs AAA, last N days from history
+  const spreadSeries = useMemo(() => {
+    if (!history) return { aaa: [] as { d: string; val: number }[], universe: [] as { d: string; val: number }[], aaaAvg: 0, uniAvg: 0 };
+    const aaaTickers = new Set(
+      data.filter(t => (t.rating ?? "").includes("AAA")).map(t => t.ticker)
+    );
+    // Aggregate by date
+    const uniByDate: Record<string, number[]> = {};
+    const aaaByDate: Record<string, number[]> = {};
+    for (const [ticker, points] of Object.entries(history)) {
+      const isAaa = aaaTickers.has(ticker);
+      for (const p of points) {
+        if (p.r == null || !isFinite(p.r)) continue;
+        (uniByDate[p.d] ??= []).push(p.r);
+        if (isAaa) (aaaByDate[p.d] ??= []).push(p.r);
+      }
+    }
+    const allDates = Object.keys(uniByDate).sort();
+    const sliced = allDates.slice(-spreadWindow);
+    const universe = sliced.map(d => {
+      const arr = uniByDate[d] ?? [];
+      return { d, val: arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0 };
+    });
+    const aaa = sliced.map(d => {
+      const arr = aaaByDate[d] ?? [];
+      return { d, val: arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0 };
+    });
+    const meanOf = (arr: { val: number }[]) =>
+      arr.length ? arr.reduce((s, p) => s + p.val, 0) / arr.length : 0;
+    return { universe, aaa, uniAvg: meanOf(universe), aaaAvg: meanOf(aaa.filter(p => p.val > 0)) };
+  }, [history, data, spreadWindow]);
+
+  const spreadYDomain = useMemo<[number, number] | undefined>(() => {
+    const all = [...spreadSeries.aaa, ...spreadSeries.universe].map(p => p.val).filter(v => v > 0);
+    if (all.length === 0) return undefined;
+    const min = Math.min(...all);
+    const max = Math.max(...all);
+    const pad = (max - min) * 0.1 || 0.05;
+    return [Math.max(0, min - pad), max + pad];
+  }, [spreadSeries]);
+
+  const formatShortDate = (d: string) => {
+    const dt = new Date(d);
+    return `${String(dt.getUTCDate()).padStart(2, "0")}/${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+
   // Top 8 opportunities
   const topOpp = useMemo(() =>
     [...data].sort((a, b) => b.z_score - a.z_score).slice(0, 8),
