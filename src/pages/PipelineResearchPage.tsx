@@ -1253,6 +1253,69 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reabrir Análise Modal */}
+      <Dialog open={!!reabrirModal} onOpenChange={(open) => { if (!open) { setReabrirModal(null); setNovoPrazoReabrir(undefined); } }}>
+        <DialogContent className="max-w-sm bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Reabrir Análise</DialogTitle>
+            <DialogDescription>
+              {reabrirModal ? `${getEmissorNome(reabrirModal.empresa_id, empresasMap)} · ${reabrirModal.tipo}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Novo prazo de entrega (obrigatório)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !novoPrazoReabrir && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {novoPrazoReabrir ? format(novoPrazoReabrir, 'dd/MM/yyyy') : 'Selecionar data'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={novoPrazoReabrir} onSelect={setNovoPrazoReabrir} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!novoPrazoReabrir || createAnalise.isPending}
+              onClick={async () => {
+                if (!reabrirModal || !novoPrazoReabrir) return;
+                const item = reabrirModal;
+                const { data: maxRows } = await supabase
+                  .from('analises')
+                  .select('versao')
+                  .eq('empresa_id', item.empresa_id)
+                  .eq('tipo', item.tipo)
+                  .order('versao', { ascending: false })
+                  .limit(1);
+                const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
+                createAnalise.mutate({
+                  empresa_id: item.empresa_id,
+                  tipo: item.tipo,
+                  analista_responsavel: item.analista_responsavel,
+                  isin: item.isin || '',
+                  status: 'Pendente',
+                  data_inicio: new Date().toISOString().split('T')[0],
+                  prazo: format(novoPrazoReabrir, 'yyyy-MM-dd'),
+                  versao: novaVersao,
+                  solicitante_id: currentUser?.id || '',
+                });
+                registrarEvento({ analise_id: item.id, acao: 'reaberta', etapa_nova: 'Pendente', comentario: `v${novaVersao}` });
+                toast({ title: `Nova análise v${novaVersao} criada` });
+                setReabrirModal(null);
+                setNovoPrazoReabrir(undefined);
+              }}
+            >
+              {createAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirmar Reabertura
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent className="bg-card border-border">
