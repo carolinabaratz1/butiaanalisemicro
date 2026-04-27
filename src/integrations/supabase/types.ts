@@ -578,6 +578,63 @@ export type Database = {
         }
         Relationships: []
       }
+      trade_spread_agg_diario: {
+        Row: {
+          data: string
+          grupo: string
+          n_ativos: number | null
+          spread_mediano: number | null
+          spread_p25: number | null
+          spread_p75: number | null
+        }
+        Insert: {
+          data: string
+          grupo: string
+          n_ativos?: number | null
+          spread_mediano?: number | null
+          spread_p25?: number | null
+          spread_p75?: number | null
+        }
+        Update: {
+          data?: string
+          grupo?: string
+          n_ativos?: number | null
+          spread_mediano?: number | null
+          spread_p25?: number | null
+          spread_p75?: number | null
+        }
+        Relationships: []
+      }
+      trade_spread_historico: {
+        Row: {
+          data: string
+          indexador: string | null
+          pu_curva: number | null
+          pu_indicativo: number | null
+          rating: string | null
+          spread: number | null
+          ticker: string
+        }
+        Insert: {
+          data: string
+          indexador?: string | null
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          rating?: string | null
+          spread?: number | null
+          ticker: string
+        }
+        Update: {
+          data?: string
+          indexador?: string | null
+          pu_curva?: number | null
+          pu_indicativo?: number | null
+          rating?: string | null
+          spread?: number | null
+          ticker?: string
+        }
+        Relationships: []
+      }
       trade_taxas: {
         Row: {
           created_at: string | null
@@ -611,6 +668,24 @@ export type Database = {
           taxa_indicativa?: number | null
           ticker?: string
           vol_financeiro?: number | null
+        }
+        Relationships: []
+      }
+      trade_ticker_snapshot: {
+        Row: {
+          payload: Json
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          payload: Json
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          payload?: Json
+          ticker?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -805,6 +880,9 @@ export type Database = {
           processed_count: number
         }[]
       }
+      refresh_spread_agg_diario: { Args: never; Returns: number }
+      refresh_spread_historico: { Args: never; Returns: number }
+      refresh_ticker_snapshots: { Args: never; Returns: number }
     }
     Enums: {
       app_role:

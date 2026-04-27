@@ -133,21 +133,44 @@ export function useTradeData(mode: TradeMode | null): TradeDataState {
       const PAGE = 1000;
 
       if (mode === "IPCA") {
-        // For IPCA we need to compute spread on the fly via RPC.
-        // Use real LIMIT/OFFSET inside the function (pushdown) to avoid timeouts.
+        // Lê da tabela materializada trade_spread_historico (preenchida no upload).
+        // Se estiver vazia (ainda não rodou upload com a nova lógica), faz fallback à RPC.
         const byTicker: Record<string, HistoryPoint[]> = {};
-        let offset = 0;
+        let from = 0;
+        let usedMaterialized = false;
         while (true) {
           const { data: hist, error: histErr } = await supabase
-            .rpc("get_ipca_history", { p_cutoff: cutoff, p_limit: PAGE, p_offset: offset });
+            .from("trade_spread_historico")
+            .select("ticker, data, spread, pu_curva, pu_indicativo")
+            .gte("data", cutoff)
+            .order("data", { ascending: true })
+            .range(from, from + PAGE - 1);
           if (histErr) throw histErr;
+          if (hist && hist.length > 0) usedMaterialized = true;
           for (const row of hist ?? []) {
             const t = row.ticker as string;
             if (!byTicker[t]) byTicker[t] = [];
-            byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
+            byTicker[t].push({ d: row.data, r: Number(row.spread), pc: row.pu_curva, pi: row.pu_indicativo });
           }
           if (!hist || hist.length < PAGE) break;
-          offset += PAGE;
+          from += PAGE;
+        }
+
+        // Fallback: tabela ainda não populada → usa RPC (lento, mas funcional)
+        if (!usedMaterialized) {
+          let offset = 0;
+          while (true) {
+            const { data: hist, error: histErr } = await supabase
+              .rpc("get_ipca_history", { p_cutoff: cutoff, p_limit: PAGE, p_offset: offset });
+            if (histErr) throw histErr;
+            for (const row of hist ?? []) {
+              const t = row.ticker as string;
+              if (!byTicker[t]) byTicker[t] = [];
+              byTicker[t].push({ d: row.data, r: row.spread, pc: row.pu_curva, pi: row.pu_indicativo });
+            }
+            if (!hist || hist.length < PAGE) break;
+            offset += PAGE;
+          }
         }
         setHistory(byTicker);
       } else {
@@ -238,25 +261,39 @@ export function useTickerDetail(ticker: string | null) {
       const isIPCA = (m as TradeAtivo | null)?.indexador === "IPCA";
 
       if (isIPCA) {
-        // For IPCA, fetch capitalized spread history via the RPC filtered by ticker
-        const allHist: HistoryPoint[] = [];
-        let offset = 0;
-        while (true) {
-          const { data: page } = await supabase
-            .rpc("get_ipca_history", { p_ticker: ticker, p_limit: PAGE, p_offset: offset });
-          if (!page || page.length === 0) break;
-          for (const row of page) {
-            allHist.push({
-              d: row.data,
-              r: row.spread,
-              pc: row.pu_curva,
-              pi: row.pu_indicativo,
-            });
+        // 1) Tenta snapshot pré-calculado (preenchido no upload)
+        const { data: snap } = await supabase
+          .from("trade_ticker_snapshot")
+          .select("payload")
+          .eq("ticker", ticker)
+          .maybeSingle();
+
+        const snapSerie = (snap?.payload as { serie?: Array<{ data: string; spread: number; pu_curva: number | null; pu_indicativo: number | null }> } | null)?.serie;
+        if (snapSerie && snapSerie.length > 0) {
+          setHistory(snapSerie.map((row) => ({
+            d: row.data, r: Number(row.spread), pc: row.pu_curva, pi: row.pu_indicativo,
+          })));
+        } else {
+          // 2) Fallback: RPC (caso o upload novo ainda não tenha rodado)
+          const allHist: HistoryPoint[] = [];
+          let offset = 0;
+          while (true) {
+            const { data: page } = await supabase
+              .rpc("get_ipca_history", { p_ticker: ticker, p_limit: PAGE, p_offset: offset });
+            if (!page || page.length === 0) break;
+            for (const row of page) {
+              allHist.push({
+                d: row.data,
+                r: row.spread,
+                pc: row.pu_curva,
+                pi: row.pu_indicativo,
+              });
+            }
+            if (page.length < PAGE) break;
+            offset += PAGE;
           }
-          if (page.length < PAGE) break;
-          offset += PAGE;
+          setHistory(allHist);
         }
-        setHistory(allHist);
       } else {
         // DI/PRE/OUTRO: raw indicative rate
         const allHist: { data: string; taxa_indicativa: number | null; pu_curva: number | null; pu_indicativo: number | null }[] = [];
