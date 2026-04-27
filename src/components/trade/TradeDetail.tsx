@@ -26,6 +26,15 @@ function rBadge(r: string | null) {
   return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
 }
 
+function fmtNTNB(ref: string | null | undefined): string {
+  if (!ref) return "";
+  // Strip any "NTN-B ..." prefix; keep the trailing 8-digit YYYYMMDD code
+  const m = ref.match(/(\d{8})\s*$/);
+  if (!m) return ref.startsWith("NTN-B") ? ref : `NTN-B ${ref}`;
+  const code = m[1];
+  return `NTN-B ${code.slice(0, 4)}-${code.slice(4, 6)}`;
+}
+
 const TOOLTIP_STYLE = {
   backgroundColor: "#0c1018", border: "1px solid #1c2840", borderRadius: 6,
   fontSize: 11, fontFamily: "DM Mono, monospace", color: "#dde6f0",
@@ -87,7 +96,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
             </div>
             {isIPCA && t.ntnb_ref && (
               <div className="text-[9px] text-violet-300 font-mono mt-1">
-                NTN-B: {t.ntnb_ref.replace("NTN-B 760199 ","")} · {(t.ntnb_taxa ?? 0).toFixed(4)}%
+                {fmtNTNB(t.ntnb_ref)} · {(t.ntnb_taxa ?? 0).toFixed(4)}%
               </div>
             )}
           </div>
@@ -212,7 +221,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
           {isIPCA ? (
             <><strong className="text-foreground">Spread capitalizado</strong> = (1+taxa_ativo) ÷ (1+taxa_NTN-B) − 1<br />
             {t.ntnb_ref && (
-              <>Ref: <span className="text-foreground">{t.ntnb_ref.replace("NTN-B 760199 ", "")}</span> · NTN-B atual: <span className="text-foreground">{(t.ntnb_taxa ?? 0).toFixed(4)}%</span><br /></>
+              <>Ref: <span className="text-foreground">{fmtNTNB(t.ntnb_ref)}</span> · NTN-B atual: <span className="text-foreground">{(t.ntnb_taxa ?? 0).toFixed(4)}%</span><br /></>
             )}
             Z-Score calculado sobre o spread, não sobre a taxa bruta.</>
           ) : (
