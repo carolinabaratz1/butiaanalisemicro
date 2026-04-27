@@ -215,23 +215,24 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
             <ResponsiveContainer width="100%" height="100%">
               {chartWin === "pu" ? (
                 <LineChart data={chartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                  <XAxis dataKey="d" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono" }} axisLine={false} tickLine={false}
+                  <XAxis dataKey="d" tick={{ fontSize: 8, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                     tickFormatter={v => "R$"+Math.round(v)} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v: number, name: string) => ["R$ "+v?.toFixed(2), name === "pc" ? "PU Curva" : "PU Indicativo"]} />
-                  <Legend iconSize={6} wrapperStyle={{ fontSize: 9 }} />
-                  <Line type="monotone" dataKey="pc" stroke="#475569" strokeWidth={1.5} dot={false} name="PU Curva" strokeDasharray="4 3" connectNulls />
+                  <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem}
+                    formatter={(v: number, name: string) => ["R$ "+v?.toFixed(2), name === "pc" ? "PU Curva" : "PU Indicativo"]} />
+                  <Legend iconSize={6} wrapperStyle={{ fontSize: 9, color: chartTheme.muted }} />
+                  <Line type="monotone" dataKey="pc" stroke={chartTheme.muted} strokeWidth={1.5} dot={false} name="PU Curva" strokeDasharray="4 3" connectNulls />
                   <Line type="monotone" dataKey="pi" stroke={modeColor} strokeWidth={2} dot={false} name="PU Indicativo" connectNulls />
                 </LineChart>
               ) : (
                 <LineChart data={chartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
-                  <XAxis dataKey="d" tick={{ fontSize: 8 }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono" }} axisLine={false} tickLine={false}
+                  <XAxis dataKey="d" tick={{ fontSize: 8, fill: chartTheme.tickFill }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 8, fontFamily: "DM Mono", fill: chartTheme.tickFill }} axisLine={false} tickLine={false}
                     tickFormatter={v => v.toFixed(2)+"%"} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE}
+                  <Tooltip contentStyle={chartTheme.tooltip} labelStyle={chartTheme.tooltipLabel} itemStyle={chartTheme.tooltipItem}
                     formatter={(v: number, name: string) => [v.toFixed(4)+"%", name === "val" ? (isIPCA ? "Spread" : "Taxa") : "Média 90d"]} />
                   <Line type="monotone" dataKey="val" stroke={modeColor} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="avg90" stroke="#2d4060" strokeWidth={1} strokeDasharray="4 3" dot={false} />
+                  <Line type="monotone" dataKey="avg90" stroke={chartTheme.border} strokeWidth={1} strokeDasharray="4 3" dot={false} />
                 </LineChart>
               )}
             </ResponsiveContainer>
