@@ -82,7 +82,29 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
   );
 
   return (
-    <div className="w-72 flex-shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
+    <>
+      {/* Mobile backdrop — closes on tap */}
+      <div
+        className="md:hidden fixed inset-0 bg-foreground/40 z-40 animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="
+        fixed md:static
+        inset-x-0 bottom-0 md:inset-auto
+        z-50 md:z-auto
+        w-full md:w-72 flex-shrink-0
+        max-h-[85vh] md:max-h-none
+        rounded-t-2xl md:rounded-none
+        border-t md:border-t-0 md:border-l border-border bg-card
+        flex flex-col overflow-hidden
+        shadow-2xl md:shadow-none
+        animate-in slide-in-from-bottom md:slide-in-from-bottom-0 duration-300
+      ">
+        {/* Mobile drag handle */}
+        <div className="md:hidden flex justify-center pt-2 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+        </div>
       {/* Header */}
       <div className="p-4 border-b border-border flex-shrink-0">
         <div className="flex items-start justify-between">
