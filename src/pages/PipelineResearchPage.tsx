@@ -982,6 +982,11 @@ export default function PipelineResearchPage() {
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
+                    <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setEditarPrazoModal(drawerAnalise); setNovoPrazoEdicao(drawerAnalise.prazo ? new Date(drawerAnalise.prazo + 'T00:00:00') : undefined); }}>
+                      <CalendarIcon className="h-3 w-3" /> Alterar Prazo
+                    </Button>
+                  )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
