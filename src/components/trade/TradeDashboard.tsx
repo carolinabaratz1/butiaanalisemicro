@@ -390,6 +390,85 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker 
         </ChartCard>
       </div>
 
+      {/* Spread behaviour — AAA vs Universe */}
+      <Section title="Comportamento do Spread · AAA vs Universo" />
+      <div className="bg-card border border-border rounded-xl p-4">
+        <div className="flex items-center justify-end gap-1 mb-3">
+          {([90, 30, 21, 10] as const).map(w => (
+            <button
+              key={w}
+              onClick={() => setSpreadWindow(w)}
+              className={`px-2 py-0.5 text-[10px] font-mono rounded border transition-colors ${
+                spreadWindow === w
+                  ? "bg-foreground text-background border-foreground"
+                  : "bg-transparent text-muted-foreground border-border hover:text-foreground"
+              }`}
+            >
+              {w}d
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {([
+            { title: "Spread Médio AAA", series: spreadSeries.aaa, avg: spreadSeries.aaaAvg, color: "#34d399", sub: `${spreadSeries.aaa.length} dias` },
+            { title: "Spread Médio Universo", series: spreadSeries.universe, avg: spreadSeries.uniAvg, color: modeColor, sub: `${spreadSeries.universe.length} dias` },
+          ]).map((c, i) => (
+            <div key={i}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-foreground">{c.title}</span>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  μ {c.avg.toFixed(3)}% · {c.sub}
+                </span>
+              </div>
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={c.series} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} style={CHART_STYLE}>
+                    <XAxis
+                      dataKey="d"
+                      tick={{ fontSize: 9, fill: chartTheme.tickFill }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={formatShortDate}
+                      minTickGap={24}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 9, fontFamily: "DM Mono, monospace", fill: chartTheme.tickFill }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={spreadYDomain ?? ["auto", "auto"]}
+                      tickFormatter={v => v.toFixed(2) + "%"}
+                    />
+                    <Tooltip
+                      contentStyle={chartTheme.tooltip}
+                      labelStyle={chartTheme.tooltipLabel}
+                      itemStyle={chartTheme.tooltipItem}
+                      labelFormatter={(l: string) => formatShortDate(l)}
+                      formatter={(v: number) => [v.toFixed(4) + "%", "Spread médio"]}
+                    />
+                    {c.avg > 0 && (
+                      <ReferenceLine
+                        y={c.avg}
+                        stroke={chartTheme.muted}
+                        strokeDasharray="4 4"
+                        strokeWidth={1}
+                      />
+                    )}
+                    <Line
+                      type="monotone"
+                      dataKey="val"
+                      stroke={c.color}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Opportunities */}
       <Section title="Oportunidades Z-Score > 1.5" />
       <div className="grid grid-cols-3 gap-4">
