@@ -159,21 +159,17 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
     return buckets.map(b => ({ name: b.name, count: data.filter(t => b.fn(t.last_val)).length }));
   }, [data, isIPCA]);
 
-  // Evolution by window — filter null/<=0 before median
+  // Evolution by window — medians come from the server-side summary so they include the full universe.
   const evoData = useMemo(() => {
-    const pick = (key: keyof TradeAtivo) =>
-      data
-        .map(t => (t[key] as number | null | undefined))
-        .filter((v): v is number => v != null && v > 0);
-    const lastVals = data.map(t => t.last_val).filter((v): v is number => v != null && v > 0);
     return [
-      { name: "5d",   val: median(pick("avg_5d")) },
-      { name: "10d",  val: median(pick("avg_10d")) },
-      { name: "21d",  val: median(pick("avg_21d")) },
-      { name: "30d",  val: median(pick("avg_30d")) },
-      { name: "Hoje", val: median(lastVals) },
+      { name: "90d",  val: Number(summary?.median_avg_90d ?? 0) },
+      { name: "30d",  val: Number(summary?.median_avg_30d ?? 0) },
+      { name: "21d",  val: Number(summary?.median_avg_21d ?? 0) },
+      { name: "10d",  val: Number(summary?.median_avg_10d ?? 0) },
+      { name: "5d",   val: Number(summary?.median_avg_5d ?? 0) },
+      { name: "Hoje", val: Number(summary?.median_last_val ?? 0) },
     ];
-  }, [data]);
+  }, [summary]);
 
   // Delta vs today
   const deltaData = useMemo(() => {
