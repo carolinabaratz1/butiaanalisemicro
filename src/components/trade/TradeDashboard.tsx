@@ -1,6 +1,7 @@
 // src/components/trade/TradeDashboard.tsx
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TradeAtivo } from "@/hooks/useTradeData";
+import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -11,6 +12,17 @@ interface TradeDashboardProps {
   mode: "DI" | "IPCA";
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
+}
+
+interface TradeSummary {
+  total_count: number;
+  hot_count: number;
+  median_last_val: number | null;
+  median_avg_5d: number | null;
+  median_avg_10d: number | null;
+  median_avg_21d: number | null;
+  median_avg_30d: number | null;
+  median_avg_90d: number | null;
 }
 
 const CHART_STYLE = {
