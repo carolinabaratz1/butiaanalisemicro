@@ -80,6 +80,7 @@ function fv(v: number) {
 
 export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
   const isIPCA = mode === "IPCA";
+  const chartTheme = useChartTheme();
 
   // Server-side aggregated summary (medians/counts) — avoids paginated row truncation in the client.
   const [summary, setSummary] = useState<TradeSummary | null>(null);
