@@ -679,12 +679,12 @@ export default function PipelineResearchPage() {
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
+                            {(isAnalista || isCoord) && isMyAnalise && item.displayStatus === 'Pendente' && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
+                            {(isAnalista || isCoord) && isMyAnalise && item.displayStatus === 'Em Análise' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
                                   <CheckCircle className="h-2.5 w-2.5" /> Entregar
@@ -822,12 +822,12 @@ export default function PipelineResearchPage() {
 
                           {/* Quick actions */}
                           <div className="flex gap-1 pt-1 flex-wrap" onClick={e => e.stopPropagation()}>
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Pendente' && (
+                            {(isAnalista || isCoord) && isMyAnalise && item.displayStatus === 'Pendente' && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { updateStatus.mutate({ id: item.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: item.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); }}>
                                 <Play className="h-2.5 w-2.5" /> Iniciar
                               </Button>
                             )}
-                            {isAnalista && isMyAnalise && item.displayStatus === 'Em Análise' && (
+                            {(isAnalista || isCoord) && isMyAnalise && item.displayStatus === 'Em Análise' && (
                               <>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEntregarModal(item.id)}>
                                   <CheckCircle className="h-2.5 w-2.5" /> Entregar
@@ -952,12 +952,12 @@ export default function PipelineResearchPage() {
 
                 {/* Drawer actions */}
                 <div className="flex gap-2 flex-wrap">
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
+                  {(isAnalista || isCoord) && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Pendente' && (
                     <Button size="sm" className="gap-1 text-xs" onClick={() => { updateStatus.mutate({ id: drawerAnalise.id, status: 'Em Análise', extras: { data_inicio: new Date().toISOString().split('T')[0] } }); registrarEvento({ analise_id: drawerAnalise.id, acao: 'etapa_alterada', etapa_anterior: 'Pendente', etapa_nova: 'Em Análise' }); setDrawerAnalise(null); }}>
                       <Play className="h-3 w-3" /> Iniciar Análise
                     </Button>
                   )}
-                  {isAnalista && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
+                  {(isAnalista || isCoord) && drawerAnalise.analista_responsavel === currentUser?.id && drawerAnalise.status === 'Em Análise' && (
                     <>
                       <Button size="sm" className="gap-1 text-xs" onClick={() => setEntregarModal(drawerAnalise.id)}>
                         <CheckCircle className="h-3 w-3" /> Entregar Análise
