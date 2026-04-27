@@ -1,6 +1,6 @@
 // src/components/trade/TradeDetail.tsx
 import { useState } from "react";
-import { TradeAtivo, HistoryPoint, NTNBPoint } from "@/hooks/useTradeData";
+import { TradeAtivo, HistoryPoint, NTNBPoint, useTickerDetail } from "@/hooks/useTradeData";
 import { X, ExternalLink } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
@@ -36,10 +36,15 @@ type ChartWin = "90d" | "30d" | "21d" | "10d" | "pu";
 export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, onViewEmissor }: TradeDetailProps) {
   const [chartWin, setChartWin] = useState<ChartWin>("90d");
   const t = data.find(x => x.ticker === ticker);
+
+  // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
+  // Falls back to the global `history` map if the per-ticker fetch is empty.
+  const { history: tickerHist } = useTickerDetail(ticker);
+
   if (!t) return null;
 
   const isIPCA = mode === "IPCA";
-  const hist = history[ticker] ?? [];
+  const hist = tickerHist.length > 0 ? tickerHist : (history[ticker] ?? []);
   const zColor = (t.z_score ?? 0) > 1.5 ? "#ff4d2e" : (t.z_score ?? 0) > 0.5 ? "#fb923c" : "#34d399";
 
   // Slice history by window
