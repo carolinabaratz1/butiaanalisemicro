@@ -26,6 +26,15 @@ function rBadge(r: string | null) {
   return <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${cls}`}>{s}</span>;
 }
 
+function fmtNTNB(ref: string | null | undefined): string {
+  if (!ref) return "";
+  // Strip any "NTN-B ..." prefix; keep the trailing 8-digit YYYYMMDD code
+  const m = ref.match(/(\d{8})\s*$/);
+  if (!m) return ref.startsWith("NTN-B") ? ref : `NTN-B ${ref}`;
+  const code = m[1];
+  return `NTN-B ${code.slice(0, 4)}-${code.slice(4, 6)}`;
+}
+
 const TOOLTIP_STYLE = {
   backgroundColor: "#0c1018", border: "1px solid #1c2840", borderRadius: 6,
   fontSize: 11, fontFamily: "DM Mono, monospace", color: "#dde6f0",
