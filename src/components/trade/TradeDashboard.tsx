@@ -1,6 +1,7 @@
 // src/components/trade/TradeDashboard.tsx
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TradeAtivo } from "@/hooks/useTradeData";
+import { supabase } from "@/integrations/supabase/client";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -11,6 +12,17 @@ interface TradeDashboardProps {
   mode: "DI" | "IPCA";
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
+}
+
+interface TradeSummary {
+  total_count: number;
+  hot_count: number;
+  median_last_val: number | null;
+  median_avg_5d: number | null;
+  median_avg_10d: number | null;
+  median_avg_21d: number | null;
+  median_avg_30d: number | null;
+  median_avg_90d: number | null;
 }
 
 const CHART_STYLE = {
@@ -75,21 +87,26 @@ function fv(v: number) {
 export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
   const isIPCA = mode === "IPCA";
 
-  // KPIs
-  const kpis = useMemo(() => {
-    const vals = data
-      .map(t => t.last_val)
-      .filter((v): v is number => v != null && v > 0)
-      .sort((a, b) => a - b);
-    return {
-      total: data.length,
-      hot: data.filter(t => t.z_score > 1.5).length,
-      median: median(vals) ?? 0,
-      wide: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 > 5).length,
-      narrow: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 < -5).length,
-      totalVolFin: data.reduce((s, t) => s + (t.total_vol_fin ?? 0), 0),
-    };
-  }, [data]);
+  // Server-side aggregated summary (medians/counts) — avoids paginated row truncation in the client.
+  const [summary, setSummary] = useState<TradeSummary | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: rows } = await supabase.rpc("get_trade_summary", { p_indexador: mode });
+      if (!cancelled) setSummary((rows?.[0] as TradeSummary) ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [mode]);
+
+  // KPIs — counts/medians come from the server summary; client data is only a fallback.
+  const kpis = useMemo(() => ({
+    total: summary?.total_count ?? data.length,
+    hot: summary?.hot_count ?? data.filter(t => t.z_score > 1.5).length,
+    median: Number(summary?.median_last_val ?? 0),
+    wide: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 > 5).length,
+    narrow: data.filter(t => (t.last_val - (t.avg_21d ?? t.last_val)) * 100 < -5).length,
+    totalVolFin: data.reduce((s, t) => s + (t.total_vol_fin ?? 0), 0),
+  }), [data, summary]);
 
   // Rating chart
   const ratingData = useMemo(() => {
@@ -142,21 +159,17 @@ export function TradeDashboard({ data, mode, modeColor, onSelectTicker }: TradeD
     return buckets.map(b => ({ name: b.name, count: data.filter(t => b.fn(t.last_val)).length }));
   }, [data, isIPCA]);
 
-  // Evolution by window — filter null/<=0 before median
+  // Evolution by window — medians come from the server-side summary so they include the full universe.
   const evoData = useMemo(() => {
-    const pick = (key: keyof TradeAtivo) =>
-      data
-        .map(t => (t[key] as number | null | undefined))
-        .filter((v): v is number => v != null && v > 0);
-    const lastVals = data.map(t => t.last_val).filter((v): v is number => v != null && v > 0);
     return [
-      { name: "5d",   val: median(pick("avg_5d")) },
-      { name: "10d",  val: median(pick("avg_10d")) },
-      { name: "21d",  val: median(pick("avg_21d")) },
-      { name: "30d",  val: median(pick("avg_30d")) },
-      { name: "Hoje", val: median(lastVals) },
+      { name: "90d",  val: Number(summary?.median_avg_90d ?? 0) },
+      { name: "30d",  val: Number(summary?.median_avg_30d ?? 0) },
+      { name: "21d",  val: Number(summary?.median_avg_21d ?? 0) },
+      { name: "10d",  val: Number(summary?.median_avg_10d ?? 0) },
+      { name: "5d",   val: Number(summary?.median_avg_5d ?? 0) },
+      { name: "Hoje", val: Number(summary?.median_last_val ?? 0) },
     ];
-  }, [data]);
+  }, [summary]);
 
   // Delta vs today
   const deltaData = useMemo(() => {
