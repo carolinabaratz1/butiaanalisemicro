@@ -74,6 +74,23 @@ function asRows(value: unknown): Record<string, unknown>[] {
   });
 }
 
+function dedupeRows(
+  table: UploadTable,
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const keys = tableConfig[table].onConflict.split(",").map((k) => k.trim());
+  const map = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const key = keys.map((k) => {
+      const v = row[k];
+      return v === null || v === undefined ? "" : String(v);
+    }).join("||");
+    // Last occurrence wins (mesma semântica de um upsert linha-a-linha)
+    map.set(key, row);
+  }
+  return Array.from(map.values());
+}
+
 async function batchUpsert(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -81,11 +98,12 @@ async function batchUpsert(
   rows: Record<string, unknown>[],
 ) {
   if (rows.length === 0) return 0;
-  const { error } = await supabase.from(table).upsert(rows, {
+  const deduped = dedupeRows(table, rows);
+  const { error } = await supabase.from(table).upsert(deduped, {
     onConflict: tableConfig[table].onConflict,
   });
   if (error) throw new Error(`${table} upsert: ${error.message}`);
-  return rows.length;
+  return deduped.length;
 }
 
 serve(async (req) => {
