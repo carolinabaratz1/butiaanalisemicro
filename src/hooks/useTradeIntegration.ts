@@ -241,10 +241,10 @@ export function useTradeIntegration() {
       // First try by ISIN
       const byIsin = info.isin ? maps.analiseByIsin.get(info.isin) : undefined;
       if (byIsin) return byIsin;
-      // Fallback: by company
-      const empresaId = maps.cnpjToEmpresa.get(info.cnpj);
-      if (!empresaId) return null;
-      return maps.analiseByEmpresa.get(empresaId) ?? null;
+      // Fallback: by CNPJ do emissor (analises.empresa_id armazena CNPJ)
+      const key = maps.normCnpj(info.cnpj);
+      if (!key) return null;
+      return maps.analiseByCnpj.get(key) ?? null;
     }
 
     function getStatus(ticker: string): AnaliseStatus | null {
