@@ -316,6 +316,29 @@ export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker,
 
   return (
     <div className="p-6 space-y-4">
+      {selectedFund && (
+        <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center gap-6">
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Fundo selecionado</div>
+            <div className="text-sm font-bold text-foreground">{selectedFund}</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Total do Fundo</div>
+            <div className="text-sm font-bold font-mono text-foreground">
+              {fundTotal >= 1e9 ? `R$ ${(fundTotal/1e9).toFixed(2)}B` : fundTotal >= 1e6 ? `R$ ${(fundTotal/1e6).toFixed(2)}M` : `R$ ${(fundTotal/1e3).toFixed(0)}K`}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Alocado neste universo</div>
+            <div className="text-sm font-bold font-mono" style={{ color: modeColor }}>
+              {allocatedInFund >= 1e6 ? `R$ ${(allocatedInFund/1e6).toFixed(2)}M` : `R$ ${(allocatedInFund/1e3).toFixed(0)}K`}
+              <span className="text-[10px] text-muted-foreground ml-1.5">
+                ({fundTotal > 0 ? ((allocatedInFund/fundTotal)*100).toFixed(2) : "0.00"}% do PL)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       {/* KPIs */}
       <div className="grid grid-cols-6 gap-3">
         {[
