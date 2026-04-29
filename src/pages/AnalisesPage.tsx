@@ -33,7 +33,9 @@ function fmtDateBR(d: string | null | undefined): string {
   return clean;
 }
 
-function isVencida(status: string, dataConclusao: string | null): boolean {
+function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
+  // FIDC analyses do not expire — they have continuous monitoring instead
+  if (tipoEmissor === 'FIDC') return false;
   if (status !== 'Aprovada' || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
@@ -41,8 +43,8 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null): string {
-  if (isVencida(status, dataConclusao)) return 'Vencida';
+function getDisplayStatus(status: string, dataConclusao: string | null, tipoEmissor?: string | null): string {
+  if (isVencida(status, dataConclusao, tipoEmissor)) return 'Vencida';
   return status;
 }
 
@@ -62,7 +64,7 @@ export default function AnalisesPage() {
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-lookup'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('empresas').select('cnpj, nome');
+      const { data, error } = await supabase.from('empresas').select('cnpj, nome, tipo');
       if (error) throw error;
       return data || [];
     },
@@ -84,6 +86,11 @@ export default function AnalisesPage() {
     return e?.nome || id;
   }
 
+  function getTipoEmissor(cnpj: string): string | null {
+    const e = empresas.find(em => em.cnpj === cnpj);
+    return e?.tipo ?? null;
+  }
+
   const { data: analises = [], isLoading } = useQuery({
     queryKey: ['analises'],
     queryFn: async () => {
@@ -97,7 +104,7 @@ export default function AnalisesPage() {
   });
 
   const filtered = analises.filter(a => {
-    const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+    const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
     return (statusFilter === 'all' || displayStatus === statusFilter)
       && (tipoFilter === 'all' || a.tipo === tipoFilter)
       && (analistaFilter === 'all' || a.analista_responsavel === analistaFilter);
@@ -178,7 +185,7 @@ export default function AnalisesPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map(a => {
-                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
                   return (
                     <TableRow key={a.id} className="border-border">
                       <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
@@ -211,7 +218,7 @@ export default function AnalisesPage() {
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="max-w-2xl bg-card border-border max-h-[85vh] overflow-y-auto">
           {selected && (() => {
-            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao);
+            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao, getTipoEmissor(selected.empresa_id));
             return (
               <>
                 <DialogHeader>
@@ -275,7 +282,7 @@ export default function AnalisesPage() {
                       <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
                       <div className="space-y-1">
                         {versions.map(v => {
-                          const vStatus = getDisplayStatus(v.status, v.data_conclusao);
+                          const vStatus = getDisplayStatus(v.status, v.data_conclusao, getTipoEmissor(v.empresa_id));
                           return (
                             <div key={v.id} className="flex items-center gap-3 text-xs p-2 bg-surface-1 rounded">
                               <span className="font-medium">v{v.versao}</span>

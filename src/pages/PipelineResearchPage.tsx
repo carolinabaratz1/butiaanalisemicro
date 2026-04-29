@@ -73,7 +73,9 @@ function fmtDateBR(d: string | null | undefined): string {
   return clean;
 }
 
-function isVencida(status: string, dataConclusao: string | null): boolean {
+function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
+  // FIDC analyses do not expire — they have continuous monitoring instead
+  if (tipoEmissor === 'FIDC') return false;
   if (status !== 'Aprovada' || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
@@ -81,8 +83,8 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean): AnaliseStatus {
-  if (isVencida(status, dataConclusao)) {
+function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean, tipoEmissor?: string | null): AnaliseStatus {
+  if (isVencida(status, dataConclusao, tipoEmissor)) {
     if (empresaId && temPosicaoFn) {
       return temPosicaoFn(empresaId) ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
     }
@@ -182,6 +184,8 @@ export default function PipelineResearchPage() {
   });
 
   const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
+  const empresaTipoPorCnpj = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.tipo])), [empresasDB]);
+  const tipoEmissorDe = useCallback((cnpj: string) => empresaTipoPorCnpj.get(cnpj) ?? null, [empresaTipoPorCnpj]);
 
   // ── Fetch emissoes from DB for ticker resolution ──
   const { data: emissoesDB = [] } = useQuery({
@@ -281,7 +285,7 @@ export default function PipelineResearchPage() {
   const analisesComStatus = useMemo(() => {
     const withStatus = analises.map(a => ({
       ...a,
-      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
+      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva, tipoEmissorDe(a.empresa_id)),
     }));
 
     // Group by empresa_id — keep only highest versao per empresa
@@ -313,7 +317,7 @@ export default function PipelineResearchPage() {
     });
 
     return result;
-  }, [analises, temPosicaoAtiva]);
+  }, [analises, temPosicaoAtiva, tipoEmissorDe]);
 
   // ── Filters ──
   const filtered = useMemo(() => {
@@ -885,7 +889,7 @@ export default function PipelineResearchPage() {
                     <Badge variant="outline" className={`text-[10px] mt-0.5 ${tipoAnaliseColors[drawerAnalise.tipo] || ''}`}>{drawerAnalise.tipo}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Status</p>
-                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva)}</Badge>
+                    <Badge variant="outline" className="text-[10px] mt-0.5">{getDisplayStatus(drawerAnalise.status, drawerAnalise.data_conclusao, drawerAnalise.empresa_id, temPosicaoAtiva, tipoEmissorDe(drawerAnalise.empresa_id))}</Badge>
                   </div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Prazo</p><p className={`text-xs ${drawerAnalise.prazo && drawerAnalise.prazo < hoje && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') ? 'text-status-danger font-semibold' : ''}`}>{fmtDateBR(drawerAnalise.prazo)}</p></div>
                   <div><p className="text-[10px] text-muted-foreground uppercase">Analista</p><p className="text-xs">{getAnalistaNome(drawerAnalise.analista_responsavel, allProfiles)}</p></div>
@@ -987,7 +991,7 @@ export default function PipelineResearchPage() {
                       <CalendarIcon className="h-3 w-3" /> Alterar Prazo
                     </Button>
                   )}
-                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
