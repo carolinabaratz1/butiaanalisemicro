@@ -48,9 +48,30 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
   const t = data.find(x => x.ticker === ticker);
   const chartTheme = useChartTheme();
 
-  const allocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const rawAllocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const puInd = t?.pu_indicativo ?? 0;
+  // Financeiro = Quantidade × PU Indicativo (override do hook)
+  const allocations = useMemo(
+    () => rawAllocations.map(a => ({ ...a, financial_price: a.amount * puInd })),
+    [rawAllocations, puInd]
+  );
   const totalFinAlloc = useMemo(() => allocations.reduce((s, a) => s + a.financial_price, 0), [allocations]);
   const totalQtyAlloc = useMemo(() => allocations.reduce((s, a) => s + a.amount, 0), [allocations]);
+
+  // Abrevia nomes longos de fundos para evitar truncamento
+  function abbrevFundo(name: string): string {
+    if (!name) return "—";
+    return name
+      .replace(/BUTI[ÁA]/gi, "BTA")
+      .replace(/\bMASTER\b/gi, "MSTR")
+      .replace(/\bFI\b/gi, "")
+      .replace(/\bFIRF\b/gi, "FIRF")
+      .replace(/\bFIFE\b/gi, "FIFE")
+      .replace(/\bRENDA FIXA\b/gi, "RF")
+      .replace(/\bPREVID[ÊE]NCI[AÁ]\b/gi, "PREV")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
   // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
   // Falls back to the global `history` map if the per-ticker fetch is empty.
