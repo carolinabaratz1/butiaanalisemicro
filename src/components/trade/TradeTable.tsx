@@ -353,6 +353,17 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                       </td>
                     )}
                     <td className="hidden md:table-cell px-2.5 py-2">{rBadge(t.rating)}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">{statusBadge(integration.getStatus(t.ticker))}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">
+                      {integration.hasPosition(t.ticker) ? (
+                        <div className="flex items-center gap-1.5" title={`${integration.getAllocations(t.ticker).length} fundo(s) com posição`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_hsl(142_71%_45%)]" />
+                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">ATIVA</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-2 md:px-2.5 py-2 font-mono font-semibold text-xs text-foreground">{(t.last_val ?? 0).toFixed(3)}%</td>
                     <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_5d ?? 0).toFixed(3)}%</td>
                     <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_21d ?? 0).toFixed(3)}%</td>
