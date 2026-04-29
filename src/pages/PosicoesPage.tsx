@@ -208,7 +208,7 @@ export default function PosicoesPage() {
         cnpj,
         empresaNome: empresa?.nome,
         empresaRating: empresa?.rating,
-        analiseStatus: getAnaliseStatus(analise),
+        analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
         analiseRecomendacao: analise?.recomendacao || null,
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
