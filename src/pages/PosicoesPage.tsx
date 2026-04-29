@@ -159,8 +159,8 @@ export default function PosicoesPage() {
   }, [emissoes]);
 
   const cnpjToEmpresa = useMemo(() => {
-    const map: Record<string, { nome: string; rating: string | null; setor: string | null }> = {};
-    empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor }; });
+    const map: Record<string, { nome: string; rating: string | null; setor: string | null; tipo: string | null }> = {};
+    empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor, tipo: (e as any).tipo ?? null }; });
     return map;
   }, [empresas]);
 
