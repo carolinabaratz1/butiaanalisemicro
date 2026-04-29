@@ -1,10 +1,12 @@
 import { cn } from '@/lib/utils';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { KpiResumo } from '@/utils/desempenhoUtils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface Props {
   atual: KpiResumo;
   anterior: KpiResumo;
+  loading?: boolean;
 }
 
 interface CardDef {
@@ -29,7 +31,19 @@ function formatDelta(delta: number, higherIsBetter: boolean) {
   };
 }
 
-export function KpiCards({ atual, anterior }: Props) {
+export function KpiCards({ atual, anterior, loading }: Props) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="bg-muted rounded-lg p-4">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-20 mt-2" />
+          </div>
+        ))}
+      </div>
+    );
+  }
   const cards: CardDef[] = [
     { label: 'Análises entregues',  value: String(atual.entregues),                        delta: atual.entregues - anterior.entregues,         higherIsBetter: true  },
     { label: 'Prazo médio (d.ú.)',  value: atual.prazoMedio.toFixed(1),                    delta: atual.prazoMedio - anterior.prazoMedio,       higherIsBetter: false },

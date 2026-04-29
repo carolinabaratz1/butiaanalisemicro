@@ -1,11 +1,14 @@
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
+import { BarChart3 } from 'lucide-react';
 import { ANALISTA_COLOR_CLASSES, AnalistaMetrica } from '@/utils/desempenhoUtils';
 
 interface Props {
   metricas: AnalistaMetrica[];
   onSelect: (m: AnalistaMetrica) => void;
+  loading?: boolean;
 }
 
 const STATUS_LABEL: Record<AnalistaMetrica['status'], { text: string; cls: string }> = {
@@ -14,7 +17,7 @@ const STATUS_LABEL: Record<AnalistaMetrica['status'], { text: string; cls: strin
   em_atraso:{ text: 'Em atraso',cls: 'bg-red-100 text-red-700 hover:bg-red-100' },
 };
 
-export function TabelaAnalistas({ metricas, onSelect }: Props) {
+export function TabelaAnalistas({ metricas, onSelect, loading }: Props) {
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="overflow-x-auto">
@@ -67,13 +70,25 @@ export function TabelaAnalistas({ metricas, onSelect }: Props) {
                 </tr>
               );
             })}
-            {metricas.length === 0 && (
+            {loading && Array.from({ length: 4 }).map((_, i) => (
+              <tr key={`sk-${i}`} className="border-b border-border/40">
+                <td colSpan={7} className="px-4 py-3"><Skeleton className="h-6 w-full" /></td>
+              </tr>
+            ))}
+            {!loading && metricas.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                  Nenhuma análise no período selecionado.
+                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground text-sm">
+                  <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  Nenhuma análise encontrada no período selecionado
                 </td>
               </tr>
             )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
           </tbody>
         </table>
       </div>
