@@ -48,9 +48,30 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
   const t = data.find(x => x.ticker === ticker);
   const chartTheme = useChartTheme();
 
-  const allocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const rawAllocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const puInd = t?.pu_indicativo ?? 0;
+  // Financeiro = Quantidade × PU Indicativo (override do hook)
+  const allocations = useMemo(
+    () => rawAllocations.map(a => ({ ...a, financial_price: a.amount * puInd })),
+    [rawAllocations, puInd]
+  );
   const totalFinAlloc = useMemo(() => allocations.reduce((s, a) => s + a.financial_price, 0), [allocations]);
   const totalQtyAlloc = useMemo(() => allocations.reduce((s, a) => s + a.amount, 0), [allocations]);
+
+  // Abrevia nomes longos de fundos para evitar truncamento
+  function abbrevFundo(name: string): string {
+    if (!name) return "—";
+    return name
+      .replace(/BUTI[ÁA]/gi, "BTA")
+      .replace(/\bMASTER\b/gi, "MSTR")
+      .replace(/\bFI\b/gi, "")
+      .replace(/\bFIRF\b/gi, "FIRF")
+      .replace(/\bFIFE\b/gi, "FIFE")
+      .replace(/\bRENDA FIXA\b/gi, "RF")
+      .replace(/\bPREVID[ÊE]NCI[AÁ]\b/gi, "PREV")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
 
   // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
   // Falls back to the global `history` map if the per-ticker fetch is empty.
@@ -288,7 +309,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
                 <tbody>
                   {allocations.map((a) => (
                     <tr key={a.fundo} className="border-b border-border last:border-0">
-                      <td className="px-2.5 py-1.5 text-foreground max-w-[180px] truncate" title={a.fundo}>{a.fundo}</td>
+                      <td className="px-2.5 py-1.5 text-foreground max-w-[140px] truncate font-medium" title={a.fundo}>{abbrevFundo(a.fundo)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right">{a.amount >= 1e3 ? (a.amount/1e3).toFixed(1)+"K" : a.amount.toFixed(0)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right">{a.financial_price >= 1e6 ? (a.financial_price/1e6).toFixed(2)+"M" : a.financial_price >= 1e3 ? (a.financial_price/1e3).toFixed(0)+"K" : a.financial_price.toFixed(0)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right" style={{ color: modeColor }}>{(a.pct_fundo * 100).toFixed(2)}%</td>

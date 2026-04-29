@@ -174,9 +174,12 @@ export function useTradeIntegration() {
     const empresas = empresasQ.data ?? [];
     const analises = analisesQ.data ?? [];
 
-    // CNPJ → empresa_id
+    // CNPJ → empresa_id (kept for reference; analises.empresa_id armazena CNPJ direto)
     const cnpjToEmpresa = new Map<string, string>();
     for (const e of empresas) cnpjToEmpresa.set(e.cnpj, e.id);
+
+    // Normaliza CNPJ removendo pontuação para casamento robusto
+    const normCnpj = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
 
     // ticker → { isin, cnpj }
     const tickerInfo = new Map<string, { isin: string; cnpj: string }>();
@@ -186,13 +189,13 @@ export function useTradeIntegration() {
       isinToTicker.set(e.isin, e.ticker ?? "");
     }
 
-    // Latest analise por isin e por empresa_id
+    // Latest analise por isin e por CNPJ (analises.empresa_id contém o CNPJ formatado)
     const analiseByIsin = new Map<string, AnaliseRow>();
-    const analiseByEmpresa = new Map<string, AnaliseRow>();
-    // analises já vêm ordenadas por versao desc — primeira ocorrência vence
+    const analiseByCnpj = new Map<string, AnaliseRow>();
     for (const a of analises) {
-      if (a.isin && !analiseByIsin.has(a.isin)) analiseByIsin.set(a.isin, a);
-      if (!analiseByEmpresa.has(a.empresa_id)) analiseByEmpresa.set(a.empresa_id, a);
+      if (a.isin && a.isin.trim() && !analiseByIsin.has(a.isin)) analiseByIsin.set(a.isin, a);
+      const key = normCnpj(a.empresa_id);
+      if (key && !analiseByCnpj.has(key)) analiseByCnpj.set(key, a);
     }
 
     // isin → posições[]
@@ -220,7 +223,8 @@ export function useTradeIntegration() {
       tickerInfo,
       isinToTicker,
       analiseByIsin,
-      analiseByEmpresa,
+      analiseByCnpj,
+      normCnpj,
       posByIsin,
       fundTotal,
       fundIsins,
@@ -237,10 +241,10 @@ export function useTradeIntegration() {
       // First try by ISIN
       const byIsin = info.isin ? maps.analiseByIsin.get(info.isin) : undefined;
       if (byIsin) return byIsin;
-      // Fallback: by company
-      const empresaId = maps.cnpjToEmpresa.get(info.cnpj);
-      if (!empresaId) return null;
-      return maps.analiseByEmpresa.get(empresaId) ?? null;
+      // Fallback: by CNPJ do emissor (analises.empresa_id armazena CNPJ)
+      const key = maps.normCnpj(info.cnpj);
+      if (!key) return null;
+      return maps.analiseByCnpj.get(key) ?? null;
     }
 
     function getStatus(ticker: string): AnaliseStatus | null {
