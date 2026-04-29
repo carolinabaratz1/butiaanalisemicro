@@ -1,74 +1,71 @@
+## Objetivo
 
+Análises de emissores tipo **FIDC** ficam aprovadas indefinidamente — não vencem após 1 ano. O acompanhamento periódico continua sendo registrado normalmente via novas versões / eventos, mas o status aprovado não muda automaticamente para "Vencida".
 
-## Diagnóstico
+## Identificação
 
-Três problemas, todos relacionados à **corrupção UTF-8 → Latin-1 → UTF-8** (mojibake) no arquivo `src/pages/PipelineResearchPage.tsx`:
+- Critério: `empresas.tipo === 'FIDC'` (cadastro do emissor).
+- A função utilitária precisa cruzar a análise com o emissor para checar o tipo. Hoje ela só recebe `status` e `data_conclusao`.
 
-### 1. Dados NÃO foram perdidos
-Verifiquei direto no banco: existem **10 análises com status `Em Análise`**, 161 `Aprovada`, 2 `Reprovada`. O celular (que renderiza outra view ou cache antigo) mostra corretamente "Em Análise (10)". O desktop mostra "0" porque o código do Pipeline compara com a string corrompida `'Em AnÃ¡lise'` e nunca casa com o valor real do banco `'Em Análise'`.
+## Mudanças
 
-### 2. Erro de build TS2367 (Pipeline)
-Linha 135: `currentUser?.funcao === 'CoordenaÃ§Ã£o/Especialista'`. O tipo `UserRole` define `'Coordenação/Especialista'` (correto), por isso o TypeScript reclama que "não há overlap". Mesma causa: encoding corrompido.
+### 1. `src/pages/PipelineResearchPage.tsx`
+- Estender `isVencida(status, dataConclusao, tipoEmissor?)`: se `tipoEmissor === 'FIDC'`, retorna `false` sempre.
+- Estender `getDisplayStatus(...)`: passar `tipoEmissor` adiante.
+- Nos pontos onde essas funções são chamadas (mapeamento de `analisesComStatus`, drawer, kanban), buscar o tipo do emissor a partir do `empresaMap` já existente (`empresas` query), usando `empresa_id` (CNPJ).
+- O filtro "Vencido" do prazo de entrega (linha 328/566) **não** se aplica a aprovação — é prazo de entrega da análise pendente, então mantém comportamento atual.
 
-### 3. Erros de build TS18046 (edge functions)
-`supabase/functions/create-user/index.ts:99` e `supabase/functions/manage-user/index.ts:186`: `catch (err)` retorna `err.message` sem narrowing. No Deno strict, `err` é `unknown`.
+### 2. `src/pages/AnalisesPage.tsx`
+- Mesma alteração em `isVencida` e `getDisplayStatus`, recebendo `tipoEmissor`.
+- Garantir que o componente já tenha acesso ao map de empresas (verificar; se não tiver, adicionar query de `empresas` selecionando `cnpj, tipo`).
 
-## Escopo da corrupção
+### 3. `src/pages/DashboardPage.tsx`
+- Onde o `computedStatus` é calculado (linhas 129–139), antes de marcar como "Vencida c/ Alocação"/"Vencida s/ Alocação", checar se o emissor é FIDC; se for, manter `computedStatus = 'Aprovada'`.
+- Cobertura ativa: FIDCs aprovados continuam contando como cobertura ativa naturalmente (já contam, pois ficarão "Aprovada").
 
-- `src/pages/PipelineResearchPage.tsx` — **110 ocorrências** de mojibake (tipo `AnaliseStatus`, comparações de status, comparações de role, labels de UI, comentários, ícones de emoji virando "ð"). Todas as colunas do Kanban com texto corrompido (`AnÃ¡lise`, `ConcluÃda`, `PosiÃ§Ã£o Ativa`, `AlocaÃ§Ã£o`, `Nova AnÃ¡lise`).
-- `src/data/emissores.ts` — **falso positivo**, os "Ã" são parte legítima de palavras como "LOCAÇÃO".
-- Demais arquivos limpos.
+### 4. Sem mudanças no backend
+- O campo `empresas.tipo` já existe e é lido pelas páginas. RLS já permite leitura.
+- Nenhuma migration necessária.
 
-## Correção
+## Detalhes técnicos
 
-### Passo 1 — Restaurar encoding em `PipelineResearchPage.tsx`
-Reescrever o arquivo substituindo todos os mojibakes pelas strings UTF-8 corretas. Mapeamento aplicado:
+### Assinatura nova
 
-| Corrompido | Correto |
-|---|---|
-| `Em AnÃ¡lise` | `Em Análise` |
-| `ConcluÃ­da` / `ConcluÃda` | `Concluída` |
-| `Vencida c/ AlocaÃ§Ã£o` | `Vencida c/ Alocação` |
-| `Vencida s/ AlocaÃ§Ã£o` | `Vencida s/ Alocação` |
-| `CoordenaÃ§Ã£o/Especialista` | `Coordenação/Especialista` |
-| `PosiÃ§Ã£o Ativa` | `Posição Ativa` |
-| `RejeiÃ§Ã£o` | `Rejeição` |
-| `ComitÃª` | `Comitê` |
-| `Nova AnÃ¡lise` | `Nova Análise` |
-| `â` (em comentário de seta) | `→` |
-| `ð...` (ícone de calendário corrompido) | `📅` |
-| Demais acentos `Ã£`/`Ã§`/`Ã©`/`Ã¡` etc. | recompor para `ã`/`ç`/`é`/`á` etc. |
-
-Após o fix, o tipo `AnaliseStatus` voltará a casar com os valores que vêm do banco — as 10 análises "Em Análise" voltam a aparecer no desktop, e o erro TS2367 some.
-
-### Passo 2 — Corrigir tipagem em `catch (err)` nas duas edge functions
-Em ambos os arquivos, trocar:
 ```ts
-} catch (err) {
-  return new Response(JSON.stringify({ error: err.message }), { ... });
-}
-```
-por:
-```ts
-} catch (err) {
-  const message = err instanceof Error ? err.message : String(err);
-  return new Response(JSON.stringify({ error: message }), { ... });
+function isVencida(
+  status: string,
+  dataConclusao: string | null,
+  tipoEmissor?: string | null
+): boolean {
+  if (tipoEmissor === 'FIDC') return false;
+  if (status !== 'Aprovada' || !dataConclusao) return false;
+  const conclusao = new Date(dataConclusao.split('T')[0]);
+  const umAnoAtras = new Date();
+  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
+  return conclusao < umAnoAtras;
 }
 ```
 
-### Passo 3 — Não tocar no banco
-Nenhuma migration, nenhum UPDATE/INSERT/DELETE. Os dados estão íntegros; só o frontend estava lendo as strings erradas.
+### Lookup do tipo
 
-## Resultado esperado
+Onde já existe `empresaMap: Map<cnpj, empresa>`, basta:
+```ts
+const tipoEmissor = empresaMap.get(a.empresa_id)?.tipo ?? null;
+isVencida(a.status, a.data_conclusao, tipoEmissor);
+```
 
-- Build verde (TS2367 e dois TS18046 resolvidos).
-- Coluna "Em Análise" do Pipeline volta a mostrar **10** (consistente com o celular e com o banco).
-- Labels da UI em português correto: "Em Análise", "Concluída", "Vencida c/ Alocação", "Posição Ativa", "Comitê", "Nova Análise", ícone 📅.
-- Comparações de role (`'Coordenação/Especialista'`) voltam a funcionar — analistas/coordenadores não ficam mais sem permissão por causa do mismatch de string.
+Em `DashboardPage` o `cnpjSet` já existe; precisa também de um `Map<cnpj, tipo>` derivado da query de empresas — adicionar.
 
-## Arquivos modificados
+## Não muda
 
-- `src/pages/PipelineResearchPage.tsx` — reescrita completa do arquivo com encoding UTF-8 restaurado
-- `supabase/functions/create-user/index.ts` — narrowing de `err` no catch
-- `supabase/functions/manage-user/index.ts` — narrowing de `err` no catch
+- Lógica de versionamento / fluxo de aprovação.
+- Auditoria (`pipeline_eventos`).
+- Permissões de perfil (Coord/Analista/Gestor).
+- Filtros de prazo (data de entrega ≠ vencimento da aprovação).
+- Status visual: FIDC aprovado continua aparecendo apenas como **Aprovada** (sem badge extra).
 
+## Aceitação
+
+1. Análise aprovada de emissor FIDC com `data_conclusao` >1 ano: status = **Aprovada** (não vira Vencida) no Pipeline Research, lista de Análises e Dashboard.
+2. Análise aprovada de emissor não-FIDC com mesma idade: continua virando **Vencida c/ Alocação** ou **Vencida s/ Alocação**.
+3. KPIs do Dashboard refletem isso: FIDCs aprovados antigos contam em "Aprovadas" e em "Cobertura ativa".
