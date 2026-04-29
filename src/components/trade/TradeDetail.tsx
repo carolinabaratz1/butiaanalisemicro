@@ -1,8 +1,9 @@
 // src/components/trade/TradeDetail.tsx
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { TradeAtivo, HistoryPoint, NTNBPoint, TradeMode, useTickerDetail } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
-import { X, ExternalLink } from "lucide-react";
+import type { TradeIntegration } from "@/hooks/useTradeIntegration";
+import { X, ExternalLink, Wallet } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface TradeDetailProps {
@@ -13,6 +14,7 @@ interface TradeDetailProps {
   mode: TradeMode;
   modeColor: string;
   onClose: () => void;
+  integration: TradeIntegration;
   onViewEmissor?: (cnpj: string) => void;
 }
 
