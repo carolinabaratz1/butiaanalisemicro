@@ -118,6 +118,12 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         if (sprFilter === "ipca-0510" && (v < 0.5 || v >= 1)) return false;
         if (sprFilter === "ipca-gt10" && v < 1) return false;
       }
+      // Status filter
+      const st = integration.getStatus(t.ticker);
+      const stKey = st ?? "__none__";
+      if (!statusFilter.includes(stKey)) return false;
+      // Position filter
+      if (posOnly && !integration.hasPosition(t.ticker)) return false;
       return true;
     });
 
@@ -128,7 +134,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
       return sortAsc ? av - bv : bv - av;
     });
     return src;
-  }, [data, search, zWin, sigFilter, ratFilter, vencMax, sprFilter, sortField, sortAsc]);
+  }, [data, search, zWin, sigFilter, ratFilter, vencMax, sprFilter, sortField, sortAsc, statusFilter, posOnly, integration]);
 
   const pages = Math.ceil(filtered.length / PER);
   const slice = filtered.slice((page-1)*PER, page*PER);
