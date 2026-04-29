@@ -178,9 +178,11 @@ export default function PosicoesPage() {
     return map;
   }, [analises]);
 
-  const getAnaliseStatus = (analise: typeof analises[0] | undefined): string => {
+  const getAnaliseStatus = (analise: typeof analises[0] | undefined, tipoEmissor?: string | null): string => {
     if (!analise) return 'Sem Análise';
     if (analise.status === 'Aprovada') {
+      // FIDC: análise aprovada não vence
+      if (tipoEmissor === 'FIDC') return 'Aprovada';
       if (analise.data_conclusao) {
         const conclusao = new Date(analise.data_conclusao);
         const oneYearAgo = new Date();
