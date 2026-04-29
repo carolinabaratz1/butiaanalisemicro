@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { ANALISES_MOCK } from '@/data/desempenhoMock';
 import {
   Periodo,
   inicioDoPeriodo,
@@ -12,6 +11,7 @@ import {
   calcularMetricasPorAnalista,
   AnalistaMetrica,
 } from '@/utils/desempenhoUtils';
+import { useDesempenhoData } from '@/hooks/useDesempenhoData';
 import { PeriodoSelector } from '@/components/desempenho/PeriodoSelector';
 import { KpiCards } from '@/components/desempenho/KpiCards';
 import { TabelaAnalistas } from '@/components/desempenho/TabelaAnalistas';
@@ -25,21 +25,19 @@ export default function DesempenhoPage() {
   const [analistaSel, setAnalistaSel] = useState<AnalistaMetrica | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const ref = useMemo(() => {
-    const datas = ANALISES_MOCK.map((a) => new Date(a.dataInicio).getTime());
-    const max = Math.max(...datas, Date.now());
-    return new Date(max);
-  }, []);
+  const { analises, isLoading } = useDesempenhoData(periodo);
+
+  const ref = useMemo(() => new Date(), []);
 
   const filtradas = useMemo(
-    () => filtrarPorPeriodo(ANALISES_MOCK, inicioDoPeriodo(periodo, ref)),
-    [periodo, ref],
+    () => filtrarPorPeriodo(analises, inicioDoPeriodo(periodo, ref)),
+    [analises, periodo, ref],
   );
 
   const filtradasAnt = useMemo(() => {
     const { inicio, fim } = periodoAnterior(periodo, ref);
-    return filtrarPorPeriodo(ANALISES_MOCK, inicio, fim);
-  }, [periodo, ref]);
+    return filtrarPorPeriodo(analises, inicio, fim);
+  }, [analises, periodo, ref]);
 
   const kpisAtual = useMemo(() => calcularKpis(filtradas), [filtradas]);
   const kpisAnt   = useMemo(() => calcularKpis(filtradasAnt), [filtradasAnt]);
@@ -73,15 +71,15 @@ export default function DesempenhoPage() {
       </div>
 
       {/* KPIs */}
-      <KpiCards atual={kpisAtual} anterior={kpisAnt} />
+      <KpiCards atual={kpisAtual} anterior={kpisAnt} loading={isLoading} />
 
       {/* Tabela */}
-      <TabelaAnalistas metricas={metricas} onSelect={handleSelect} />
+      <TabelaAnalistas metricas={metricas} onSelect={handleSelect} loading={isLoading} />
 
       {/* Grid inferior */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CalendarioEntregas analises={filtradas} />
-        <PainelSlaAcertividade pendentes={filtradas} todasParaAcertividade={ANALISES_MOCK} />
+        <CalendarioEntregas analises={filtradas} loading={isLoading} />
+        <PainelSlaAcertividade pendentes={filtradas} todasParaAcertividade={analises} />
       </div>
 
       <AnalistaSheet metrica={analistaSel} open={sheetOpen} onOpenChange={setSheetOpen} />
