@@ -17,8 +17,10 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAnaliseEmissao, type AnaliseStatus } from '@/contexts/AnaliseEmissaoContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+import { registrarEvento } from '@/services/pipelineEventos';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
