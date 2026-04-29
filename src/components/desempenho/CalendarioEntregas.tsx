@@ -53,6 +53,14 @@ export function CalendarioEntregas({ analises, loading }: Props) {
 
   const navegar = (offset: number) => setRef(new Date(ano, mes + offset, 1));
 
+  if (loading) {
+    return (
+      <div className="bg-card rounded-lg border border-border p-4 flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card rounded-lg border border-border p-4">
       <div className="flex items-center justify-between mb-3">
