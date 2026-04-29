@@ -224,6 +224,27 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
             </>}
           </select>
         </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Status análise</div>
+          <div className="flex flex-wrap gap-1">
+            {([...STATUS_LIST, "__none__"] as const).map(s => (
+              <Chip
+                key={s}
+                label={s === "__none__" ? "S/Análise" : s}
+                active={statusFilter.includes(s)}
+                onClick={() => toggleFilter(statusFilter, setStatusFilter, s)}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Posição</div>
+          <Chip
+            label={posOnly ? "✓ Só com posição" : "Só com posição"}
+            active={posOnly}
+            onClick={() => { setPosOnly(p => !p); setPage(1); }}
+          />
+        </div>
       </aside>
 
       {/* Table area */}
