@@ -1,107 +1,116 @@
-## Conectar Desempenho & Agenda com dados reais
+## Integrar Trade Monitor com posições e análises
 
-Substituir `ANALISES_MOCK` por queries reais no Supabase, mantendo intactos os componentes visuais, os tipos `AnaliseEntry` / `AnalistaMetrica` e as funções de cálculo em `desempenhoUtils.ts`.
-
----
-
-### 1. Mapeamento Supabase → `AnaliseEntry`
-
-Não existe tabela `pipeline_historico`. Vamos derivar tudo a partir de **`analises`** + **`pipeline_eventos`** + **`profiles`** + **`empresas`** (todas já existentes).
-
-Tabela `analises` (campos existentes confirmados):
-- `id`, `empresa_id` (CNPJ), `tipo` (`Crédito Privado` | `Ações`), `status` (`Pendente` | `Em Análise` | `Concluída` | `Aprovada` | `Reprovada` | `Vencida c/ Alocação` | `Vencida s/ Alocação`)
-- `analista_responsavel` (UUID do profile, ou nome em registros legados)
-- `data_inicio`, `prazo`, `data_conclusao`, `data_comite` (todos `text` ISO)
-- `versao`
-
-Tabela `pipeline_eventos`: `analise_id`, `acao`, `etapa_anterior`, `etapa_nova`, `created_at`. Usada para reconstruir `etapasKanban` (entrada/saída de cada etapa do kanban).
-
-Tabela `empresas`: usada para derivar o `tipo` visual (`Corporativo` | `FIDC` | `CRI` | `CRA` | `Financeiro`) a partir de `empresas.tipo` + `empresas.setor`.
-
-Tabela `profiles`: para buscar `nome` e `initials` do analista (lendo `analises.analista_responsavel` como UUID; fallback para o próprio texto se não for UUID).
-
-**Mapeamentos:**
-
-| `AnaliseEntry` | Origem |
-|---|---|
-| `id` | `analises.id` |
-| `titulo` | `empresas.nome` (lookup por CNPJ); fallback `empresa_id` |
-| `tipo` | derivado: `empresas.tipo='FINANCEIRO'`→`Financeiro`; `empresas.tipo='FIDC'` ou `setor='FIDC'`→`FIDC`; `setor` contém `CRI`→`CRI`; `setor` contém `CRA`→`CRA`; senão → `Corporativo` |
-| `analistaId` / `analistaNome` / `analistaInitials` | `profiles` por UUID; iniciais = primeiras letras do nome |
-| `analistaColor` | derivado por índice estável (hash do `analistaId` → `blue/teal/amber/pink/purple`) |
-| `dataInicio` | `analises.data_inicio` |
-| `dataEntrega` | `analises.prazo` (fallback: `data_inicio + SLA_META`) |
-| `dataEntregueEm` | `data_conclusao` quando `status` ∈ {`Concluída`,`Aprovada`,`Reprovada`,`Vencida c/ Alocação`,`Vencida s/ Alocação`}; senão `undefined` |
-| `aprovadoPrimeiraRevisao` | `status === 'Aprovada'` (proxy — não temos contagem de revisões) |
-| `statusEntrega` | derivado da regra do enunciado (sem entrega + prazo<hoje → `atrasado`; sem entrega + prazo ok → `em_andamento`; entregue ≤ prazo → `no_prazo`; entregue > prazo → `atencao`). Quando entregue, usar `entregue` se houver demanda, senão manter `no_prazo`/`atencao`. |
-| `etapasKanban` | reconstruído de `pipeline_eventos` filtrando `etapa_nova` ∈ {`Em Análise`,`Concluída`,`Aprovada`} → renomeados para o enum visual (`Em análise`/`Revisão`/`Aprovado`/`Concluído`); `entradaEm` = `created_at` do evento, `saidaEm` = `created_at` do próximo evento |
+Conectar o Trade Monitor às tabelas internas (`posicoes`, `emissoes`, `analises`, `empresas`) para que o usuário consiga:
+1. Filtrar o Dashboard por fundo das nossas posições
+2. Ver Status da análise e indicador de Posição Ativa na lista de emissões
+3. Ver, ao clicar numa emissão, a alocação de cada fundo naquela emissão
 
 ---
 
-### 2. Novo hook `src/hooks/useDesempenhoData.ts`
+### 1. Novo hook: `useTradeIntegration`
 
-```ts
-useDesempenhoData(periodo: Periodo): {
-  analises: AnaliseEntry[];
-  isLoading: boolean;
-  isError: boolean;
-}
+Criar `src/hooks/useTradeIntegration.ts` que carrega, em paralelo (TanStack Query), os dados internos necessários e expõe um `Map` por `ticker`:
+
+- **Posições** mais recentes (`val_date` máxima): `isin → [{ fundo, amount, financial_price, val_date }]`
+- **Emissões**: `ticker → { isin, cnpj_emissor }` e `isin → ticker`
+- **Análises** mais recentes por `(empresa_cnpj, isin)`: `ticker → { status, recomendacao, data_conclusao, data_aprovacao, prazo, id }`
+  - Status efetivo derivado: se `status='Aprovada'` e `data_aprovacao + 1 ano < hoje` → `Vencida`. Caso contrário usa `status` da tabela.
+- Helpers retornados:
+  - `getStatus(ticker) → 'Aprovada' | 'Reprovada' | 'Pendente' | 'Em Análise' | 'Concluída' | 'Vencida' | null`
+  - `hasPosition(ticker) → boolean`
+  - `getAllocations(ticker) → Array<{ fundo, val_date, amount, financial_price, pct_fundo }>`
+  - `getFundsList() → string[]` lista distinta dos `trading_desk_share_source` na última `val_date`
+  - `getTickersByFund(fund) → Set<string>` tickers cujo ISIN tem posição naquele fundo
+
+Esse hook é consumido por `TradeMonitorPage`, `TradeTable`, `TradeDashboard` e `TradeDetail` via props (drilling) ou contexto leve interno do módulo Trade.
+
+---
+
+### 2. `TradeMonitorPage` — filtro por fundo
+
+- Adicionar estado `selectedFund: string | null` no header.
+- Novo `<Select>` ao lado dos botões Dashboard/Emissões com:
+  - Opção "Todos os fundos" (default)
+  - Lista de fundos retornada por `getFundsList()`
+- `filteredData` passa a aplicar dois filtros: `emissorCnpj` (já existe) **e** `selectedFund` (`getTickersByFund(selectedFund).has(t.ticker)`).
+- Quando um fundo é selecionado, mostrar uma `Badge` "Fundo: {nome}" (clique remove filtro).
+- Como `data` filtrado alimenta tanto Dashboard quanto Tabela, **todos os KPIs, gráficos e médias do Dashboard recalculam automaticamente** restritos ao universo do fundo. Cobrindo o pedido "calcular todas as informações para o fundo".
+- Adicionar 1 KPI extra ao topo do Dashboard quando há fundo selecionado: **% PL alocado** (somatório `financial_price` desses tickers no fundo / total do fundo).
+
+---
+
+### 3. `TradeTable` — coluna Status + indicador Posição Ativa
+
+Após a coluna **Rating** (linha 245):
+
+- **Coluna `Status`**: badge colorido com texto:
+  - `Aprovada` → verde, `Reprovada` → vermelho, `Pendente` → roxo, `Em Análise` → azul, `Concluída` → cinza-azulado, `Vencida` → âmbar, sem análise → traço
+- **Coluna `Posição`**: ícone de "ponto verde + texto Ativa" se `hasPosition(ticker)`, caso contrário traço. Tooltip mostra contagem de fundos com posição.
+- Adicionar 2 chips de filtro na sidebar:
+  - **Status** (multi-select dos 6 valores + "S/Análise")
+  - **Posição** (toggle "Apenas com posição ativa")
+
+Status e posição vêm via prop `integration` (do hook), evitando refetch.
+
+---
+
+### 4. `TradeDetail` — tabela de alocação por fundo
+
+No corpo do painel, antes do bloco "Note" (linha 242):
+
+- Nova seção `Posições Ativas por Fundo`:
+  - Se `getAllocations(ticker)` for vazio → mensagem "Sem posição ativa nesta emissão" em texto pequeno.
+  - Se houver posições, renderizar uma `<table>` (estilo dos outros blocos do detail — `bg-muted border border-border`) com colunas:
+
+```text
+Fundo | Data Pos. | Quantidade | Financeiro | % do Fundo
 ```
 
-Implementação com TanStack Query (já presente no projeto):
+  - Linhas ordenadas por `financial_price` desc.
+  - Rodapé com **TOTAL** somando `amount` e `financial_price`.
 
-1. `queryKey: ['desempenho', periodo]`.
-2. Calcular `inicio = inicioDoPeriodo(periodo)`.
-3. Em paralelo (`Promise.all`):
-   - `supabase.from('analises').select('id,empresa_id,tipo,status,analista_responsavel,data_inicio,prazo,data_conclusao,versao').gte('data_inicio', isoInicio)`
-   - `supabase.from('empresas').select('cnpj,nome,tipo,setor')`
-   - `supabase.from('profiles').select('id,nome').eq('status','Ativo')`
-4. Após receber as análises, buscar:
-   - `supabase.from('pipeline_eventos').select('analise_id,acao,etapa_anterior,etapa_nova,created_at').in('analise_id', ids).order('created_at',{ascending:true})`
-5. Aplicar mapeamentos da tabela acima em memória e retornar `AnaliseEntry[]`.
-6. `onError`: disparar `toast.error('Erro ao carregar dados de desempenho. Tente novamente.')` (sonner) e retornar `[]`.
+- Acima dessa tabela, mostrar dois mini-metrics:
+  - **Fundos com posição**: contagem distinta
+  - **Total alocado**: soma de `financial_price` formatada em R$ M/K
 
 ---
 
-### 3. Atualizar `DesempenhoPage.tsx`
+### 5. Detalhes técnicos
 
-- Remover `import { ANALISES_MOCK } from '@/data/desempenhoMock'`.
-- Usar `const { analises, isLoading, isError } = useDesempenhoData(periodo);`
-- `ref` passa a ser `new Date()` (não depende mais de datas mock).
-- Substituir `ANALISES_MOCK` por `analises` em `filtrarPorPeriodo` e em `<PainelSlaAcertividade ... todasParaAcertividade={analises} />`.
-- Renderização condicional:
-  - **Loading**: cards de KPI com `<Skeleton>` (4 blocos), tabela de analistas com 4 linhas `<Skeleton>`, calendário com spinner centralizado (`Loader2` animado).
-  - **Vazio** (`!isLoading && analises.length === 0`): KPIs zerados (passar arrays vazios — já funciona); tabela com empty state (ícone `BarChart3` + texto "Nenhuma análise encontrada no período selecionado"); painel SLA com texto "Nenhuma entrega pendente".
-- Manter o guard de perfil intacto.
+**Queries (TanStack Query, todas com `staleTime: 5min`):**
 
-Pequena adição nos componentes-filhos quando necessário:
-- `KpiCards`: aceitar prop `loading?: boolean` para alternar valores ↔ skeletons.
-- `TabelaAnalistas`: aceitar `loading?: boolean` e renderizar skeleton/empty state.
-- `CalendarioEntregas`: aceitar `loading?: boolean` e mostrar spinner.
-- `PainelSlaAcertividade`: já trata listas vazias; só ajustar texto do empty.
+```ts
+// Posições da última val_date
+supabase.from('posicoes')
+  .select('isin, trading_desk_share_source, val_date, amount, financial_price')
+  .eq('val_date', latestValDate)
+  .not('isin','is',null);
 
-Sem alterações em `desempenhoUtils.ts` nem em `desempenhoMock.ts` (mantido apenas como fonte de tipos e constantes — `AnaliseEntry`, `SLA_META_DIAS_UTEIS`, `FERIADOS_BR_2026`).
+// Emissões (mapping isin↔ticker)
+supabase.from('emissoes').select('ticker, isin, cnpj_emissor');
 
----
+// Última análise por empresa (por cnpj) + por isin
+supabase.from('analises')
+  .select('id, empresa_id, isin, status, recomendacao, data_conclusao, data_aprovacao, prazo, versao, created_at')
+  .order('versao',{ascending:false});
+```
 
-### 4. Detalhes técnicos
+A latest `val_date` é obtida via `select('val_date').order('val_date',{ascending:false}).limit(1)` e formato é `MM/DD/YYYY` (texto) — atenção ao usar `eq` com a string exata.
 
-**Iniciais do analista:** primeiras letras do primeiro e último nome (`Lucas Almeida` → `LA`).
+**Resolução status por ticker:**
+1. Buscar `emissoes` com aquele `ticker` → pega `isin` e `cnpj_emissor`.
+2. Procurar análise com mesmo `isin` (versão maior). Se não houver, fallback para análise da empresa (`empresa_id` = id da empresa cujo `cnpj` bate).
+3. Aplicar regra de "Vencida" descrita acima.
 
-**Cor estável:** `colors[hash(analistaId) % 5]` com `colors = ['blue','teal','amber','pink','purple']`.
+**% do fundo** = `financial_price` da posição ÷ `Σ financial_price` das posições daquele fundo na mesma `val_date`.
 
-**Reconstrução de etapas a partir de `pipeline_eventos`:** ordenar eventos da análise por `created_at`; sequência tipica observada no DB: `criada → analista_atribuido → etapa_alterada (Pendente→Em Análise) → concluida (→Concluída) → aprovado (→Aprovada)`. Mapeamento de `etapa_nova`:
-- `Em Análise` → `Em análise`
-- `Concluída` → `Revisão` (etapa que precede aprovação)
-- `Aprovada` → `Aprovado`
-- Última etapa quando `data_conclusao` existe → `Concluído` com `saidaEm = data_conclusao`
+**Componentes a editar/criar:**
+- novo `src/hooks/useTradeIntegration.ts`
+- `src/components/trade/TradeMonitorPage.tsx` — selector de fundo, filtro
+- `src/components/trade/TradeTable.tsx` — colunas Status + Posição, filtros
+- `src/components/trade/TradeDetail.tsx` — tabela de alocação
+- (opcional) `src/components/trade/TradeDashboard.tsx` — KPI extra "% PL alocado" quando há fundo
 
-**Resiliência a `analista_responsavel` em texto:** se não bater com nenhum UUID do `profiles`, usar o próprio valor como `analistaNome`/`analistaId` e gerar iniciais a partir dele.
-
----
-
-### 5. Arquivos tocados
-
-- **Criar**: `src/hooks/useDesempenhoData.ts`
-- **Editar**: `src/pages/DesempenhoPage.tsx`, `src/components/desempenho/KpiCards.tsx`, `src/components/desempenho/TabelaAnalistas.tsx`, `src/components/desempenho/CalendarioEntregas.tsx`, `src/components/desempenho/PainelSlaAcertividade.tsx` (apenas para aceitar `loading` e tratar vazio)
-- **Não tocar**: `src/utils/desempenhoUtils.ts`, `src/data/desempenhoMock.ts` (mantido como fonte de tipos), guard de rota, `AppSidebar`, `users.ts`
+**O que NÃO muda:**
+- Layout/estilo geral, modos DI/IPCA/CDI, lógica de Z-score e gráficos existentes.
+- Estrutura das tabelas Supabase (sem migration).

@@ -1,8 +1,9 @@
 // src/components/trade/TradeDetail.tsx
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { TradeAtivo, HistoryPoint, NTNBPoint, TradeMode, useTickerDetail } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
-import { X, ExternalLink } from "lucide-react";
+import type { TradeIntegration } from "@/hooks/useTradeIntegration";
+import { X, ExternalLink, Wallet } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface TradeDetailProps {
@@ -13,6 +14,7 @@ interface TradeDetailProps {
   mode: TradeMode;
   modeColor: string;
   onClose: () => void;
+  integration: TradeIntegration;
   onViewEmissor?: (cnpj: string) => void;
 }
 
@@ -41,10 +43,14 @@ function fmtNTNB(ref: string | null | undefined): string {
 
 type ChartWin = "90d" | "30d" | "21d" | "10d" | "pu";
 
-export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, onViewEmissor }: TradeDetailProps) {
+export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, integration, onViewEmissor }: TradeDetailProps) {
   const [chartWin, setChartWin] = useState<ChartWin>("90d");
   const t = data.find(x => x.ticker === ticker);
   const chartTheme = useChartTheme();
+
+  const allocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const totalFinAlloc = useMemo(() => allocations.reduce((s, a) => s + a.financial_price, 0), [allocations]);
+  const totalQtyAlloc = useMemo(() => allocations.reduce((s, a) => s + a.amount, 0), [allocations]);
 
   // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
   // Falls back to the global `history` map if the per-ticker fetch is empty.
@@ -237,6 +243,61 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
               )}
             </ResponsiveContainer>
           </div>
+        </div>
+
+        {/* Posições por fundo */}
+        <div className="bg-muted border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+              <Wallet className="w-3 h-3" />
+              Posições por Fundo
+            </span>
+            <span className="text-[9px] font-mono text-muted-foreground">
+              {allocations.length} fundo{allocations.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {allocations.length === 0 ? (
+            <div className="px-3 py-4 text-[10px] text-muted-foreground text-center">
+              Sem posição ativa nesta emissão.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 p-2">
+                <div className="bg-card border border-border rounded p-2">
+                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Total Financeiro</div>
+                  <div className="text-sm font-bold font-mono text-foreground">
+                    {totalFinAlloc >= 1e6 ? `R$ ${(totalFinAlloc/1e6).toFixed(2)}M` : totalFinAlloc >= 1e3 ? `R$ ${(totalFinAlloc/1e3).toFixed(0)}K` : `R$ ${totalFinAlloc.toFixed(0)}`}
+                  </div>
+                </div>
+                <div className="bg-card border border-border rounded p-2">
+                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Quantidade</div>
+                  <div className="text-sm font-bold font-mono text-foreground">
+                    {totalQtyAlloc >= 1e6 ? `${(totalQtyAlloc/1e6).toFixed(2)}M` : totalQtyAlloc >= 1e3 ? `${(totalQtyAlloc/1e3).toFixed(1)}K` : totalQtyAlloc.toFixed(0)}
+                  </div>
+                </div>
+              </div>
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-y border-border bg-card/50">
+                    <th className="px-2.5 py-1.5 text-left text-[9px] text-muted-foreground font-semibold">Fundo</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">Qtd.</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">Financeiro</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">% Fundo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map((a) => (
+                    <tr key={a.fundo} className="border-b border-border last:border-0">
+                      <td className="px-2.5 py-1.5 text-foreground max-w-[180px] truncate" title={a.fundo}>{a.fundo}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right">{a.amount >= 1e3 ? (a.amount/1e3).toFixed(1)+"K" : a.amount.toFixed(0)}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right">{a.financial_price >= 1e6 ? (a.financial_price/1e6).toFixed(2)+"M" : a.financial_price >= 1e3 ? (a.financial_price/1e3).toFixed(0)+"K" : a.financial_price.toFixed(0)}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right" style={{ color: modeColor }}>{(a.pct_fundo * 100).toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
 
         {/* Note */}

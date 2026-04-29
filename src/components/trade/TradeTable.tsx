@@ -1,6 +1,7 @@
 // src/components/trade/TradeTable.tsx
 import { useState, useMemo } from "react";
 import { TradeAtivo, TradeMode } from "@/hooks/useTradeData";
+import type { AnaliseStatus, TradeIntegration } from "@/hooks/useTradeIntegration";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface TradeTableProps {
@@ -9,6 +10,7 @@ interface TradeTableProps {
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
   selectedTicker: string | null;
+  integration: TradeIntegration;
 }
 
 type SortField = keyof TradeAtivo;
@@ -57,7 +59,22 @@ const Z_WINDOWS = [
   { key: "z_score_5d",  label: "5d"  },
 ] as const;
 
-export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTicker }: TradeTableProps) {
+const STATUS_LIST: AnaliseStatus[] = ["Aprovada", "Em Análise", "Pendente", "Concluída", "Reprovada", "Vencida"];
+
+function statusBadge(s: AnaliseStatus | null) {
+  if (!s) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground bg-transparent">—</span>;
+  const cls: Record<AnaliseStatus, string> = {
+    "Aprovada":   "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400",
+    "Em Análise": "border-sky-600 text-sky-700 dark:border-sky-500 dark:text-sky-400",
+    "Pendente":   "border-violet-600 text-violet-700 dark:border-violet-500 dark:text-violet-400",
+    "Concluída":  "border-slate-500 text-slate-600 dark:border-slate-400 dark:text-slate-300",
+    "Reprovada":  "border-rose-600 text-rose-700 dark:border-rose-500 dark:text-rose-400",
+    "Vencida":    "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400",
+  };
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border bg-transparent whitespace-nowrap ${cls[s]}`}>{s}</span>;
+}
+
+export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTicker, integration }: TradeTableProps) {
   const isIPCA = mode === "IPCA";
   const [sortField, setSortField] = useState<SortField>("z_score");
   const [sortAsc, setSortAsc]   = useState(false);
@@ -68,6 +85,8 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
   const [sigFilter, setSigFilter] = useState<string[]>(["hot","watch","ok"]);
   const [vencMax, setVencMax]   = useState(35);
   const [sprFilter, setSprFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>([...STATUS_LIST, "__none__"]);
+  const [posOnly, setPosOnly]   = useState(false);
   const PER = 20;
 
   function toggleFilter(arr: string[], setArr: (v: string[]) => void, val: string) {
@@ -99,6 +118,12 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         if (sprFilter === "ipca-0510" && (v < 0.5 || v >= 1)) return false;
         if (sprFilter === "ipca-gt10" && v < 1) return false;
       }
+      // Status filter
+      const st = integration.getStatus(t.ticker);
+      const stKey = st ?? "__none__";
+      if (!statusFilter.includes(stKey)) return false;
+      // Position filter
+      if (posOnly && !integration.hasPosition(t.ticker)) return false;
       return true;
     });
 
@@ -109,7 +134,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
       return sortAsc ? av - bv : bv - av;
     });
     return src;
-  }, [data, search, zWin, sigFilter, ratFilter, vencMax, sprFilter, sortField, sortAsc]);
+  }, [data, search, zWin, sigFilter, ratFilter, vencMax, sprFilter, sortField, sortAsc, statusFilter, posOnly, integration]);
 
   const pages = Math.ceil(filtered.length / PER);
   const slice = filtered.slice((page-1)*PER, page*PER);
@@ -199,6 +224,27 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
             </>}
           </select>
         </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Status análise</div>
+          <div className="flex flex-wrap gap-1">
+            {([...STATUS_LIST, "__none__"] as const).map(s => (
+              <Chip
+                key={s}
+                label={s === "__none__" ? "S/Análise" : s}
+                active={statusFilter.includes(s)}
+                onClick={() => toggleFilter(statusFilter, setStatusFilter, s)}
+              />
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Posição</div>
+          <Chip
+            label={posOnly ? "✓ Só com posição" : "Só com posição"}
+            active={posOnly}
+            onClick={() => { setPosOnly(p => !p); setPage(1); }}
+          />
+        </div>
       </aside>
 
       {/* Table area */}
@@ -243,6 +289,8 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                 <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("anos_venc")}>Venc. <SortIcon field="anos_venc" /></th>
                 {isIPCA && <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">NTN-B</th>}
                 <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Rating</th>
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Status</th>
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Posição</th>
                 <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_val")}>{isIPCA ? "Spread" : "Taxa"} <SortIcon field="last_val" /></th>
                 <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_5d")}>5d <SortIcon field="avg_5d" /></th>
                 <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_21d")}>21d <SortIcon field="avg_21d" /></th>
@@ -305,6 +353,17 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                       </td>
                     )}
                     <td className="hidden md:table-cell px-2.5 py-2">{rBadge(t.rating)}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">{statusBadge(integration.getStatus(t.ticker))}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">
+                      {integration.hasPosition(t.ticker) ? (
+                        <div className="flex items-center gap-1.5" title={`${integration.getAllocations(t.ticker).length} fundo(s) com posição`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_hsl(142_71%_45%)]" />
+                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400">ATIVA</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
                     <td className="px-2 md:px-2.5 py-2 font-mono font-semibold text-xs text-foreground">{(t.last_val ?? 0).toFixed(3)}%</td>
                     <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_5d ?? 0).toFixed(3)}%</td>
                     <td className="hidden lg:table-cell px-2.5 py-2 font-mono text-muted-foreground text-[11px]">{(t.avg_21d ?? 0).toFixed(3)}%</td>
