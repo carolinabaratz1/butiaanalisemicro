@@ -25,14 +25,7 @@ export default function DesempenhoPage() {
   const [analistaSel, setAnalistaSel] = useState<AnalistaMetrica | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // Guard de perfil
-  if (!currentUser) return null;
-  if (currentUser.funcao !== 'Gestor' && currentUser.funcao !== 'Coordenação/Especialista') {
-    return <Navigate to="/" replace />;
-  }
-
   const ref = useMemo(() => {
-    // Usar a data mais recente do mock como "hoje" (mock é 2026); fallback para hoje real
     const datas = ANALISES_MOCK.map((a) => new Date(a.dataInicio).getTime());
     const max = Math.max(...datas, Date.now());
     return new Date(max);
@@ -51,6 +44,12 @@ export default function DesempenhoPage() {
   const kpisAtual = useMemo(() => calcularKpis(filtradas), [filtradas]);
   const kpisAnt   = useMemo(() => calcularKpis(filtradasAnt), [filtradasAnt]);
   const metricas  = useMemo(() => calcularMetricasPorAnalista(filtradas), [filtradas]);
+
+  // Guard de perfil (após hooks para respeitar Rules of Hooks)
+  if (!currentUser) return null;
+  if (currentUser.funcao !== 'Gestor' && currentUser.funcao !== 'Coordenação/Especialista') {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSelect = (m: AnalistaMetrica) => {
     setAnalistaSel(m);
