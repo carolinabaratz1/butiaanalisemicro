@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound } from 'lucide-react';
+import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProfileUser {
@@ -94,10 +94,18 @@ export default function ConfiguracoesPage() {
     setConfirmAction(null);
   };
 
+  const passwordChecks = {
+    length: resetPassword.length >= 8,
+    letter: /[A-Za-z]/.test(resetPassword),
+    number: /[0-9]/.test(resetPassword),
+    symbol: /[^A-Za-z0-9]/.test(resetPassword),
+  };
+  const passwordValid = Object.values(passwordChecks).every(Boolean);
+
   const handleResetPassword = async () => {
     if (!resetDialog || !resetPassword) return;
-    if (resetPassword.length < 6) {
-      toast.error('A senha deve ter pelo menos 6 caracteres');
+    if (!passwordValid) {
+      toast.error('A senha não atende a todos os requisitos');
       return;
     }
     setResetting(true);
@@ -367,11 +375,29 @@ export default function ConfiguracoesPage() {
                 type="password"
                 value={resetPassword}
                 onChange={e => setResetPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 className="bg-surface-1 border-border"
               />
+              {resetPassword.length > 0 && (
+                <ul className="space-y-1 pt-2 text-xs">
+                  {[
+                    { ok: passwordChecks.length, label: 'Mínimo 8 caracteres' },
+                    { ok: passwordChecks.letter, label: 'Contém letras' },
+                    { ok: passwordChecks.number, label: 'Contém números' },
+                    { ok: passwordChecks.symbol, label: 'Contém ao menos um símbolo (ex: !@#$%^&*)' },
+                  ].map((req, i) => (
+                    <li
+                      key={i}
+                      className={`flex items-center gap-2 ${req.ok ? 'text-green-500' : 'text-destructive'}`}
+                    >
+                      {req.ok ? <Check className="h-3.5 w-3.5" /> : <X className="h-3.5 w-3.5" />}
+                      <span>{req.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <Button onClick={handleResetPassword} disabled={resetting} className="w-full">
+            <Button onClick={handleResetPassword} disabled={resetting || !passwordValid} className="w-full">
               {resetting ? 'Resetando...' : 'Resetar Senha'}
             </Button>
           </div>
