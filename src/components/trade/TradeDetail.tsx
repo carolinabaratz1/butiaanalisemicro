@@ -309,7 +309,7 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
                 <tbody>
                   {allocations.map((a) => (
                     <tr key={a.fundo} className="border-b border-border last:border-0">
-                      <td className="px-2.5 py-1.5 text-foreground max-w-[180px] truncate" title={a.fundo}>{a.fundo}</td>
+                      <td className="px-2.5 py-1.5 text-foreground max-w-[140px] truncate font-medium" title={a.fundo}>{abbrevFundo(a.fundo)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right">{a.amount >= 1e3 ? (a.amount/1e3).toFixed(1)+"K" : a.amount.toFixed(0)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right">{a.financial_price >= 1e6 ? (a.financial_price/1e6).toFixed(2)+"M" : a.financial_price >= 1e3 ? (a.financial_price/1e3).toFixed(0)+"K" : a.financial_price.toFixed(0)}</td>
                       <td className="px-2.5 py-1.5 font-mono text-right" style={{ color: modeColor }}>{(a.pct_fundo * 100).toFixed(2)}%</td>
