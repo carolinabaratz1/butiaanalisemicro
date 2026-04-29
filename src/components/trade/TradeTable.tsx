@@ -59,7 +59,22 @@ const Z_WINDOWS = [
   { key: "z_score_5d",  label: "5d"  },
 ] as const;
 
-export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTicker }: TradeTableProps) {
+const STATUS_LIST: AnaliseStatus[] = ["Aprovada", "Em Análise", "Pendente", "Concluída", "Reprovada", "Vencida"];
+
+function statusBadge(s: AnaliseStatus | null) {
+  if (!s) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground bg-transparent">—</span>;
+  const cls: Record<AnaliseStatus, string> = {
+    "Aprovada":   "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400",
+    "Em Análise": "border-sky-600 text-sky-700 dark:border-sky-500 dark:text-sky-400",
+    "Pendente":   "border-violet-600 text-violet-700 dark:border-violet-500 dark:text-violet-400",
+    "Concluída":  "border-slate-500 text-slate-600 dark:border-slate-400 dark:text-slate-300",
+    "Reprovada":  "border-rose-600 text-rose-700 dark:border-rose-500 dark:text-rose-400",
+    "Vencida":    "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400",
+  };
+  return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border bg-transparent whitespace-nowrap ${cls[s]}`}>{s}</span>;
+}
+
+export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTicker, integration }: TradeTableProps) {
   const isIPCA = mode === "IPCA";
   const [sortField, setSortField] = useState<SortField>("z_score");
   const [sortAsc, setSortAsc]   = useState(false);
@@ -70,6 +85,8 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
   const [sigFilter, setSigFilter] = useState<string[]>(["hot","watch","ok"]);
   const [vencMax, setVencMax]   = useState(35);
   const [sprFilter, setSprFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string[]>([...STATUS_LIST, "__none__"]);
+  const [posOnly, setPosOnly]   = useState(false);
   const PER = 20;
 
   function toggleFilter(arr: string[], setArr: (v: string[]) => void, val: string) {
