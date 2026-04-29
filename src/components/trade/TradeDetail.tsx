@@ -245,6 +245,61 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
           </div>
         </div>
 
+        {/* Posições por fundo */}
+        <div className="bg-muted border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-1.5">
+              <Wallet className="w-3 h-3" />
+              Posições por Fundo
+            </span>
+            <span className="text-[9px] font-mono text-muted-foreground">
+              {allocations.length} fundo{allocations.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {allocations.length === 0 ? (
+            <div className="px-3 py-4 text-[10px] text-muted-foreground text-center">
+              Sem posição ativa nesta emissão.
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 p-2">
+                <div className="bg-card border border-border rounded p-2">
+                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Total Financeiro</div>
+                  <div className="text-sm font-bold font-mono text-foreground">
+                    {totalFinAlloc >= 1e6 ? `R$ ${(totalFinAlloc/1e6).toFixed(2)}M` : totalFinAlloc >= 1e3 ? `R$ ${(totalFinAlloc/1e3).toFixed(0)}K` : `R$ ${totalFinAlloc.toFixed(0)}`}
+                  </div>
+                </div>
+                <div className="bg-card border border-border rounded p-2">
+                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground">Quantidade</div>
+                  <div className="text-sm font-bold font-mono text-foreground">
+                    {totalQtyAlloc >= 1e6 ? `${(totalQtyAlloc/1e6).toFixed(2)}M` : totalQtyAlloc >= 1e3 ? `${(totalQtyAlloc/1e3).toFixed(1)}K` : totalQtyAlloc.toFixed(0)}
+                  </div>
+                </div>
+              </div>
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-y border-border bg-card/50">
+                    <th className="px-2.5 py-1.5 text-left text-[9px] text-muted-foreground font-semibold">Fundo</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">Qtd.</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">Financeiro</th>
+                    <th className="px-2.5 py-1.5 text-right text-[9px] text-muted-foreground font-semibold">% Fundo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map((a) => (
+                    <tr key={a.fundo} className="border-b border-border last:border-0">
+                      <td className="px-2.5 py-1.5 text-foreground max-w-[180px] truncate" title={a.fundo}>{a.fundo}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right">{a.amount >= 1e3 ? (a.amount/1e3).toFixed(1)+"K" : a.amount.toFixed(0)}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right">{a.financial_price >= 1e6 ? (a.financial_price/1e6).toFixed(2)+"M" : a.financial_price >= 1e3 ? (a.financial_price/1e3).toFixed(0)+"K" : a.financial_price.toFixed(0)}</td>
+                      <td className="px-2.5 py-1.5 font-mono text-right" style={{ color: modeColor }}>{(a.pct_fundo * 100).toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+
         {/* Note */}
         <div className="text-[10px] text-muted-foreground leading-relaxed bg-muted border border-border rounded-lg p-3">
           {isIPCA ? (
