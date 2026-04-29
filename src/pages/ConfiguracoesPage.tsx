@@ -94,10 +94,18 @@ export default function ConfiguracoesPage() {
     setConfirmAction(null);
   };
 
+  const passwordChecks = {
+    length: resetPassword.length >= 8,
+    letter: /[A-Za-z]/.test(resetPassword),
+    number: /[0-9]/.test(resetPassword),
+    symbol: /[^A-Za-z0-9]/.test(resetPassword),
+  };
+  const passwordValid = Object.values(passwordChecks).every(Boolean);
+
   const handleResetPassword = async () => {
     if (!resetDialog || !resetPassword) return;
-    if (resetPassword.length < 6) {
-      toast.error('A senha deve ter pelo menos 6 caracteres');
+    if (!passwordValid) {
+      toast.error('A senha não atende a todos os requisitos');
       return;
     }
     setResetting(true);
