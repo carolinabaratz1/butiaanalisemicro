@@ -37,7 +37,7 @@ export interface RolePermissions {
 
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   'Gestor': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes', '/assembleias', '/trade', '/trade/upload'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho'],
     canWrite: true,
     canManageUsers: true,
     canViewAllDashboards: true,
@@ -46,7 +46,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: true,
   },
   'Coordenação/Especialista': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/assembleias', '/trade', '/trade/upload'],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/credito/corporativo', '/credito/estruturado', '/acoes', '/analistas', '/assembleias', '/trade', '/trade/upload', '/desempenho'],
     canWrite: true,
     canManageUsers: false,
     canViewAllDashboards: true,

@@ -24,6 +24,7 @@ import PosicoesPage from "./pages/PosicoesPage";
 import AnalistasPage from "./pages/AnalistasPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import AssembleiasPage from "./pages/AssembleiasPage";
+import DesempenhoPage from "./pages/DesempenhoPage";
 import { TradeMonitorPage } from "./components/trade/TradeMonitorPage";
 import { UploadPage as TradeUploadPage } from "./components/trade/UploadPage";
 import NotFound from "./pages/NotFound.tsx";
@@ -78,6 +79,7 @@ function ProtectedRoutes() {
         <Route path="/analistas" element={<AnalistasPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/assembleias" element={<AssembleiasPage />} />
+        <Route path="/desempenho" element={<DesempenhoPage />} />
         <Route path="/trade" element={<TradeMonitorPage />} />
         <Route path="/trade/upload" element={<TradeUploadPage />} />
         <Route path="*" element={<NotFound />} />

@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, FileSearch, Kanban, CreditCard,
   TrendingUp, Users, Settings, ChevronDown, ChevronRight, Briefcase,
-  CalendarDays, ArrowLeftRight, Upload
+  CalendarDays, ArrowLeftRight, Upload, BarChart3
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ const mainItems = [
   { label: 'Análises',          icon: FileSearch,       path: '/analises' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
+  { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
   { label: 'Trade Monitor',     icon: ArrowLeftRight,   path: '/trade' },
   { label: 'Atualizar Dados',   icon: Upload,           path: '/trade/upload' },
 ];
