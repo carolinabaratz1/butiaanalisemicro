@@ -369,6 +369,10 @@ export default function ConfiguracoesPage() {
             <p className="text-sm text-muted-foreground">
               Defina uma senha temporária. O usuário será obrigado a trocá-la no próximo login.
             </p>
+            <p className="text-xs text-muted-foreground">
+              ⚠️ Evite senhas comuns ou previsíveis (ex: <code>Senha@123</code>, <code>Admin@2024</code>). 
+              O sistema rejeita senhas que apareçam em vazamentos públicos conhecidos. Use uma combinação única.
+            </p>
             <div className="space-y-1.5">
               <Label className="text-xs">Nova Senha Temporária</Label>
               <Input
