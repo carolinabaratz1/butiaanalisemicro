@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -225,17 +226,13 @@ export function useDesempenhoData(periodo: Periodo) {
     queryKey: ['desempenho', periodo],
     queryFn: () => fetchDesempenho(periodo),
     staleTime: 60_000,
-    meta: {
-      onError: () => {
-        toast.error('Erro ao carregar dados de desempenho. Tente novamente.');
-      },
-    },
   });
 
-  // Fire toast on transition to error
-  if (query.isError) {
-    // Avoid spamming: only when the consumer renders, react-query already memoizes
-  }
+  useEffect(() => {
+    if (query.isError) {
+      toast.error('Erro ao carregar dados de desempenho. Tente novamente.');
+    }
+  }, [query.isError]);
 
   return {
     analises: query.data ?? [],
