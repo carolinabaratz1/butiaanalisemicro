@@ -47,6 +47,7 @@ export default function EmpresaDetailPage() {
   const { currentUser } = useAuth();
   const { analises, criarAnalise, iniciarAnalise, concluirAnalise, getAnalisesByIsin } = useAnaliseEmissao();
 
+  const queryClient = useQueryClient();
   const [solicitarModal, setSolicitarModal] = useState<string | null>(null);
   const [novaEmissaoModal, setNovaEmissaoModal] = useState(false);
   const [entregarModal, setEntregarModal] = useState<string | null>(null);
