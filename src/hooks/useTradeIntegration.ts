@@ -120,7 +120,7 @@ export function useTradeIntegration() {
           .select("isin, trading_desk_share_source, val_date, amount, financial_price")
           .eq("val_date", latestValDate as string)
           .not("isin", "is", null)
-          .range(from, to),
+          .range(from, to) as unknown as PromiseLike<{ data: PosRow[] | null; error: unknown }>,
       ),
   });
 
@@ -130,7 +130,7 @@ export function useTradeIntegration() {
     staleTime: 5 * 60_000,
     queryFn: async () =>
       paginate<EmissaoRow>((from, to) =>
-        supabase.from("emissoes").select("ticker, isin, cnpj_emissor").range(from, to),
+        supabase.from("emissoes").select("ticker, isin, cnpj_emissor").range(from, to) as unknown as PromiseLike<{ data: EmissaoRow[] | null; error: unknown }>,
       ),
   });
 
@@ -140,7 +140,7 @@ export function useTradeIntegration() {
     staleTime: 5 * 60_000,
     queryFn: async () =>
       paginate<EmpresaRow>((from, to) =>
-        supabase.from("empresas").select("id, cnpj").range(from, to),
+        supabase.from("empresas").select("id, cnpj").range(from, to) as unknown as PromiseLike<{ data: EmpresaRow[] | null; error: unknown }>,
       ),
   });
 
@@ -156,7 +156,7 @@ export function useTradeIntegration() {
             "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_conclusao, prazo, versao, created_at",
           )
           .order("versao", { ascending: false })
-          .range(from, to),
+          .range(from, to) as unknown as PromiseLike<{ data: AnaliseRow[] | null; error: unknown }>,
       ),
   });
 
