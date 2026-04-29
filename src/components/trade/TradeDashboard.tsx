@@ -82,7 +82,7 @@ function fv(v: number) {
   return v.toFixed(0);
 }
 
-export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker }: TradeDashboardProps) {
+export function TradeDashboard({ data, history, mode, modeColor, onSelectTicker, selectedFund, fundTotal = 0, allocatedInFund = 0 }: TradeDashboardProps) {
   const isIPCA = mode === "IPCA";
   const chartTheme = useChartTheme();
   const [spreadWindow, setSpreadWindow] = useState<90 | 30 | 21 | 10>(90);
