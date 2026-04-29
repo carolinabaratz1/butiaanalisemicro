@@ -205,18 +205,52 @@ export default function EmpresaDetailPage() {
     return analises.find(a => a.isin === isin && (a.status === 'pendente' || a.status === 'em_analise'));
   };
 
-  const handleSolicitar = () => {
+  const handleSolicitar = async () => {
     if (!solicitarModal || !analistaSel || !prazoDate) return;
-    criarAnalise({
+
+    // Deriva tipo da análise a partir do tipo da empresa
+    const tipoEmpresa = (emissor?.tipo || '').toUpperCase();
+    const tipoAnalise = tipoEmpresa.includes('AÇ') || tipoEmpresa.includes('AC') || tipoEmpresa === 'EQUITY'
+      ? 'Ações'
+      : 'Crédito Privado';
+
+    // Calcula próxima versão (MAX+1) por empresa+tipo
+    const { data: maxRows } = await supabase
+      .from('analises')
+      .select('versao')
+      .eq('empresa_id', decodedCnpj)
+      .eq('tipo', tipoAnalise)
+      .order('versao', { ascending: false })
+      .limit(1);
+    const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
+
+    const { data: inserted, error } = await supabase.from('analises').insert({
+      empresa_id: decodedCnpj,
+      tipo: tipoAnalise,
       isin: solicitarModal,
-      cnpj_emissor: decodedCnpj,
-      analista_id: analistaSel,
+      analista_responsavel: analistaSel,
       solicitante_id: currentUser?.id || '',
-      status: 'pendente',
+      status: 'Pendente',
+      data_inicio: new Date().toISOString().split('T')[0],
       prazo: format(prazoDate, 'yyyy-MM-dd'),
       observacoes,
-      data_solicitacao: new Date().toISOString(),
-    });
+      versao: novaVersao,
+    }).select('id').single();
+
+    if (error) {
+      toast({ title: 'Erro ao solicitar análise', description: error.message, variant: 'destructive' });
+      return;
+    }
+
+    if (inserted?.id) {
+      registrarEvento({ analise_id: inserted.id, acao: 'criada', etapa_nova: 'Pendente', comentario: `v${novaVersao} (solicitada via empresa)` });
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['pipeline-analises'] });
+    queryClient.invalidateQueries({ queryKey: ['analises-ativas-count'] });
+    queryClient.invalidateQueries({ queryKey: ['empresa-analises', decodedCnpj] });
+
+    toast({ title: 'Análise solicitada', description: `v${novaVersao} criada no pipeline.` });
     setSolicitarModal(null);
     setAnalistaSel('');
     setPrazoDate(undefined);
