@@ -6,14 +6,16 @@
 // ============================================================
 
 import { useState, useMemo } from "react";
-import { useTradeData, TradeAtivo, TradeMode } from "@/hooks/useTradeData";
+import { useTradeData, TradeMode } from "@/hooks/useTradeData";
+import { useTradeIntegration } from "@/hooks/useTradeIntegration";
 import { TradeTable } from "./TradeTable";
 import { TradeDashboard } from "./TradeDashboard";
 import { TradeDetail } from "./TradeDetail";
 import { TradeLanding } from "./TradeLanding";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X } from "lucide-react";
 
 interface TradeMonitorPageProps {
   /** Se passado, abre o monitor já filtrado por este CNPJ (vindo do módulo de emissores) */
@@ -28,14 +30,23 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
   const [mode, setMode] = useState<TradeMode | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(initialTicker ?? null);
+  const [selectedFund, setSelectedFund] = useState<string | null>(null);
 
   const { data, history, ntnbHist, lastDate, loading, error, refresh } = useTradeData(mode);
+  const integration = useTradeIntegration();
 
-  // Filter by emissor if called from within Emissores module
+  const fundsList = useMemo(() => integration.getFundsList(), [integration]);
+
+  // Filter by emissor and/or fund
   const filteredData = useMemo(() => {
-    if (!emissorCnpj) return data;
-    return data.filter((t) => t.emissor_cnpj === emissorCnpj);
-  }, [data, emissorCnpj]);
+    let d = data;
+    if (emissorCnpj) d = d.filter((t) => t.emissor_cnpj === emissorCnpj);
+    if (selectedFund) {
+      const tickers = integration.getTickersByFund(selectedFund);
+      d = d.filter((t) => tickers.has(t.ticker));
+    }
+    return d;
+  }, [data, emissorCnpj, selectedFund, integration]);
 
   // ── Landing ──────────────────────────────────────────────
   if (!mode) {
@@ -58,8 +69,8 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b bg-card flex-shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 px-6 py-3 border-b bg-card flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="font-bold text-sm">Monitor de Trade</span>
           <Badge
             variant="outline"
@@ -75,9 +86,40 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               Filtrado por emissor
             </Badge>
           )}
+          {selectedFund && (
+            <Badge
+              variant="outline"
+              className="text-xs gap-1.5 cursor-pointer hover:bg-muted"
+              onClick={() => setSelectedFund(null)}
+              title="Remover filtro de fundo"
+            >
+              <Wallet className="w-3 h-3" />
+              <span className="max-w-[180px] truncate">{selectedFund}</span>
+              <X className="w-3 h-3" />
+            </Badge>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Fund selector */}
+          <Select
+            value={selectedFund ?? "__all__"}
+            onValueChange={(v) => setSelectedFund(v === "__all__" ? null : v)}
+          >
+            <SelectTrigger className="h-8 w-[220px] text-xs">
+              <Wallet className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Todos os fundos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos os fundos</SelectItem>
+              {fundsList.map((f) => (
+                <SelectItem key={f} value={f} className="text-xs">
+                  {f}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           {/* View toggle */}
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
             <Button
@@ -111,7 +153,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
 
       {/* Error state */}
       {error && (
-        <div className="px-6 py-2 bg-red-500/10 border-b border-red-500/20 text-sm text-red-600">
+        <div className="px-6 py-2 bg-destructive/10 border-b border-destructive/20 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -135,6 +177,21 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
                 mode={mode}
                 modeColor={modeCfg.color}
                 onSelectTicker={(t) => { setSelectedTicker(t); setView("table"); }}
+                selectedFund={selectedFund}
+                fundTotal={selectedFund ? integration.getFundTotal(selectedFund) : 0}
+                allocatedInFund={
+                  selectedFund
+                    ? filteredData.reduce(
+                        (s, t) =>
+                          s +
+                          integration
+                            .getAllocations(t.ticker)
+                            .filter((a) => a.fundo === selectedFund)
+                            .reduce((ss, a) => ss + a.financial_price, 0),
+                        0,
+                      )
+                    : 0
+                }
               />
             ) : (
               <TradeTable
@@ -143,6 +200,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
                 modeColor={modeCfg.color}
                 onSelectTicker={setSelectedTicker}
                 selectedTicker={selectedTicker}
+                integration={integration}
               />
             )}
           </div>
@@ -157,6 +215,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               mode={mode}
               modeColor={modeCfg.color}
               onClose={() => setSelectedTicker(null)}
+              integration={integration}
               // Integration: link to emissor profile
               onViewEmissor={(cnpj) => {
                 // Dispatch event for parent system to navigate to emissor page
