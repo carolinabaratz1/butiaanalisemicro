@@ -128,7 +128,7 @@ export default function PosicoesPage() {
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-all'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('empresas').select('cnpj, nome, rating, setor');
+      const { data, error } = await supabase.from('empresas').select('cnpj, nome, rating, setor, tipo');
       if (error) throw error;
       return data as { cnpj: string; nome: string; rating: string | null; setor: string | null }[];
     },
@@ -159,8 +159,8 @@ export default function PosicoesPage() {
   }, [emissoes]);
 
   const cnpjToEmpresa = useMemo(() => {
-    const map: Record<string, { nome: string; rating: string | null; setor: string | null }> = {};
-    empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor }; });
+    const map: Record<string, { nome: string; rating: string | null; setor: string | null; tipo: string | null }> = {};
+    empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor, tipo: (e as any).tipo ?? null }; });
     return map;
   }, [empresas]);
 
@@ -178,9 +178,11 @@ export default function PosicoesPage() {
     return map;
   }, [analises]);
 
-  const getAnaliseStatus = (analise: typeof analises[0] | undefined): string => {
+  const getAnaliseStatus = (analise: typeof analises[0] | undefined, tipoEmissor?: string | null): string => {
     if (!analise) return 'Sem Análise';
     if (analise.status === 'Aprovada') {
+      // FIDC: análise aprovada não vence
+      if (tipoEmissor === 'FIDC') return 'Aprovada';
       if (analise.data_conclusao) {
         const conclusao = new Date(analise.data_conclusao);
         const oneYearAgo = new Date();
@@ -206,7 +208,7 @@ export default function PosicoesPage() {
         cnpj,
         empresaNome: empresa?.nome,
         empresaRating: empresa?.rating,
-        analiseStatus: getAnaliseStatus(analise),
+        analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
         analiseRecomendacao: analise?.recomendacao || null,
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
