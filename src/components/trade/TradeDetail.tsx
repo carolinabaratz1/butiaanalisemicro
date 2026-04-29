@@ -43,10 +43,14 @@ function fmtNTNB(ref: string | null | undefined): string {
 
 type ChartWin = "90d" | "30d" | "21d" | "10d" | "pu";
 
-export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, onViewEmissor }: TradeDetailProps) {
+export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, onClose, integration, onViewEmissor }: TradeDetailProps) {
   const [chartWin, setChartWin] = useState<ChartWin>("90d");
   const t = data.find(x => x.ticker === ticker);
   const chartTheme = useChartTheme();
+
+  const allocations = useMemo(() => integration.getAllocations(ticker), [integration, ticker]);
+  const totalFinAlloc = useMemo(() => allocations.reduce((s, a) => s + a.financial_price, 0), [allocations]);
+  const totalQtyAlloc = useMemo(() => allocations.reduce((s, a) => s + a.amount, 0), [allocations]);
 
   // Fetch full per-ticker history (paginated, computed via RPC for IPCA).
   // Falls back to the global `history` map if the per-ticker fetch is empty.
