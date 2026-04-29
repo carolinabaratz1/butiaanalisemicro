@@ -218,7 +218,7 @@ export default function AnalisesPage() {
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="max-w-2xl bg-card border-border max-h-[85vh] overflow-y-auto">
           {selected && (() => {
-            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao);
+            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao, getTipoEmissor(selected.empresa_id));
             return (
               <>
                 <DialogHeader>
