@@ -285,7 +285,7 @@ export default function PipelineResearchPage() {
   const analisesComStatus = useMemo(() => {
     const withStatus = analises.map(a => ({
       ...a,
-      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva),
+      displayStatus: getDisplayStatus(a.status, a.data_conclusao, a.empresa_id, temPosicaoAtiva, tipoEmissorDe(a.empresa_id)),
     }));
 
     // Group by empresa_id — keep only highest versao per empresa
