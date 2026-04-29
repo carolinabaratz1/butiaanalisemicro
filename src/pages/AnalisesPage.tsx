@@ -64,7 +64,7 @@ export default function AnalisesPage() {
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-lookup'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('empresas').select('cnpj, nome');
+      const { data, error } = await supabase.from('empresas').select('cnpj, nome, tipo');
       if (error) throw error;
       return data || [];
     },
@@ -84,6 +84,11 @@ export default function AnalisesPage() {
   function getEmpresaNome(id: string): string {
     const e = empresas.find(em => em.cnpj === id);
     return e?.nome || id;
+  }
+
+  function getTipoEmissor(cnpj: string): string | null {
+    const e = empresas.find(em => em.cnpj === cnpj);
+    return e?.tipo ?? null;
   }
 
   const { data: analises = [], isLoading } = useQuery({
