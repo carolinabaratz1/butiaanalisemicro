@@ -33,7 +33,9 @@ function fmtDateBR(d: string | null | undefined): string {
   return clean;
 }
 
-function isVencida(status: string, dataConclusao: string | null): boolean {
+function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
+  // FIDC analyses do not expire — they have continuous monitoring instead
+  if (tipoEmissor === 'FIDC') return false;
   if (status !== 'Aprovada' || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
@@ -41,8 +43,8 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null): string {
-  if (isVencida(status, dataConclusao)) return 'Vencida';
+function getDisplayStatus(status: string, dataConclusao: string | null, tipoEmissor?: string | null): string {
+  if (isVencida(status, dataConclusao, tipoEmissor)) return 'Vencida';
   return status;
 }
 
