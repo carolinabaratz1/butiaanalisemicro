@@ -104,7 +104,7 @@ export default function AnalisesPage() {
   });
 
   const filtered = analises.filter(a => {
-    const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+    const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
     return (statusFilter === 'all' || displayStatus === statusFilter)
       && (tipoFilter === 'all' || a.tipo === tipoFilter)
       && (analistaFilter === 'all' || a.analista_responsavel === analistaFilter);
