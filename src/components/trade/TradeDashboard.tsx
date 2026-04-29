@@ -14,6 +14,9 @@ interface TradeDashboardProps {
   mode: TradeMode;
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
+  selectedFund?: string | null;
+  fundTotal?: number;
+  allocatedInFund?: number;
 }
 
 interface TradeSummary {
