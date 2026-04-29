@@ -289,6 +289,8 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                 <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("anos_venc")}>Venc. <SortIcon field="anos_venc" /></th>
                 {isIPCA && <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">NTN-B</th>}
                 <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Rating</th>
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Status</th>
+                <th className="hidden md:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground">Posição</th>
                 <th className="px-2 md:px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("last_val")}>{isIPCA ? "Spread" : "Taxa"} <SortIcon field="last_val" /></th>
                 <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_5d")}>5d <SortIcon field="avg_5d" /></th>
                 <th className="hidden lg:table-cell px-2.5 py-2 text-left text-[9px] uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-foreground" onClick={() => srt("avg_21d")}>21d <SortIcon field="avg_21d" /></th>
