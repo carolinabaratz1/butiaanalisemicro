@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -8,6 +8,7 @@ import { AnaliseEntry, FERIADOS_BR_2026 } from '@/data/desempenhoMock';
 
 interface Props {
   analises: AnaliseEntry[];
+  loading?: boolean;
 }
 
 const FERIADOS_SET = new Set(FERIADOS_BR_2026);
@@ -25,7 +26,7 @@ function pontosDoDia(items: AnaliseEntry[], hoje: Date) {
   });
 }
 
-export function CalendarioEntregas({ analises }: Props) {
+export function CalendarioEntregas({ analises, loading }: Props) {
   const [ref, setRef] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -51,6 +52,14 @@ export function CalendarioEntregas({ analises }: Props) {
   }
 
   const navegar = (offset: number) => setRef(new Date(ano, mes + offset, 1));
+
+  if (loading) {
+    return (
+      <div className="bg-card rounded-lg border border-border p-4 flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card rounded-lg border border-border p-4">

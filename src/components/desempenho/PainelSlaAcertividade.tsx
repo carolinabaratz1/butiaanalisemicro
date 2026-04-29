@@ -27,7 +27,7 @@ export function PainelSlaAcertividade({ pendentes, todasParaAcertividade }: Prop
       <div>
         <h3 className="text-sm font-medium mb-3">SLA de entregas pendentes</h3>
         {visiveis.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhuma análise pendente.</p>
+          <p className="text-xs text-muted-foreground">Nenhuma entrega pendente.</p>
         ) : (
           <div className="space-y-2">
             {visiveis.map((p) => (

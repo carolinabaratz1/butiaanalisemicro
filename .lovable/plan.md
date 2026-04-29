@@ -1,93 +1,107 @@
-## Nova aba: Desempenho & Agenda
+## Conectar Desempenho & Agenda com dados reais
 
-Criar a página `/desempenho` com KPIs de equipe, tabela por analista, calendário de entregas e painel de SLA/acertividade. Acesso restrito a **Gestor** e **Coordenação/Especialista** (no projeto o role é literalmente `'Coordenação/Especialista'`, não `'Coordenador'` — vou usar o valor existente para não quebrar o RBAC).
-
-Tudo será alimentado por **mock estático** nesta primeira versão. Nenhuma alteração em backend/edge functions/RLS.
+Substituir `ANALISES_MOCK` por queries reais no Supabase, mantendo intactos os componentes visuais, os tipos `AnaliseEntry` / `AnalistaMetrica` e as funções de cálculo em `desempenhoUtils.ts`.
 
 ---
 
-### Arquivos a criar
+### 1. Mapeamento Supabase → `AnaliseEntry`
 
-1. `src/data/desempenhoMock.ts` — interface `AnaliseEntry`, `ANALISES_MOCK` (≈18 entradas Jan–Abr 2026, com 4 analistas fictícios, mix de tipos, ≥2 atrasadas, ≥2 vencidas), constante `SLA_META_DIAS_UTEIS = 7` e lista de feriados nacionais BR 2026.
-2. `src/utils/desempenhoUtils.ts` — `diasUteisEntre`, `inicioDoPeriodo`, `calcularMetricasPorAnalista`, `agruparPorDia`, helpers de delta período-anterior e acertividade mensal.
-3. `src/pages/DesempenhoPage.tsx` — página principal (topbar + KPIs + tabela + grid inferior + Sheet de detalhe).
-4. `src/components/desempenho/PeriodoSelector.tsx` — botões pill 7d/30d/90d/YTD.
-5. `src/components/desempenho/KpiCards.tsx` — 4 cards com delta vs período anterior.
-6. `src/components/desempenho/TabelaAnalistas.tsx` — tabela clicável que abre o Sheet.
-7. `src/components/desempenho/AnalistaSheet.tsx` — Sheet lateral (right, 600px) com KPIs do analista, tempo por etapa do kanban e tabela de análises.
-8. `src/components/desempenho/CalendarioEntregas.tsx` — calendário mensal customizado (grid 7 colunas, navegação `<` `>`, pontos coloridos por tipo, Popover por dia).
-9. `src/components/desempenho/PainelSlaAcertividade.tsx` — lista de pendentes ordenada por urgência + mini barras dos últimos 6 meses.
+Não existe tabela `pipeline_historico`. Vamos derivar tudo a partir de **`analises`** + **`pipeline_eventos`** + **`profiles`** + **`empresas`** (todas já existentes).
 
-### Arquivos a editar
+Tabela `analises` (campos existentes confirmados):
+- `id`, `empresa_id` (CNPJ), `tipo` (`Crédito Privado` | `Ações`), `status` (`Pendente` | `Em Análise` | `Concluída` | `Aprovada` | `Reprovada` | `Vencida c/ Alocação` | `Vencida s/ Alocação`)
+- `analista_responsavel` (UUID do profile, ou nome em registros legados)
+- `data_inicio`, `prazo`, `data_conclusao`, `data_comite` (todos `text` ISO)
+- `versao`
 
-- `src/data/users.ts` — adicionar `/desempenho` ao array `sections` de **Gestor** e **Coordenação/Especialista** (necessário porque o `hasAccess` do `AuthContext` consulta esse mapa).
-- `src/components/layout/AppSidebar.tsx` — adicionar item `{ label: 'Desempenho & Agenda', icon: BarChart3, path: '/desempenho' }` em `mainItems`. O filtro existente `filteredMain = mainItems.filter(item => hasAccess(item.path))` já garantirá visibilidade só para perfis autorizados — mantém o padrão do projeto sem hardcode de role no componente.
-- `src/App.tsx` — registrar `<Route path="/desempenho" element={<DesempenhoPage />} />` dentro de `ProtectedRoutes`.
+Tabela `pipeline_eventos`: `analise_id`, `acao`, `etapa_anterior`, `etapa_nova`, `created_at`. Usada para reconstruir `etapasKanban` (entrada/saída de cada etapa do kanban).
 
-### Guard na página
+Tabela `empresas`: usada para derivar o `tipo` visual (`Corporativo` | `FIDC` | `CRI` | `CRA` | `Financeiro`) a partir de `empresas.tipo` + `empresas.setor`.
 
-Dentro de `DesempenhoPage`, ler `currentUser.funcao` do `useAuth()` e:
+Tabela `profiles`: para buscar `nome` e `initials` do analista (lendo `analises.analista_responsavel` como UUID; fallback para o próprio texto se não for UUID).
+
+**Mapeamentos:**
+
+| `AnaliseEntry` | Origem |
+|---|---|
+| `id` | `analises.id` |
+| `titulo` | `empresas.nome` (lookup por CNPJ); fallback `empresa_id` |
+| `tipo` | derivado: `empresas.tipo='FINANCEIRO'`→`Financeiro`; `empresas.tipo='FIDC'` ou `setor='FIDC'`→`FIDC`; `setor` contém `CRI`→`CRI`; `setor` contém `CRA`→`CRA`; senão → `Corporativo` |
+| `analistaId` / `analistaNome` / `analistaInitials` | `profiles` por UUID; iniciais = primeiras letras do nome |
+| `analistaColor` | derivado por índice estável (hash do `analistaId` → `blue/teal/amber/pink/purple`) |
+| `dataInicio` | `analises.data_inicio` |
+| `dataEntrega` | `analises.prazo` (fallback: `data_inicio + SLA_META`) |
+| `dataEntregueEm` | `data_conclusao` quando `status` ∈ {`Concluída`,`Aprovada`,`Reprovada`,`Vencida c/ Alocação`,`Vencida s/ Alocação`}; senão `undefined` |
+| `aprovadoPrimeiraRevisao` | `status === 'Aprovada'` (proxy — não temos contagem de revisões) |
+| `statusEntrega` | derivado da regra do enunciado (sem entrega + prazo<hoje → `atrasado`; sem entrega + prazo ok → `em_andamento`; entregue ≤ prazo → `no_prazo`; entregue > prazo → `atencao`). Quando entregue, usar `entregue` se houver demanda, senão manter `no_prazo`/`atencao`. |
+| `etapasKanban` | reconstruído de `pipeline_eventos` filtrando `etapa_nova` ∈ {`Em Análise`,`Concluída`,`Aprovada`} → renomeados para o enum visual (`Em análise`/`Revisão`/`Aprovado`/`Concluído`); `entradaEm` = `created_at` do evento, `saidaEm` = `created_at` do próximo evento |
+
+---
+
+### 2. Novo hook `src/hooks/useDesempenhoData.ts`
 
 ```ts
-if (funcao !== 'Gestor' && funcao !== 'Coordenação/Especialista') {
-  return <Navigate to="/" replace />;
+useDesempenhoData(periodo: Periodo): {
+  analises: AnaliseEntry[];
+  isLoading: boolean;
+  isError: boolean;
 }
 ```
 
+Implementação com TanStack Query (já presente no projeto):
+
+1. `queryKey: ['desempenho', periodo]`.
+2. Calcular `inicio = inicioDoPeriodo(periodo)`.
+3. Em paralelo (`Promise.all`):
+   - `supabase.from('analises').select('id,empresa_id,tipo,status,analista_responsavel,data_inicio,prazo,data_conclusao,versao').gte('data_inicio', isoInicio)`
+   - `supabase.from('empresas').select('cnpj,nome,tipo,setor')`
+   - `supabase.from('profiles').select('id,nome').eq('status','Ativo')`
+4. Após receber as análises, buscar:
+   - `supabase.from('pipeline_eventos').select('analise_id,acao,etapa_anterior,etapa_nova,created_at').in('analise_id', ids).order('created_at',{ascending:true})`
+5. Aplicar mapeamentos da tabela acima em memória e retornar `AnaliseEntry[]`.
+6. `onError`: disparar `toast.error('Erro ao carregar dados de desempenho. Tente novamente.')` (sonner) e retornar `[]`.
+
 ---
 
-### Layout (topo → base)
+### 3. Atualizar `DesempenhoPage.tsx`
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ Topbar: título | badge perfil | [7d][30d][90d][YTD]         │
-├─────────────────────────────────────────────────────────────┤
-│ [KPI 1] [KPI 2] [KPI 3] [KPI 4]   (grid-cols-4)             │
-├─────────────────────────────────────────────────────────────┤
-│ Tabela desempenho por analista (linhas clicáveis → Sheet)   │
-├──────────────────────────────┬──────────────────────────────┤
-│ Calendário mensal de entregas│ SLA pendentes (top 6)        │
-│ + legenda                    │ ─────────────────────────    │
-│                              │ Acertividade 6m (mini bars)  │
-└──────────────────────────────┴──────────────────────────────┘
-```
+- Remover `import { ANALISES_MOCK } from '@/data/desempenhoMock'`.
+- Usar `const { analises, isLoading, isError } = useDesempenhoData(periodo);`
+- `ref` passa a ser `new Date()` (não depende mais de datas mock).
+- Substituir `ANALISES_MOCK` por `analises` em `filtrarPorPeriodo` e em `<PainelSlaAcertividade ... todasParaAcertividade={analises} />`.
+- Renderização condicional:
+  - **Loading**: cards de KPI com `<Skeleton>` (4 blocos), tabela de analistas com 4 linhas `<Skeleton>`, calendário com spinner centralizado (`Loader2` animado).
+  - **Vazio** (`!isLoading && analises.length === 0`): KPIs zerados (passar arrays vazios — já funciona); tabela com empty state (ícone `BarChart3` + texto "Nenhuma análise encontrada no período selecionado"); painel SLA com texto "Nenhuma entrega pendente".
+- Manter o guard de perfil intacto.
 
-Em `< lg` o grid inferior colapsa para coluna única.
+Pequena adição nos componentes-filhos quando necessário:
+- `KpiCards`: aceitar prop `loading?: boolean` para alternar valores ↔ skeletons.
+- `TabelaAnalistas`: aceitar `loading?: boolean` e renderizar skeleton/empty state.
+- `CalendarioEntregas`: aceitar `loading?: boolean` e mostrar spinner.
+- `PainelSlaAcertividade`: já trata listas vazias; só ajustar texto do empty.
 
-### Cálculos (resumo das regras)
+Sem alterações em `desempenhoUtils.ts` nem em `desempenhoMock.ts` (mantido apenas como fonte de tipos e constantes — `AnaliseEntry`, `SLA_META_DIAS_UTEIS`, `FERIADOS_BR_2026`).
 
-- **Período**: filtro por `dataInicio >= inicioDoPeriodo(periodo)`.
-- **Dias úteis**: contagem excluindo sáb/dom e feriados hardcoded.
-- **KPIs**: entregues, prazo médio (dias úteis), aprovação 1ª revisão (%), em atraso. Delta = comparação com a janela imediatamente anterior do mesmo tamanho.
-- **Status badge da tabela**:
-  - No prazo: `prazoMedio ≤ SLA_META` e nenhuma vencida não entregue.
-  - Atenção: `SLA_META < prazoMedio ≤ SLA_META + 1.5`.
-  - Em atraso: `prazoMedio > SLA_META + 1.5` ou tem vencida não entregue.
-- **Acertividade mensal** (últimos 6 meses): `entreguesNoPrazo / entregues * 100`. Cores: ≥85 verde `#639922`, 70–84 âmbar `#EF9F27`, <70 vermelho `#E24B4A`. Barras altura máx 52px, sem eixo Y.
+---
 
-### Calendário
+### 4. Detalhes técnicos
 
-- Grid 7 colunas, células `min-h-[54px] rounded-md`.
-- Pontos por tipo (máx 4, excedente vira `+N`): Corporativo `#378ADD`, FIDC `#EF9F27`, CRI/CRA `#639922`, Financeiro `#7F77DD`, vencido sem entrega `#E24B4A`.
-- Dia atual com fundo info claro; feriados com `bg-muted`.
-- Click no dia → `Popover` com lista (título, tipo, initials do analista, status pill).
+**Iniciais do analista:** primeiras letras do primeiro e último nome (`Lucas Almeida` → `LA`).
 
-### Sheet do analista
+**Cor estável:** `colors[hash(analistaId) % 5]` com `colors = ['blue','teal','amber','pink','purple']`.
 
-`Sheet` shadcn `side="right"` com `w-[600px]` (custom via className do `SheetContent`). Conteúdo:
-1. Header: avatar + nome + badge de status geral.
-2. 4 mini KPI cards (entregues / prazo médio / aprovação / em andamento).
-3. "Tempo por etapa": 4 cards com média de dias por etapa (`Em análise`, `Revisão`, `Aprovado`, `Concluído`) calculada de `etapasKanban`.
-4. Tabela de análises do analista no período (título, tipo, datas, status, aprovação 1ª revisão).
+**Reconstrução de etapas a partir de `pipeline_eventos`:** ordenar eventos da análise por `created_at`; sequência tipica observada no DB: `criada → analista_atribuido → etapa_alterada (Pendente→Em Análise) → concluida (→Concluída) → aprovado (→Aprovada)`. Mapeamento de `etapa_nova`:
+- `Em Análise` → `Em análise`
+- `Concluída` → `Revisão` (etapa que precede aprovação)
+- `Aprovada` → `Aprovado`
+- Última etapa quando `data_conclusao` existe → `Concluído` com `saidaEm = data_conclusao`
 
-### Detalhes técnicos
+**Resiliência a `analista_responsavel` em texto:** se não bater com nenhum UUID do `profiles`, usar o próprio valor como `analistaNome`/`analistaId` e gerar iniciais a partir dele.
 
-- Apenas **Shadcn/ui + Tailwind** existentes; usar `Card`, `Badge`, `Sheet`, `Popover`, `Progress`, `Table`. Ícone do menu: `BarChart3` do `lucide-react`.
-- Avatares de analistas: 28px com classes `bg-{cor}-100 text-{cor}-700` (cores `blue/teal/amber/pink/purple`) — incluir as classes na safelist via uso explícito por mapa para evitar purge do Tailwind (mapa `colorClass: Record<AnalistaColor, string>` no componente).
-- Toda formatação numérica: `.toFixed(1)` para dias, `Math.round()` para %.
-- Datas em ISO no mock; UI em pt-BR (DD/MM/YYYY) usando `toLocaleDateString('pt-BR')`.
+---
 
-### Não-objetivos (fora desta entrega)
+### 5. Arquivos tocados
 
-- Nenhuma persistência em Supabase, nenhuma migração, nenhuma edge function.
-- Nada sobre o erro de "senha rejeitada" nem reimportação de empresas — escopo somente da nova aba.
+- **Criar**: `src/hooks/useDesempenhoData.ts`
+- **Editar**: `src/pages/DesempenhoPage.tsx`, `src/components/desempenho/KpiCards.tsx`, `src/components/desempenho/TabelaAnalistas.tsx`, `src/components/desempenho/CalendarioEntregas.tsx`, `src/components/desempenho/PainelSlaAcertividade.tsx` (apenas para aceitar `loading` e tratar vazio)
+- **Não tocar**: `src/utils/desempenhoUtils.ts`, `src/data/desempenhoMock.ts` (mantido como fonte de tipos), guard de rota, `AppSidebar`, `users.ts`
