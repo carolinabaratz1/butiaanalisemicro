@@ -991,7 +991,7 @@ export default function PipelineResearchPage() {
                       <CalendarIcon className="h-3 w-3" /> Alterar Prazo
                     </Button>
                   )}
-                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao)) && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
