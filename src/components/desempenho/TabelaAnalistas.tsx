@@ -89,9 +89,3 @@ export function TabelaAnalistas({ metricas, onSelect, loading }: Props) {
     </div>
   );
 }
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
