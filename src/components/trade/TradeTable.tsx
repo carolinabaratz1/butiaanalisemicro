@@ -1,6 +1,7 @@
 // src/components/trade/TradeTable.tsx
 import { useState, useMemo } from "react";
 import { TradeAtivo, TradeMode } from "@/hooks/useTradeData";
+import type { AnaliseStatus, TradeIntegration } from "@/hooks/useTradeIntegration";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface TradeTableProps {
@@ -9,6 +10,7 @@ interface TradeTableProps {
   modeColor: string;
   onSelectTicker: (ticker: string) => void;
   selectedTicker: string | null;
+  integration: TradeIntegration;
 }
 
 type SortField = keyof TradeAtivo;
