@@ -317,7 +317,7 @@ export default function PipelineResearchPage() {
     });
 
     return result;
-  }, [analises, temPosicaoAtiva]);
+  }, [analises, temPosicaoAtiva, tipoEmissorDe]);
 
   // ── Filters ──
   const filtered = useMemo(() => {
