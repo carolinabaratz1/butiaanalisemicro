@@ -61,7 +61,7 @@ interface AnaliseRow {
 }
 
 async function paginate<T>(
-  fn: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  fn: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
 ): Promise<T[]> {
   const PAGE = 1000;
   const out: T[] = [];
