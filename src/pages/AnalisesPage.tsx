@@ -185,7 +185,7 @@ export default function AnalisesPage() {
               </TableHeader>
               <TableBody>
                 {filtered.map(a => {
-                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao);
+                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
                   return (
                     <TableRow key={a.id} className="border-border">
                       <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
