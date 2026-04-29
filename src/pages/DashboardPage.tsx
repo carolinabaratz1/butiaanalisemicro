@@ -126,13 +126,17 @@ export default function DashboardPage() {
   const analises = todasAnalises ?? [];
 
   // Compute statuses (same logic as PipelineResearchPage)
+  // FIDC analyses do not expire — they have continuous monitoring instead
   const computedAnalisesRaw = analises.map((a) => {
     let computedStatus = a.status;
     if (a.status === "Aprovada" && a.data_conclusao) {
-      const dt = new Date(a.data_conclusao.split("T")[0]);
-      if (dt < umAnoAtras) {
-        const hasPosicao = cnpjSet.has(a.empresa_id);
-        computedStatus = hasPosicao ? "Vencida c/ Alocação" : "Vencida s/ Alocação";
+      const tipoEmissor = empresaMap.get(a.empresa_id)?.tipo ?? null;
+      if (tipoEmissor !== "FIDC") {
+        const dt = new Date(a.data_conclusao.split("T")[0]);
+        if (dt < umAnoAtras) {
+          const hasPosicao = cnpjSet.has(a.empresa_id);
+          computedStatus = hasPosicao ? "Vencida c/ Alocação" : "Vencida s/ Alocação";
+        }
       }
     }
     return { ...a, computedStatus };
