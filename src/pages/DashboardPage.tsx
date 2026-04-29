@@ -80,7 +80,7 @@ export default function DashboardPage() {
   const { data: empresasData } = useQuery({
     queryKey: ["dashboard-empresas"],
     queryFn: async () => {
-      const { data } = await supabase.from("empresas").select("id, nome, cnpj");
+      const { data } = await supabase.from("empresas").select("id, nome, cnpj, tipo");
       return data ?? [];
     },
   });
