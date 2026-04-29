@@ -282,7 +282,7 @@ export default function AnalisesPage() {
                       <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
                       <div className="space-y-1">
                         {versions.map(v => {
-                          const vStatus = getDisplayStatus(v.status, v.data_conclusao);
+                          const vStatus = getDisplayStatus(v.status, v.data_conclusao, getTipoEmissor(v.empresa_id));
                           return (
                             <div key={v.id} className="flex items-center gap-3 text-xs p-2 bg-surface-1 rounded">
                               <span className="font-medium">v{v.versao}</span>
