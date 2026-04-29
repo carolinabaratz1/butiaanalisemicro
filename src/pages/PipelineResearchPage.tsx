@@ -73,7 +73,9 @@ function fmtDateBR(d: string | null | undefined): string {
   return clean;
 }
 
-function isVencida(status: string, dataConclusao: string | null): boolean {
+function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
+  // FIDC analyses do not expire — they have continuous monitoring instead
+  if (tipoEmissor === 'FIDC') return false;
   if (status !== 'Aprovada' || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
@@ -81,8 +83,8 @@ function isVencida(status: string, dataConclusao: string | null): boolean {
   return conclusao < umAnoAtras;
 }
 
-function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean): AnaliseStatus {
-  if (isVencida(status, dataConclusao)) {
+function getDisplayStatus(status: string, dataConclusao: string | null, empresaId?: string, temPosicaoFn?: (cnpj: string) => boolean, tipoEmissor?: string | null): AnaliseStatus {
+  if (isVencida(status, dataConclusao, tipoEmissor)) {
     if (empresaId && temPosicaoFn) {
       return temPosicaoFn(empresaId) ? 'Vencida c/ Alocação' : 'Vencida s/ Alocação';
     }
