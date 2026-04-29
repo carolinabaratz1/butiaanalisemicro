@@ -184,6 +184,8 @@ export default function PipelineResearchPage() {
   });
 
   const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
+  const empresaTipoPorCnpj = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.tipo])), [empresasDB]);
+  const tipoEmissorDe = useCallback((cnpj: string) => empresaTipoPorCnpj.get(cnpj) ?? null, [empresaTipoPorCnpj]);
 
   // ── Fetch emissoes from DB for ticker resolution ──
   const { data: emissoesDB = [] } = useQuery({
