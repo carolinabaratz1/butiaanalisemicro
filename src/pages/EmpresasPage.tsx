@@ -240,6 +240,7 @@ export default function EmpresasPage() {
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-9">Nome</TableHead>
+                  <TableHead className="text-[11px] h-9">Código</TableHead>
                   <TableHead className="text-[11px] h-9">CNPJ</TableHead>
                   <TableHead className="text-[11px] h-9">Tipo</TableHead>
                   <TableHead className="text-[11px] h-9">Grupo Econômico</TableHead>
