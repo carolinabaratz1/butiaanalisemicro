@@ -240,6 +240,7 @@ export default function EmpresasPage() {
               <TableHeader>
                 <TableRow className="border-border">
                   <TableHead className="text-[11px] h-9">Nome</TableHead>
+                  <TableHead className="text-[11px] h-9">Código</TableHead>
                   <TableHead className="text-[11px] h-9">CNPJ</TableHead>
                   <TableHead className="text-[11px] h-9">Tipo</TableHead>
                   <TableHead className="text-[11px] h-9">Grupo Econômico</TableHead>
@@ -255,6 +256,13 @@ export default function EmpresasPage() {
                   return (
                     <TableRow key={e.id} className="border-border group">
                       <TableCell className="text-sm py-2 font-medium max-w-[280px] truncate">{e.nome}</TableCell>
+                      <TableCell className="py-2">
+                        {e.codigo_emissor ? (
+                          <Badge variant="outline" className="text-[10px] font-mono bg-primary/10 text-primary border-primary/30">{e.codigo_emissor}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-xs py-2 text-muted-foreground font-mono">{e.cnpj}</TableCell>
                       <TableCell className="py-2"><Badge variant="outline" className="text-[10px]">{e.tipo || '—'}</Badge></TableCell>
                       <TableCell className="text-xs py-2 text-muted-foreground">{e.grupo_economico || '—'}</TableCell>

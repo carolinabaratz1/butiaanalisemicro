@@ -233,6 +233,7 @@ export type Database = {
       empresas: {
         Row: {
           cnpj: string
+          codigo_emissor: string | null
           created_at: string
           grupo_economico: string | null
           id: string
@@ -245,6 +246,7 @@ export type Database = {
         }
         Insert: {
           cnpj: string
+          codigo_emissor?: string | null
           created_at?: string
           grupo_economico?: string | null
           id?: string
@@ -257,6 +259,7 @@ export type Database = {
         }
         Update: {
           cnpj?: string
+          codigo_emissor?: string | null
           created_at?: string
           grupo_economico?: string | null
           id?: string
