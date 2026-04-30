@@ -14,21 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      _emissor_codigo_map: {
-        Row: {
-          cnpj_d: string
-          codigo: string
-        }
-        Insert: {
-          cnpj_d: string
-          codigo: string
-        }
-        Update: {
-          cnpj_d?: string
-          codigo?: string
-        }
-        Relationships: []
-      }
       analises: {
         Row: {
           analista_responsavel: string
