@@ -193,8 +193,11 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
       if (isUuid(a.analista_responsavel)) {
         const p = profileById.get(a.analista_responsavel);
         analistaNome = p?.nome ?? 'Analista desconhecido';
+        analistaId = p?.id ?? a.analista_responsavel;
       } else {
-        analistaNome = a.analista_responsavel;
+        const p = profileByNome.get(normNome(a.analista_responsavel));
+        analistaNome = p?.nome ?? a.analista_responsavel;
+        analistaId = p?.id ?? normNome(a.analista_responsavel);
       }
     }
 
