@@ -168,8 +168,10 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     eventos = (evRes.data ?? []) as EventoRow[];
   }
 
+  const normNome = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
   const empresaByCnpj = new Map(empresas.map((e) => [e.cnpj, e]));
   const profileById = new Map(profiles.map((p) => [p.id, p]));
+  const profileByNome = new Map(profiles.map((p) => [normNome(p.nome), p]));
   const eventosByAnalise = new Map<string, EventoRow[]>();
   for (const ev of eventos) {
     const arr = eventosByAnalise.get(ev.analise_id) ?? [];
@@ -191,8 +193,11 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
       if (isUuid(a.analista_responsavel)) {
         const p = profileById.get(a.analista_responsavel);
         analistaNome = p?.nome ?? 'Analista desconhecido';
+        analistaId = p?.id ?? a.analista_responsavel;
       } else {
-        analistaNome = a.analista_responsavel;
+        const p = profileByNome.get(normNome(a.analista_responsavel));
+        analistaNome = p?.nome ?? a.analista_responsavel;
+        analistaId = p?.id ?? normNome(a.analista_responsavel);
       }
     }
 
