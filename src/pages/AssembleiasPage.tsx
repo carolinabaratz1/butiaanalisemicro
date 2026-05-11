@@ -82,7 +82,7 @@ const VOTO_CLS: Record<VotoButia, string> = {
 
 function emptyForm() {
   return {
-    tipo: '' as EventoTipo | '', cnpj_empresa: '', isin: '', titulo: '', descricao: '',
+    tipo: '' as EventoTipo | '', cnpj_empresa: '', isin: '', isins: [] as string[], titulo: '', descricao: '',
     data_evento: undefined as Date | undefined, hora_evento: '',
     data_limite_voto: undefined as Date | undefined,
     modalidade: '' as Modalidade | '', local_link: '', status: 'Agendado' as EventoStatus,
