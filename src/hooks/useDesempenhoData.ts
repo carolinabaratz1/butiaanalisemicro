@@ -48,11 +48,14 @@ function deriveTipo(empresaTipo?: string | null, setor?: string | null): Analise
 
 const STATUS_ENTREGUE = new Set([
   'Concluída',
-  'Aprovada',
-  'Reprovada',
+  'Buy',
+  'Hold',
+  'Sell',
   'Vencida c/ Alocação',
   'Vencida s/ Alocação',
 ]);
+
+const STATUS_DELIBERADO = new Set(['Buy', 'Hold', 'Sell']);
 
 function deriveStatusEntrega(
   dataEntregueEm: string | undefined,
