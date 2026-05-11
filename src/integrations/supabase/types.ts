@@ -33,12 +33,14 @@ export type Database = {
           isin: string | null
           justificativa: string | null
           justificativa_rejeicao: string | null
+          link_analise: string | null
           observacoes: string | null
           prazo: string | null
           preco_maximo: number | null
           preco_medio: number | null
           preco_min: number | null
           recomendacao: string | null
+          recomendacao_rf: string | null
           relatorio: string | null
           riscos: string | null
           solicitante_id: string | null
@@ -65,12 +67,14 @@ export type Database = {
           isin?: string | null
           justificativa?: string | null
           justificativa_rejeicao?: string | null
+          link_analise?: string | null
           observacoes?: string | null
           prazo?: string | null
           preco_maximo?: number | null
           preco_medio?: number | null
           preco_min?: number | null
           recomendacao?: string | null
+          recomendacao_rf?: string | null
           relatorio?: string | null
           riscos?: string | null
           solicitante_id?: string | null
@@ -97,12 +101,14 @@ export type Database = {
           isin?: string | null
           justificativa?: string | null
           justificativa_rejeicao?: string | null
+          link_analise?: string | null
           observacoes?: string | null
           prazo?: string | null
           preco_maximo?: number | null
           preco_medio?: number | null
           preco_min?: number | null
           recomendacao?: string | null
+          recomendacao_rf?: string | null
           relatorio?: string | null
           riscos?: string | null
           solicitante_id?: string | null
