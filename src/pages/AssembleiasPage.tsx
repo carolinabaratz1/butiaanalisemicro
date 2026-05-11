@@ -151,7 +151,7 @@ export default function AssembleiasPage() {
     queryFn: async () => {
       const { data } = await supabase.from('assembleia_participacoes' as any).select('assembleia_id');
       const map: Record<string, number> = {};
-      ((data ?? []) as Array<{ assembleia_id: string }>).forEach(r => { map[r.assembleia_id] = (map[r.assembleia_id] ?? 0) + 1; });
+      ((data ?? []) as unknown as Array<{ assembleia_id: string }>).forEach(r => { map[r.assembleia_id] = (map[r.assembleia_id] ?? 0) + 1; });
       return map;
     },
   });
