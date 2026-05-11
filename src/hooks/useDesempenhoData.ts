@@ -146,7 +146,7 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     supabase
       .from('analises')
       .select('id,empresa_id,tipo,status,analista_responsavel,data_inicio,prazo,data_conclusao,versao')
-      .gte('data_inicio', isoInicio),
+      .or(`data_inicio.gte.${isoInicio},data_conclusao.gte.${isoInicio}`),
     supabase.from('empresas').select('cnpj,nome,tipo,setor'),
     supabase.from('profiles').select('id,nome'),
   ]);
