@@ -113,7 +113,7 @@ export default function AssembleiasPage() {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('Todos');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
-  const [filtroTriagem, setFiltroTriagem] = useState('Todas');
+  const [filtroTriagem, setFiltroTriagem] = useState('ocultar_sem_posicao');
   const [filtroOrigem, setFiltroOrigem] = useState('Todas');
   const [formOpen, setFormOpen] = useState(false);
   const [detalheEvento, setDetalhe] = useState(null as Assembleia | null);
@@ -174,7 +174,11 @@ export default function AssembleiasPage() {
   const filtrados = useMemo(() => eventos.filter(ev => {
     if (filtroStatus !== 'Todos' && ev.status !== filtroStatus) return false;
     if (filtroTipo !== 'Todos' && ev.tipo !== filtroTipo) return false;
-    if (filtroTriagem !== 'Todas' && (ev.triagem ?? 'sem_posicao') !== filtroTriagem) return false;
+    {
+      const tri = ev.triagem ?? 'sem_posicao';
+      if (filtroTriagem === 'ocultar_sem_posicao' && tri === 'sem_posicao') return false;
+      if (filtroTriagem !== 'Todas' && filtroTriagem !== 'ocultar_sem_posicao' && tri !== filtroTriagem) return false;
+    }
     if (filtroOrigem !== 'Todas' && (ev.origem ?? 'manual') !== filtroOrigem) return false;
     if (busca) {
       const b = busca.toLowerCase();
@@ -333,6 +337,7 @@ export default function AssembleiasPage() {
         <Select value={filtroTriagem} onValueChange={setFiltroTriagem}>
           <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Triagem" /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="ocultar_sem_posicao">Ocultar sem posição</SelectItem>
             <SelectItem value="Todas">Todas as triagens</SelectItem>
             <SelectItem value="com_posicao">Com posição</SelectItem>
             <SelectItem value="pendente_vinculo">Pendente vínculo</SelectItem>
@@ -387,7 +392,7 @@ export default function AssembleiasPage() {
                   const empresaNome = ev.cnpj_empresa ? (empresasMap.get(ev.cnpj_empresa) ?? ev.titulo) : ev.titulo;
                   const nParts = participacoesCount[ev.id] ?? 0;
                   return (
-                    <TableRow key={ev.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setDetalhe(ev)}>
+                    <TableRow key={ev.id} className={cn('cursor-pointer hover:bg-muted/30', tri === 'sem_posicao' && 'opacity-50')} onClick={() => setDetalhe(ev)}>
                       <TableCell className="text-sm py-2.5">
                         <div className="font-medium tabular-nums">{format(parseISO(ev.data_evento), 'dd/MM/yyyy')}</div>
                         {urg && <div className={cn('text-[11px]', urg.cls)}>{urg.label}</div>}
