@@ -128,9 +128,11 @@ export default function DashboardPage() {
 
   // Compute statuses (same logic as PipelineResearchPage)
   // FIDC analyses do not expire — they have continuous monitoring instead
+  const APROVADOS = new Set(["Buy", "Hold", "Sell"]);
   const computedAnalisesRaw = analises.map((a) => {
     let computedStatus = a.status;
-    if (a.status === "Aprovada" && a.data_conclusao) {
+    // Vencimento aplica-se a Buy/Hold (Sell = posição encerrada não expira)
+    if ((a.status === "Buy" || a.status === "Hold") && a.data_conclusao) {
       const tipoEmissor = empresaMap.get(a.empresa_id)?.tipo ?? null;
       if (tipoEmissor !== "FIDC") {
         const dt = new Date(a.data_conclusao.split("T")[0]);
@@ -143,8 +145,7 @@ export default function DashboardPage() {
     return { ...a, computedStatus };
   });
 
-  // Deduplicate by (empresa_id + tipo) keeping highest versao — mirrors PipelineResearchPage
-  // Exception: if latest is Reprovada, also include the previous Aprovada/Vencida version
+  // Deduplicate by (empresa_id + tipo) keeping highest versao
   const groupedDedup = new Map<string, typeof computedAnalisesRaw>();
   computedAnalisesRaw.forEach((a) => {
     const key = `${a.empresa_id}::${a.tipo}`;
@@ -159,50 +160,41 @@ export default function DashboardPage() {
       return;
     }
     items.sort((a, b) => ((b as any).versao || 1) - ((a as any).versao || 1));
-    const latest = items[0];
-    computedAnalises.push(latest);
-    if (latest.computedStatus === "Reprovada") {
-      const prev = items.find(
-        (i) =>
-          i.id !== latest.id &&
-          (i.computedStatus === "Aprovada" ||
-            i.computedStatus === "Vencida c/ Alocação" ||
-            i.computedStatus === "Vencida s/ Alocação"),
-      );
-      if (prev) computedAnalises.push(prev);
-    }
+    computedAnalises.push(items[0]);
   });
 
   const pendentes = computedAnalises.filter((a) => a.computedStatus === "Pendente");
   const emAnalise = computedAnalises.filter((a) => a.computedStatus === "Em Análise");
   const concluidas = computedAnalises.filter((a) => a.computedStatus === "Concluída");
-  const aprovadas = computedAnalises.filter((a) => a.computedStatus === "Aprovada");
-  const reprovadas = computedAnalises.filter((a) => a.computedStatus === "Reprovada");
+  const buys = computedAnalises.filter((a) => a.computedStatus === "Buy");
+  const holds = computedAnalises.filter((a) => a.computedStatus === "Hold");
+  const sells = computedAnalises.filter((a) => a.computedStatus === "Sell");
+  const deliberadas = computedAnalises.filter((a) => APROVADOS.has(a.computedStatus));
   const vencidasComAlocacao = computedAnalises.filter((a) => a.computedStatus === "Vencida c/ Alocação");
   const vencidasSemAlocacao = computedAnalises.filter((a) => a.computedStatus === "Vencida s/ Alocação");
 
   // KPIs
   const analisesEmAndamento = pendentes.length + emAnalise.length;
 
-  // Aprovadas no mês atual
+  // Aprovadas no mês atual: status IN (Buy,Hold,Sell) E data_comite >= início do mês
   const now = new Date();
-  const mesAtual = now.getMonth();
-  const anoAtual = now.getFullYear();
-  const aprovadasMes = aprovadas.filter((a) => {
-    if (!a.data_conclusao) return false;
-    const dt = new Date(a.data_conclusao.split("T")[0]);
-    return dt.getMonth() === mesAtual && dt.getFullYear() === anoAtual;
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
+  const aprovadasMes = deliberadas.filter((a) => {
+    const ref = (a as any).data_comite || a.data_conclusao;
+    if (!ref) return false;
+    const dt = new Date(String(ref).split("T")[0]);
+    return dt >= inicioMes;
   }).length;
 
-  // Alertas: vencidas com alocação (precisam de nova análise urgente)
+  // Alertas: vencidas com alocação
   const alertasPendentes = vencidasComAlocacao.length;
 
-  // Cobertura ativa: CNPJs com posição que TÊM análise válida (<1 ano aprovada)
-  const cnpjsComAnaliseValida = new Set(aprovadas.map((a) => a.empresa_id));
-  const coberturaAtiva = [...cnpjSet].filter((cnpj) => cnpjsComAnaliseValida.has(cnpj)).length;
+  // Cobertura ativa: emissores distintos com pelo menos uma análise Buy ou Hold
+  const cnpjsCobertura = new Set([...buys, ...holds].map((a) => a.empresa_id));
+  const coberturaAtiva = cnpjsCobertura.size;
 
-  // Sem análise vinculada: CNPJs com posição ativa sem análise aprovada válida
-  const semAnalise = [...cnpjSet].filter((cnpj) => !cnpjsComAnaliseValida.has(cnpj)).length;
+  // Sem análise vinculada: CNPJs com posição ativa sem análise Buy/Hold
+  const semAnalise = [...cnpjSet].filter((cnpj) => !cnpjsCobertura.has(cnpj)).length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : "Não";
   const posicoesColor = (posicoesHoje ?? 0) > 0 ? "text-status-success" : "text-status-danger";
