@@ -275,12 +275,16 @@ export default function DashboardPage() {
               <p className="text-[10px] text-muted-foreground uppercase">Concluída</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-status-success">{aprovadas.length}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Aprovada</p>
+              <p className="text-xl font-bold text-status-success">{buys.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Buy</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-status-danger">{reprovadas.length}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Reprovada</p>
+              <p className="text-xl font-bold text-amber-500">{holds.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Hold</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-danger">{sells.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Sell</p>
             </div>
             <div className="text-center">
               <p className="text-xl font-bold text-orange-400">{vencidasComAlocacao.length}</p>
