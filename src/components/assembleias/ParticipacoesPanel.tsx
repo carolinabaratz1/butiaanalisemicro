@@ -75,6 +75,15 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
     onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
   });
 
+  const marcarSemPosicao = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('assembleias' as any).update({ isins_vinculados: [], triagem: 'sem_posicao' }).eq('id', assembleiaId);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['assembleias'] }); toast({ title: 'Marcada como sem posição' }); },
+    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+  });
+
   const adicionar = useMutation({
     mutationFn: async () => {
       if (!novo.fundo || !novo.voto) throw new Error('Selecione fundo e voto');
