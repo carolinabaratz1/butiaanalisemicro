@@ -120,7 +120,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
         if (sprFilter === "ipca-gt10" && v < 1) return false;
       }
       // Status filter
-      const st = integration.getStatus(t.ticker);
+      const st = integration.getStatus(t.ticker, t.emissor_cnpj);
       const stKey = st ?? "__none__";
       if (!statusFilter.includes(stKey)) return false;
       // Position filter
