@@ -131,9 +131,10 @@ export default function PipelineResearchPage() {
   const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
   const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
 
-  // Comitê modal (Aprovada / Reprovada)
-  const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
+  // Comitê modal (Buy / Hold / Sell)
+  const [comiteModal, setComiteModal] = useState<{ id: string; recoInicial?: string } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
+  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
   // Reabrir modal (com novo prazo)
