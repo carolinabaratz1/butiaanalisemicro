@@ -74,14 +74,18 @@ export function useAllocationData(fundo: FundoKey) {
     queryFn: async (): Promise<AllocationData> => {
       const source = sourceFromFundo(fundo);
 
-      // 1. Get latest val_date for this fund
+      // 1. Get latest val_date for this fund (val_date stored as MM/DD/YYYY text — must parse to compare)
       const { data: dateData } = await supabase
         .from("posicoes")
         .select("val_date")
-        .eq("trading_desk_share_source", source)
-        .order("val_date", { ascending: false })
-        .limit(1);
-      const valDate = dateData?.[0]?.val_date ?? null;
+        .eq("trading_desk_share_source", source);
+      const parseDate = (s: string): number => {
+        const [m, d, y] = s.split("/").map(Number);
+        return new Date(y, (m || 1) - 1, d || 1).getTime();
+      };
+      const allDates = Array.from(new Set((dateData ?? []).map((r: any) => r.val_date).filter(Boolean))) as string[];
+      allDates.sort((a, b) => parseDate(b) - parseDate(a));
+      const valDate = allDates[0] ?? null;
 
       if (!valDate) {
         return {
