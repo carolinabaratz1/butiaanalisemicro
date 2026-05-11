@@ -26,14 +26,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
 
-type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Buy' | 'Hold' | 'Sell' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
   { key: 'Em Análise', label: 'Em Análise', color: 'text-status-info' },
   { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
-  { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
-  { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
+  { key: 'Buy', label: 'Buy', color: 'text-status-success' },
+  { key: 'Hold', label: 'Hold', color: 'text-status-warning' },
+  { key: 'Sell', label: 'Sell', color: 'text-status-danger' },
   { key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' },
   { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
