@@ -236,20 +236,19 @@ export function useTradeIntegration() {
   const helpers = useMemo(() => {
     const today = new Date();
 
-    function resolveAnalise(ticker: string): AnaliseRow | null {
+    function resolveAnalise(ticker: string, fallbackCnpj?: string | null): AnaliseRow | null {
       const info = maps.tickerInfo.get(ticker);
-      if (!info) return null;
       // First try by ISIN
-      const byIsin = info.isin ? maps.analiseByIsin.get(info.isin) : undefined;
+      const byIsin = info?.isin ? maps.analiseByIsin.get(info.isin) : undefined;
       if (byIsin) return byIsin;
-      // Fallback: by CNPJ do emissor (analises.empresa_id armazena CNPJ)
-      const key = maps.normCnpj(info.cnpj);
+      // Fallback: by CNPJ do emissor — usa o do mapping ou o passado pelo trade row
+      const key = maps.normCnpj(info?.cnpj ?? fallbackCnpj ?? null);
       if (!key) return null;
       return maps.analiseByCnpj.get(key) ?? null;
     }
 
-    function getStatus(ticker: string): AnaliseStatus | null {
-      const a = resolveAnalise(ticker);
+    function getStatus(ticker: string, fallbackCnpj?: string | null): AnaliseStatus | null {
+      const a = resolveAnalise(ticker, fallbackCnpj);
       if (!a) return null;
       const raw = (a.status as AnaliseStatus) ?? null;
       // Vencida: Buy/Hold há mais de 1 ano
