@@ -214,9 +214,13 @@ export default function DashboardPage() {
     .sort((a, b) => (a.data_inicio ?? "").localeCompare(b.data_inicio ?? ""))
     .slice(0, 5);
 
-  // Últimas aprovadas (5 mais recentes)
-  const ultimasAprovadas = [...aprovadas]
-    .sort((a, b) => (b.data_conclusao ?? "").localeCompare(a.data_conclusao ?? ""))
+  // Últimas análises deliberadas pelo Comitê (5 mais recentes por data_comite)
+  const ultimasAprovadas = [...deliberadas]
+    .sort((a, b) => {
+      const da = String((b as any).data_comite || b.data_conclusao || "");
+      const db = String((a as any).data_comite || a.data_conclusao || "");
+      return da.localeCompare(db);
+    })
     .slice(0, 5);
 
   // Alertas dinâmicos: vencidas com alocação (mais urgentes)
