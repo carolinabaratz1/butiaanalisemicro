@@ -18,7 +18,7 @@ export function UploadPanel() {
   const proc = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error('Selecione um arquivo');
-      return processUpload(file, user?.id ?? null);
+      return processUpload(file, currentUser?.id ?? null);
     },
     onSuccess: (r) => {
       setResult(r);
