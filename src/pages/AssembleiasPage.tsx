@@ -113,6 +113,8 @@ export default function AssembleiasPage() {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('Todos');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
+  const [filtroTriagem, setFiltroTriagem] = useState('Todas');
+  const [filtroOrigem, setFiltroOrigem] = useState('Todas');
   const [formOpen, setFormOpen] = useState(false);
   const [detalheEvento, setDetalhe] = useState(null as Assembleia | null);
   const [editando, setEditando] = useState(null as Assembleia | null);
