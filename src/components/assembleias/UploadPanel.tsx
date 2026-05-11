@@ -9,7 +9,7 @@ import { processUpload, type UploadResult } from '@/lib/assembleiasUpload';
 import { useAuth } from '@/contexts/AuthContext';
 
 export function UploadPanel() {
-  const { user } = useAuth();
+  const { currentUser } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
