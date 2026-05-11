@@ -246,13 +246,32 @@ export default function AssembleiasPage() {
 
   function removerDoc(i: number) { setForm(f => ({ ...f, documentos: f.documentos.filter((_, idx) => idx !== i) })); }
 
-  function handleSalvar() {
+  async function handleSalvar() {
     if (!form.tipo || !form.titulo || !form.data_evento) { toast({ title: 'Preencha tipo, título e data', variant: 'destructive' }); return; }
     if (usaIsin(form.tipo) && !form.isin) { toast({ title: 'Selecione a emissão (ISIN)', variant: 'destructive' }); return; }
     if (!usaIsin(form.tipo) && !form.cnpj_empresa) { toast({ title: 'Selecione a empresa', variant: 'destructive' }); return; }
+
+    // Triagem automática para evento manual: verifica se há posição em algum ISIN relacionado
+    let triagem: 'com_posicao' | 'sem_posicao' = 'sem_posicao';
+    let isinsVinculados: string[] = [];
+    try {
+      let candidateIsins: string[] = [];
+      if (usaIsin(form.tipo) && form.isin) candidateIsins = [form.isin];
+      else if (form.cnpj_empresa) {
+        const { data: ems } = await supabase.from('emissoes').select('isin').eq('cnpj_emissor', form.cnpj_empresa);
+        candidateIsins = (ems ?? []).map((e: any) => e.isin).filter(Boolean);
+      }
+      if (candidateIsins.length > 0) {
+        const { data: pos } = await supabase.from('posicoes').select('isin').in('isin', candidateIsins);
+        const comPos = [...new Set((pos ?? []).map((p: any) => p.isin).filter(Boolean))];
+        if (comPos.length > 0) { triagem = 'com_posicao'; isinsVinculados = comPos; }
+      }
+    } catch (err) { console.warn('[handleSalvar] triagem manual falhou', err); }
+
     upsert.mutate({
       tipo: form.tipo, cnpj_empresa: usaIsin(form.tipo) ? null : form.cnpj_empresa,
       isin: usaIsin(form.tipo) ? form.isin : null, titulo: form.titulo,
+      triagem, isins_vinculados: isinsVinculados,
       descricao: form.descricao || null, data_evento: format(form.data_evento, 'yyyy-MM-dd'),
       hora_evento: form.hora_evento || null,
       data_limite_voto: form.data_limite_voto ? format(form.data_limite_voto, 'yyyy-MM-dd') : null,
