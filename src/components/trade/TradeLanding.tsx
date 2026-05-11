@@ -1,7 +1,7 @@
 // src/components/trade/TradeLanding.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, Building2, Percent } from "lucide-react";
+import { TrendingUp, Building2, Percent, PieChart } from "lucide-react";
 import type { TradeMode } from "@/hooks/useTradeData";
 
 interface LandingStat {
@@ -12,6 +12,7 @@ interface LandingStat {
 
 interface TradeLandingProps {
   onSelect: (mode: TradeMode) => void;
+  onSelectAlocacao?: () => void;
   /** kept for API compatibility — not used (KPIs come from RPC) */
   diData?: unknown[];
   ipcaData?: unknown[];
@@ -75,7 +76,7 @@ const MODES: ModeDescriptor[] = [
   },
 ];
 
-export function TradeLanding({ onSelect }: TradeLandingProps) {
+export function TradeLanding({ onSelect, onSelectAlocacao }: TradeLandingProps) {
   const [stats, setStats] = useState<Record<TradeMode, LandingStat>>({
     DI_SPREAD: { count: 0, hot: 0, median: 0 },
     CDI_PCT:   { count: 0, hot: 0, median: 0 },
@@ -170,6 +171,25 @@ export function TradeLanding({ onSelect }: TradeLandingProps) {
             </button>
           );
         })}
+
+        {onSelectAlocacao && (
+          <button
+            onClick={onSelectAlocacao}
+            className="w-64 p-7 rounded-2xl border border-border bg-card text-left hover:border-primary hover:shadow-lg transition-all group"
+          >
+            <PieChart className="w-9 h-9 mb-4 text-emerald-400" />
+            <div className="text-xl font-extrabold mb-1 text-emerald-400">Alocação</div>
+            <p className="text-xs text-muted-foreground mb-5 leading-relaxed">
+              Enquadramento de limites por fundo, indexador, rating e emissor.
+            </p>
+            <div className="text-[11px] text-muted-foreground leading-relaxed">
+              Visão por fundo · Concentração por grupo econômico · Targets editáveis
+            </div>
+            <div className="mt-5 w-full py-2 rounded-lg bg-emerald-400 text-slate-900 text-xs font-bold text-center group-hover:brightness-110 transition-all">
+              Abrir Alocação →
+            </div>
+          </button>
+        )}
       </div>
     </div>
   );
