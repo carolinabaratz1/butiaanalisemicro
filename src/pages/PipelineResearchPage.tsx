@@ -654,11 +654,18 @@ export default function PipelineResearchPage() {
                                 {item.tipo}
                               </Badge>
                             )}
-                            {(item as any).recomendacao && (
-                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`}>
-                                {(item as any).recomendacao}
+                            {((item as any).recomendacao || (item as any).recomendacao_rf) && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao || (item as any).recomendacao_rf] || ''}`}>
+                                {(item as any).recomendacao || (item as any).recomendacao_rf}
                               </Badge>
                             )}
+                            {(item as any).link_analise ? (
+                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                                <LinkIcon className="h-3 w-3" />
+                              </a>
+                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Aprovada' || item.displayStatus === 'Reprovada' ? (
+                              <LinkIcon className="h-3 w-3 text-muted-foreground/40" />
+                            ) : null}
                             {posAtiva && (
                               <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
                                 ⚠️ Posição Ativa
