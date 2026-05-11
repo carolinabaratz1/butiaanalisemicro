@@ -119,6 +119,8 @@ export default function PipelineResearchPage() {
 
   // Entrega (conclusão) extra fields
   const [recomendacao, setRecomendacao] = useState('');
+  const [recomendacaoRf, setRecomendacaoRf] = useState('');
+  const [linkAnalise, setLinkAnalise] = useState('');
   const [precoMin, setPrecoMin] = useState('');
   const [precoMedio, setPrecoMedio] = useState('');
   const [precoMaximo, setPrecoMaximo] = useState('');
