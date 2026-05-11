@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink } from 'lucide-react';
 import { UploadPanel } from '@/components/assembleias/UploadPanel';
 import { ParticipacoesPanel } from '@/components/assembleias/ParticipacoesPanel';
@@ -82,7 +83,7 @@ const VOTO_CLS: Record<VotoButia, string> = {
 
 function emptyForm() {
   return {
-    tipo: '' as EventoTipo | '', cnpj_empresa: '', isin: '', titulo: '', descricao: '',
+    tipo: '' as EventoTipo | '', cnpj_empresa: '', isin: '', isins: [] as string[], titulo: '', descricao: '',
     data_evento: undefined as Date | undefined, hora_evento: '',
     data_limite_voto: undefined as Date | undefined,
     modalidade: '' as Modalidade | '', local_link: '', status: 'Agendado' as EventoStatus,
@@ -220,7 +221,8 @@ export default function AssembleiasPage() {
 
   function abrirEditar(ev: Assembleia) {
     setEditando(ev);
-    setForm({ tipo: ev.tipo, cnpj_empresa: ev.cnpj_empresa ?? '', isin: ev.isin ?? '', titulo: ev.titulo, descricao: ev.descricao ?? '',
+    const isinsIniciais = (ev.isins_vinculados && ev.isins_vinculados.length > 0) ? ev.isins_vinculados : (ev.isin ? [ev.isin] : []);
+    setForm({ tipo: ev.tipo, cnpj_empresa: ev.cnpj_empresa ?? '', isin: ev.isin ?? '', isins: isinsIniciais, titulo: ev.titulo, descricao: ev.descricao ?? '',
       data_evento: parseISO(ev.data_evento), hora_evento: ev.hora_evento ?? '',
       data_limite_voto: ev.data_limite_voto ? parseISO(ev.data_limite_voto) : undefined,
       modalidade: ev.modalidade ?? '', local_link: ev.local_link ?? '', status: ev.status,
@@ -235,7 +237,7 @@ export default function AssembleiasPage() {
   function set(field: string, value: unknown) { setForm(f => ({ ...f, [field]: value })); }
 
   function setTipo(v: EventoTipo) {
-    setForm(f => ({ ...f, tipo: v, cnpj_empresa: usaIsin(v) ? '' : f.cnpj_empresa, isin: usaIsin(v) ? f.isin : '' }));
+    setForm(f => ({ ...f, tipo: v, cnpj_empresa: usaIsin(v) ? '' : f.cnpj_empresa, isin: usaIsin(v) ? f.isin : '', isins: usaIsin(v) ? f.isins : [] }));
   }
 
   function adicionarDoc() {
@@ -248,15 +250,15 @@ export default function AssembleiasPage() {
 
   async function handleSalvar() {
     if (!form.tipo || !form.titulo || !form.data_evento) { toast({ title: 'Preencha tipo, título e data', variant: 'destructive' }); return; }
-    if (usaIsin(form.tipo) && !form.isin) { toast({ title: 'Selecione a emissão (ISIN)', variant: 'destructive' }); return; }
+    if (usaIsin(form.tipo) && form.isins.length === 0) { toast({ title: 'Selecione ao menos uma emissão (ISIN)', variant: 'destructive' }); return; }
     if (!usaIsin(form.tipo) && !form.cnpj_empresa) { toast({ title: 'Selecione a empresa', variant: 'destructive' }); return; }
 
-    // Triagem automática para evento manual: verifica se há posição em algum ISIN relacionado
+    // Triagem automática: se algum dos ISINs vinculados (manual ou derivados da empresa) tiver posição → com_posicao
     let triagem: 'com_posicao' | 'sem_posicao' = 'sem_posicao';
-    let isinsVinculados: string[] = [];
+    let isinsVinculados: string[] = usaIsin(form.tipo) ? [...form.isins] : [];
     try {
       let candidateIsins: string[] = [];
-      if (usaIsin(form.tipo) && form.isin) candidateIsins = [form.isin];
+      if (usaIsin(form.tipo)) candidateIsins = [...form.isins];
       else if (form.cnpj_empresa) {
         const { data: ems } = await supabase.from('emissoes').select('isin').eq('cnpj_emissor', form.cnpj_empresa);
         candidateIsins = (ems ?? []).map((e: any) => e.isin).filter(Boolean);
@@ -264,13 +266,17 @@ export default function AssembleiasPage() {
       if (candidateIsins.length > 0) {
         const { data: pos } = await supabase.from('posicoes').select('isin').in('isin', candidateIsins);
         const comPos = [...new Set((pos ?? []).map((p: any) => p.isin).filter(Boolean))];
-        if (comPos.length > 0) { triagem = 'com_posicao'; isinsVinculados = comPos; }
+        if (comPos.length > 0) {
+          triagem = 'com_posicao';
+          // Para tipos sem ISIN selecionável, derivamos isins_vinculados das posições; para AGDEB/etc, mantém a seleção manual
+          if (!usaIsin(form.tipo)) isinsVinculados = comPos;
+        }
       }
     } catch (err) { console.warn('[handleSalvar] triagem manual falhou', err); }
 
     upsert.mutate({
       tipo: form.tipo, cnpj_empresa: usaIsin(form.tipo) ? null : form.cnpj_empresa,
-      isin: usaIsin(form.tipo) ? form.isin : null, titulo: form.titulo,
+      isin: usaIsin(form.tipo) ? (form.isins[0] ?? null) : null, titulo: form.titulo,
       triagem, isins_vinculados: isinsVinculados,
       descricao: form.descricao || null, data_evento: format(form.data_evento, 'yyyy-MM-dd'),
       hora_evento: form.hora_evento || null,
@@ -479,11 +485,46 @@ export default function AssembleiasPage() {
               )}
               {form.tipo && usaIsin(form.tipo) && (
                 <div className="col-span-2">
-                  <Label className="text-xs mb-1.5 block">Emissão (ISIN) *</Label>
-                  <Select value={form.isin} onValueChange={v => set('isin', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione o ISIN..." /></SelectTrigger>
-                    <SelectContent>{emissoes.map((e: any) => <SelectItem key={e.isin} value={e.isin}>{e.isin}{e.ticker ? ' (' + e.ticker + ')' : ''} — {empresasMap.get(e.cnpj_emissor) ?? e.cnpj_emissor}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label className="text-xs mb-1.5 block">Emissão(ões) (ISIN) * <span className="text-muted-foreground font-normal">— pode selecionar múltiplas</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start font-normal h-auto min-h-10 py-2">
+                        {form.isins.length === 0 ? (
+                          <span className="text-muted-foreground">Selecione os ISINs...</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {form.isins.map(i => {
+                              const em = emissoes.find((e: any) => e.isin === i);
+                              return <Badge key={i} variant="secondary" className="font-mono text-[11px]">{i}{em?.ticker ? ' (' + em.ticker + ')' : ''}</Badge>;
+                            })}
+                          </div>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {emissoes.length === 0 && <p className="text-xs text-muted-foreground p-3">Nenhuma emissão cadastrada</p>}
+                        {emissoes.map((e: any) => {
+                          const checked = form.isins.includes(e.isin);
+                          return (
+                            <label key={e.isin} className="flex items-start gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer text-sm">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(v) => {
+                                  setForm(f => ({ ...f, isins: v ? [...f.isins, e.isin] : f.isins.filter(x => x !== e.isin) }));
+                                }}
+                                className="mt-0.5"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-mono text-xs">{e.isin}{e.ticker ? ' (' + e.ticker + ')' : ''}</div>
+                                <div className="text-xs text-muted-foreground truncate">{empresasMap.get(e.cnpj_emissor) ?? e.cnpj_emissor}</div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               )}
               <div>
