@@ -1263,14 +1263,29 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Comitê Modal (Aprovar / Reprovar) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComentarioReprovacao(''); }}>
+      {/* Comitê Modal (Buy / Hold / Sell) */}
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
-            <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
-            <DialogDescription>Informe a data do Comitê de Investimentos em que a decisão foi tomada.</DialogDescription>
+            <DialogTitle>Decisão do Comitê</DialogTitle>
+            <DialogDescription>
+              {comiteModal?.recoInicial
+                ? `Recomendação do analista: ${comiteModal.recoInicial}. Confirme ou altere a decisão.`
+                : 'Selecione a decisão final do Comitê.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Decisão (obrigatória)</Label>
+              <Select value={comiteDecisao} onValueChange={(v) => setComiteDecisao(v as 'Buy' | 'Hold' | 'Sell')}>
+                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="Buy">Buy</SelectItem>
+                  <SelectItem value="Hold">Hold</SelectItem>
+                  <SelectItem value="Sell">Sell</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label className="text-xs">Data do Comitê (obrigatória)</Label>
               <Popover>
@@ -1285,21 +1300,21 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            {comiteModal?.targetStatus === 'Reprovada' && (
+            {comiteDecisao === 'Sell' && (
               <div>
-                <Label className="text-xs">Motivo da Reprovação (obrigatório)</Label>
-                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovação..." />
+                <Label className="text-xs">Motivo (obrigatório)</Label>
+                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
               </div>
             )}
             <Button
               size="sm"
               className="w-full"
-              variant={comiteModal?.targetStatus === 'Aprovada' ? 'default' : 'destructive'}
+              variant={comiteDecisao === 'Sell' ? 'destructive' : 'default'}
               onClick={handleComite}
-              disabled={!dataComite || (comiteModal?.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) || updateStatus.isPending}
+              disabled={!dataComite || !comiteDecisao || (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) || updateStatus.isPending}
             >
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}
+              Confirmar {comiteDecisao || 'Decisão'}
             </Button>
           </div>
         </DialogContent>
