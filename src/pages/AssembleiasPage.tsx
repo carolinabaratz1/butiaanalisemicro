@@ -249,15 +249,15 @@ export default function AssembleiasPage() {
 
   async function handleSalvar() {
     if (!form.tipo || !form.titulo || !form.data_evento) { toast({ title: 'Preencha tipo, título e data', variant: 'destructive' }); return; }
-    if (usaIsin(form.tipo) && !form.isin) { toast({ title: 'Selecione a emissão (ISIN)', variant: 'destructive' }); return; }
+    if (usaIsin(form.tipo) && form.isins.length === 0) { toast({ title: 'Selecione ao menos uma emissão (ISIN)', variant: 'destructive' }); return; }
     if (!usaIsin(form.tipo) && !form.cnpj_empresa) { toast({ title: 'Selecione a empresa', variant: 'destructive' }); return; }
 
-    // Triagem automática para evento manual: verifica se há posição em algum ISIN relacionado
+    // Triagem automática: se algum dos ISINs vinculados (manual ou derivados da empresa) tiver posição → com_posicao
     let triagem: 'com_posicao' | 'sem_posicao' = 'sem_posicao';
-    let isinsVinculados: string[] = [];
+    let isinsVinculados: string[] = usaIsin(form.tipo) ? [...form.isins] : [];
     try {
       let candidateIsins: string[] = [];
-      if (usaIsin(form.tipo) && form.isin) candidateIsins = [form.isin];
+      if (usaIsin(form.tipo)) candidateIsins = [...form.isins];
       else if (form.cnpj_empresa) {
         const { data: ems } = await supabase.from('emissoes').select('isin').eq('cnpj_emissor', form.cnpj_empresa);
         candidateIsins = (ems ?? []).map((e: any) => e.isin).filter(Boolean);
@@ -265,13 +265,17 @@ export default function AssembleiasPage() {
       if (candidateIsins.length > 0) {
         const { data: pos } = await supabase.from('posicoes').select('isin').in('isin', candidateIsins);
         const comPos = [...new Set((pos ?? []).map((p: any) => p.isin).filter(Boolean))];
-        if (comPos.length > 0) { triagem = 'com_posicao'; isinsVinculados = comPos; }
+        if (comPos.length > 0) {
+          triagem = 'com_posicao';
+          // Para tipos sem ISIN selecionável, derivamos isins_vinculados das posições; para AGDEB/etc, mantém a seleção manual
+          if (!usaIsin(form.tipo)) isinsVinculados = comPos;
+        }
       }
     } catch (err) { console.warn('[handleSalvar] triagem manual falhou', err); }
 
     upsert.mutate({
       tipo: form.tipo, cnpj_empresa: usaIsin(form.tipo) ? null : form.cnpj_empresa,
-      isin: usaIsin(form.tipo) ? form.isin : null, titulo: form.titulo,
+      isin: usaIsin(form.tipo) ? (form.isins[0] ?? null) : null, titulo: form.titulo,
       triagem, isins_vinculados: isinsVinculados,
       descricao: form.descricao || null, data_evento: format(form.data_evento, 'yyyy-MM-dd'),
       hora_evento: form.hora_evento || null,
