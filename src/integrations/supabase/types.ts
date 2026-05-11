@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      allocation_limits: {
+        Row: {
+          categoria: string
+          created_at: string
+          fundo: string
+          id: string
+          limite_pct: number | null
+          subcategoria: string
+          updated_at: string
+        }
+        Insert: {
+          categoria: string
+          created_at?: string
+          fundo: string
+          id?: string
+          limite_pct?: number | null
+          subcategoria: string
+          updated_at?: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          fundo?: string
+          id?: string
+          limite_pct?: number | null
+          subcategoria?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      allocation_targets: {
+        Row: {
+          created_at: string
+          fundo: string
+          id: string
+          target_pct: number | null
+          tipo_ativo: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          fundo: string
+          id?: string
+          target_pct?: number | null
+          tipo_ativo: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          fundo?: string
+          id?: string
+          target_pct?: number | null
+          tipo_ativo?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       analises: {
         Row: {
           analista_responsavel: string

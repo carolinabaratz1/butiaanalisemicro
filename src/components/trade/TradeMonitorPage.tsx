@@ -12,6 +12,7 @@ import { TradeTable } from "./TradeTable";
 import { TradeDashboard } from "./TradeDashboard";
 import { TradeDetail } from "./TradeDetail";
 import { TradeLanding } from "./TradeLanding";
+import { AlocacaoPage } from "@/components/alocacao/AlocacaoPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +29,7 @@ type View = "dashboard" | "table";
 
 export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPageProps) {
   const [mode, setMode] = useState<TradeMode | null>(null);
+  const [showAlocacao, setShowAlocacao] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(initialTicker ?? null);
   const [selectedFund, setSelectedFund] = useState<string | null>(null);
@@ -48,11 +50,35 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
     return d;
   }, [data, emissorCnpj, selectedFund, integration]);
 
+  // ── Alocação view ────────────────────────────────────────
+  if (showAlocacao) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between gap-3 px-6 py-3 border-b bg-card flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-sm">Monitor de Trade</span>
+            <Badge variant="outline" className="cursor-pointer gap-1.5 font-mono text-xs border-emerald-400 text-emerald-400" onClick={() => setShowAlocacao(false)}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Alocação
+            </Badge>
+          </div>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => setShowAlocacao(false)}>
+            <ArrowLeftRight className="w-3.5 h-3.5" />Trocar
+          </Button>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <AlocacaoPage />
+        </div>
+      </div>
+    );
+  }
+
   // ── Landing ──────────────────────────────────────────────
   if (!mode) {
     return (
       <TradeLanding
         onSelect={(m) => { setMode(m); setSelectedTicker(null); }}
+        onSelectAlocacao={() => setShowAlocacao(true)}
         diData={[]}
         ipcaData={[]}
       />

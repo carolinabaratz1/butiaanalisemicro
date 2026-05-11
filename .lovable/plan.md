@@ -1,116 +1,72 @@
-## Integrar Trade Monitor com posições e análises
 
-Conectar o Trade Monitor às tabelas internas (`posicoes`, `emissoes`, `analises`, `empresas`) para que o usuário consiga:
-1. Filtrar o Dashboard por fundo das nossas posições
-2. Ver Status da análise e indicador de Posição Ativa na lista de emissões
-3. Ver, ao clicar numa emissão, a alocação de cada fundo naquela emissão
+# Módulo de Alocação de Carteira — aba "Alocação" no /trade
 
----
+## 1. Banco de dados (migração Supabase)
 
-### 1. Novo hook: `useTradeIntegration`
+Criar duas tabelas + seed:
 
-Criar `src/hooks/useTradeIntegration.ts` que carrega, em paralelo (TanStack Query), os dados internos necessários e expõe um `Map` por `ticker`:
+- **`allocation_limits`** — limites gerenciais por fundo. Campos: `fundo`, `categoria` (`tipo_ativo`|`indexador`|`rating`|`emissor`), `subcategoria`, `limite_pct` (NULL = sem limite). Unique(fundo,categoria,subcategoria). Seed com todos os valores das 4 tabelas do spec (TOP_CP, TOP_PREV, PLUS_CP_RF, Debentures_INFRA_RF).
+- **`allocation_targets`** — targets editáveis. Campos: `fundo`, `tipo_ativo`, `target_pct`, `updated_at`, `updated_by`. Unique(fundo,tipo_ativo).
+- **RLS:** SELECT para `authenticated`; INSERT/UPDATE/DELETE em `allocation_targets` apenas para `Gestor` e `Coordenação/Especialista` (uso em vez de `risco_compliance`, que não existe nos roles atuais — ver Pergunta 1). `allocation_limits` editável apenas por Gestor.
 
-- **Posições** mais recentes (`val_date` máxima): `isin → [{ fundo, amount, financial_price, val_date }]`
-- **Emissões**: `ticker → { isin, cnpj_emissor }` e `isin → ticker`
-- **Análises** mais recentes por `(empresa_cnpj, isin)`: `ticker → { status, recomendacao, data_conclusao, data_aprovacao, prazo, id }`
-  - Status efetivo derivado: se `status='Aprovada'` e `data_aprovacao + 1 ano < hoje` → `Vencida`. Caso contrário usa `status` da tabela.
-- Helpers retornados:
-  - `getStatus(ticker) → 'Aprovada' | 'Reprovada' | 'Pendente' | 'Em Análise' | 'Concluída' | 'Vencida' | null`
-  - `hasPosition(ticker) → boolean`
-  - `getAllocations(ticker) → Array<{ fundo, val_date, amount, financial_price, pct_fundo }>`
-  - `getFundsList() → string[]` lista distinta dos `trading_desk_share_source` na última `val_date`
-  - `getTickersByFund(fund) → Set<string>` tickers cujo ISIN tem posição naquele fundo
-
-Esse hook é consumido por `TradeMonitorPage`, `TradeTable`, `TradeDashboard` e `TradeDetail` via props (drilling) ou contexto leve interno do módulo Trade.
-
----
-
-### 2. `TradeMonitorPage` — filtro por fundo
-
-- Adicionar estado `selectedFund: string | null` no header.
-- Novo `<Select>` ao lado dos botões Dashboard/Emissões com:
-  - Opção "Todos os fundos" (default)
-  - Lista de fundos retornada por `getFundsList()`
-- `filteredData` passa a aplicar dois filtros: `emissorCnpj` (já existe) **e** `selectedFund` (`getTickersByFund(selectedFund).has(t.ticker)`).
-- Quando um fundo é selecionado, mostrar uma `Badge` "Fundo: {nome}" (clique remove filtro).
-- Como `data` filtrado alimenta tanto Dashboard quanto Tabela, **todos os KPIs, gráficos e médias do Dashboard recalculam automaticamente** restritos ao universo do fundo. Cobrindo o pedido "calcular todas as informações para o fundo".
-- Adicionar 1 KPI extra ao topo do Dashboard quando há fundo selecionado: **% PL alocado** (somatório `financial_price` desses tickers no fundo / total do fundo).
-
----
-
-### 3. `TradeTable` — coluna Status + indicador Posição Ativa
-
-Após a coluna **Rating** (linha 245):
-
-- **Coluna `Status`**: badge colorido com texto:
-  - `Aprovada` → verde, `Reprovada` → vermelho, `Pendente` → roxo, `Em Análise` → azul, `Concluída` → cinza-azulado, `Vencida` → âmbar, sem análise → traço
-- **Coluna `Posição`**: ícone de "ponto verde + texto Ativa" se `hasPosition(ticker)`, caso contrário traço. Tooltip mostra contagem de fundos com posição.
-- Adicionar 2 chips de filtro na sidebar:
-  - **Status** (multi-select dos 6 valores + "S/Análise")
-  - **Posição** (toggle "Apenas com posição ativa")
-
-Status e posição vêm via prop `integration` (do hook), evitando refetch.
-
----
-
-### 4. `TradeDetail` — tabela de alocação por fundo
-
-No corpo do painel, antes do bloco "Note" (linha 242):
-
-- Nova seção `Posições Ativas por Fundo`:
-  - Se `getAllocations(ticker)` for vazio → mensagem "Sem posição ativa nesta emissão" em texto pequeno.
-  - Se houver posições, renderizar uma `<table>` (estilo dos outros blocos do detail — `bg-muted border border-border`) com colunas:
+## 2. Estrutura de arquivos novos
 
 ```text
-Fundo | Data Pos. | Quantidade | Financeiro | % do Fundo
+src/components/alocacao/
+  AlocacaoPage.tsx          # container com tabs internas
+  FundLimitsPanel.tsx       # Sub-seção 1 (3 painéis colapsáveis)
+  IssuerExposurePanel.tsx   # Sub-seção 2 (grupo econômico)
+  TargetsPanel.tsx          # Sub-seção 3 (editável inline)
+  useAllocationData.ts      # hook que agrega posicoes + emissoes + empresas + limites
+  allocationUtils.ts        # mapeamento product_class→tipo_ativo, status, badges
 ```
 
-  - Linhas ordenadas por `financial_price` desc.
-  - Rodapé com **TOTAL** somando `amount` e `financial_price`.
+## 3. Integração no /trade
 
-- Acima dessa tabela, mostrar dois mini-metrics:
-  - **Fundos com posição**: contagem distinta
-  - **Total alocado**: soma de `financial_price` formatada em R$ M/K
+Atualmente `TradeMonitorPage` usa um landing (`mode = DI_SPREAD|CDI_PCT|IPCA`) e não tabs. Adicionar **4ª opção "Alocação"** no `TradeLanding` (e em `TradeMode`) que, quando selecionada, renderiza `<AlocacaoPage/>` em vez de Dashboard/Tabela. Header mostra badge "Alocação" e botão "Trocar". Não compartilha o seletor de fundo do header (a Alocação tem seu próprio seletor por sub-seção).
 
----
+## 4. Sub-seção 1 — Visão por Fundo
 
-### 5. Detalhes técnicos
+- Seletor de fundo (4 valores hardcoded). Estado compartilhado com Sub-seção 2 via context local na `AlocacaoPage`.
+- 3 painéis `<Collapsible>` (Tipo de Ativo, Indexador, Faixa de Rating).
+- Cada linha: Limite, Posição Atual (%), Headroom, Status badge.
+- **Cálculo da posição (%):** `sum(financial_price das posicoes do fundo no grupo) / sum(financial_price total do fundo)`. Filtro pela `val_date` mais recente disponível em `posicoes`.
+- **Mapeamento `product_class`/`product` → tipo_ativo** definido em `allocationUtils.ts` (heurística inicial: Debênture/NP→Corporativo; CDB/LF→Financeiro; FIDC Sr/Sub/NP via `product`; Cota de Fundo via `product_class`; Caixa via "Compromissada/Tit Pub"). Ver Pergunta 2.
+- **Indexador:** lookup via `trade_ativos.sub_indexador` cruzado pelo ticker da posição (via `emissoes.isin` → `emissoes.ticker` → `trade_ativos`).
+- **Rating:** `empresas.rating` (lookup por CNPJ via `emissoes`).
+- Status: 🔴 EXCEDIDO (>limite), 🟡 ALERTA (>80%), 🟢 OK, ⚪ SEM LIMITE / AGUARDANDO DADOS.
 
-**Queries (TanStack Query, todas com `staleTime: 5min`):**
+## 5. Sub-seção 2 — Enquadramento por Emissor / Grupo Econômico
 
-```ts
-// Posições da última val_date
-supabase.from('posicoes')
-  .select('isin, trading_desk_share_source, val_date, amount, financial_price')
-  .eq('val_date', latestValDate)
-  .not('isin','is',null);
+- Tabela ordenada por % do PL desc.
+- Agrupa posições por `empresas.grupo_economico` (fallback para `empresas.nome` se grupo for null). Ver Pergunta 3.
+- Colunas: Grupo, Emissores (lista de nomes), Rating (pior do grupo), Limite por Emissor (%), % do PL, Headroom, Status.
+- Limite vem de `allocation_limits` categoria `emissor` × pior rating do grupo × fundo.
+- Click no nome do emissor → `/empresas/{id}` (rota `EmpresaDetailPage`).
+- Estado vazio com mensagem do spec.
 
-// Emissões (mapping isin↔ticker)
-supabase.from('emissoes').select('ticker, isin, cnpj_emissor');
+## 6. Sub-seção 3 — Targets de Alocação
 
-// Última análise por empresa (por cnpj) + por isin
-supabase.from('analises')
-  .select('id, empresa_id, isin, status, recomendacao, data_conclusao, data_aprovacao, prazo, versao, created_at')
-  .order('versao',{ascending:false});
-```
+- Tabela com 1 linha por (fundo × tipo_ativo). Tipos de ativo derivados das chaves do `allocation_limits.categoria='tipo_ativo'`.
+- Coluna Target editável: `<Input>` inline; onBlur/Enter faz upsert em `allocation_targets`.
+- Botão "Salvar Todos" envia batch upsert.
+- Status DENTRO/ACIMA DO LIMITE (vermelho se Target > Limite Gerencial).
+- Permissão de edição: roles `Gestor` e `Coordenação/Especialista`. Demais → readonly + tooltip.
 
-A latest `val_date` é obtida via `select('val_date').order('val_date',{ascending:false}).limit(1)` e formato é `MM/DD/YYYY` (texto) — atenção ao usar `eq` com a string exata.
+## 7. Visual
 
-**Resolução status por ticker:**
-1. Buscar `emissoes` com aquele `ticker` → pega `isin` e `cnpj_emissor`.
-2. Procurar análise com mesmo `isin` (versão maior). Se não houver, fallback para análise da empresa (`empresa_id` = id da empresa cujo `cnpj` bate).
-3. Aplicar regra de "Vencida" descrita acima.
+- Mesmo design system (Shadcn + tokens). Badges via `variant` `destructive`/`secondary`/`outline` mais classes utilitárias para amarelo/verde já presentes no projeto.
+- Skeleton loaders durante fetch. Tabelas com `overflow-x-auto`.
 
-**% do fundo** = `financial_price` da posição ÷ `Σ financial_price` das posições daquele fundo na mesma `val_date`.
+## Detalhes técnicos
 
-**Componentes a editar/criar:**
-- novo `src/hooks/useTradeIntegration.ts`
-- `src/components/trade/TradeMonitorPage.tsx` — selector de fundo, filtro
-- `src/components/trade/TradeTable.tsx` — colunas Status + Posição, filtros
-- `src/components/trade/TradeDetail.tsx` — tabela de alocação
-- (opcional) `src/components/trade/TradeDashboard.tsx` — KPI extra "% PL alocado" quando há fundo
+- `useAllocationData(fundo)` retorna `{ posicaoTotal, agrupadoPorTipo, agrupadoPorIndexador, agrupadoPorRating, agrupadoPorGrupo, loading }` usando React Query com chave `['alocacao', fundo, valDate]`.
+- Identificação do "fundo" na tabela `posicoes`: usa `trading_desk_share_source`. Os valores reais precisam casar com TOP_CP / TOP_PREV / PLUS_CP_RF / Debentures_INFRA_RF — ver Pergunta 4.
+- Para sub-seção 1, o threshold 80% vem de constante exportada em `allocationUtils.ts`.
 
-**O que NÃO muda:**
-- Layout/estilo geral, modos DI/IPCA/CDI, lógica de Z-score e gráficos existentes.
-- Estrutura das tabelas Supabase (sem migration).
+## Perguntas a resolver antes de implementar
+
+1. Não existe role `risco_compliance` no projeto (roles atuais: `Gestor`, `Coordenação/Especialista`, `Analista`, `Consulta`). Posso usar `Gestor` + `Coordenação/Especialista` como editores dos targets?
+2. Confirmar mapeamento `product_class`/`product` → tipo_ativo (Corporativo, Financeiro, FIDC Sr, FIDC Sub, FIDC NP, Cotas, Caixa, Termo ≤60d, Termo >60d). Posso enviar a heurística e você ajusta depois, ou tem uma tabela de referência?
+3. O campo `grupo_economico` em `empresas` é nullable. Quando NULL, agrupar pelo próprio nome do emissor — ok?
+4. Quais valores exatos aparecem em `posicoes.trading_desk_share_source` para identificar TOP_CP, TOP_PREV, PLUS_CP_RF e Debentures_INFRA_RF? (Ou existe um mapeamento fundo→source que eu deva criar?)
