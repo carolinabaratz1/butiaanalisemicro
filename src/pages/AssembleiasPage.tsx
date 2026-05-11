@@ -20,12 +20,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2 } from 'lucide-react';
+import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink } from 'lucide-react';
+import { UploadPanel } from '@/components/assembleias/UploadPanel';
+import { ParticipacoesPanel } from '@/components/assembleias/ParticipacoesPanel';
 
-type EventoTipo = 'AGO' | 'AGE' | 'Reunião de Debenturistas' | 'Assembleia de Cotistas' | 'Fato Relevante';
+type EventoTipo = 'AGO' | 'AGE' | 'AGO/E' | 'AGDEB' | 'Reunião de Debenturistas' | 'Assembleia de Cotistas' | 'Fato Relevante';
 type EventoStatus = 'Agendado' | 'Realizado' | 'Cancelado' | 'Adiado';
 type VotoButia = 'A favor' | 'Contra' | 'Abstenção' | 'Não votou';
 type Modalidade = 'Presencial' | 'Híbrida' | 'Digital';
+type Triagem = 'com_posicao' | 'sem_posicao' | 'pendente_vinculo';
+type Origem = 'manual' | 'upload';
 interface Documento { nome: string; url: string; }
 interface Assembleia {
   id: string; created_at: string; updated_at: string;
@@ -36,19 +40,30 @@ interface Assembleia {
   voto_butia: VotoButia | null; justificativa_voto: string | null; resultado: string | null;
   quorum_atingido: boolean | null; observacoes: string | null; responsavel_id: string | null;
   documentos: Documento[];
+  ticker: string | null; url_b3: string | null; data_assembleia: string | null;
+  origem: Origem | null; cnpj_emissor: string | null; triagem: Triagem | null;
+  isins_vinculados: string[] | null;
 }
 
-const TIPOS: EventoTipo[] = ['AGO', 'AGE', 'Fato Relevante', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
-const TIPOS_EMPRESA: EventoTipo[] = ['AGO', 'AGE', 'Fato Relevante'];
-const TIPOS_ISIN: EventoTipo[] = ['Reunião de Debenturistas', 'Assembleia de Cotistas'];
-const TIPOS_COM_VOTO: EventoTipo[] = ['AGO', 'AGE', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'AGDEB', 'Fato Relevante', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS_EMPRESA: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'Fato Relevante'];
+const TIPOS_ISIN: EventoTipo[] = ['AGDEB', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS_COM_VOTO: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'AGDEB', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
 
-const TIPO_COLOR: Record<EventoTipo, string> = {
+const TIPO_COLOR: Record<string, string> = {
   AGO: 'bg-blue-500/15 text-blue-700 border-blue-400/30 dark:text-blue-300',
-  AGE: 'bg-blue-500/15 text-blue-700 border-blue-400/30 dark:text-blue-300',
+  AGE: 'bg-orange-500/15 text-orange-700 border-orange-400/30 dark:text-orange-300',
+  'AGO/E': 'bg-muted/50 text-muted-foreground border-border',
+  AGDEB: 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
   'Fato Relevante': 'bg-amber-500/15 text-amber-700 border-amber-400/30 dark:text-amber-300',
   'Reunião de Debenturistas': 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
   'Assembleia de Cotistas': 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
+};
+
+const TRIAGEM_CFG: Record<Triagem, { label: string; cls: string }> = {
+  com_posicao: { label: 'Com posição', cls: 'bg-status-success/15 text-status-success border-status-success/30' },
+  pendente_vinculo: { label: 'Pendente vínculo', cls: 'bg-status-warning/15 text-status-warning border-status-warning/30' },
+  sem_posicao: { label: 'Sem posição', cls: 'bg-muted/50 text-muted-foreground border-border' },
 };
 
 const STATUS_CFG: Record<EventoStatus, { label: string; cls: string; icon: React.ReactNode }> = {
