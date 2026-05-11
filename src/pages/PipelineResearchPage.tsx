@@ -717,17 +717,14 @@ export default function PipelineResearchPage() {
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsDown className="h-2.5 w-2.5" /> Reprovar
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                                  <ThumbsUp className="h-2.5 w-2.5" /> Comitê
                                 </Button>
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
                                 </Button>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReatribuirModal(item.id); setNovoAnalista(item.analista_responsavel); }}>
@@ -735,7 +732,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Sell' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
