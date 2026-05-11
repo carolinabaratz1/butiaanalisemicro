@@ -59,16 +59,17 @@ const Z_WINDOWS = [
   { key: "z_score_5d",  label: "5d"  },
 ] as const;
 
-const STATUS_LIST: AnaliseStatus[] = ["Aprovada", "Em Análise", "Pendente", "Concluída", "Reprovada", "Vencida"];
+const STATUS_LIST: AnaliseStatus[] = ["Buy", "Hold", "Sell", "Em Análise", "Pendente", "Concluída", "Vencida"];
 
 function statusBadge(s: AnaliseStatus | null) {
   if (!s) return <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border text-muted-foreground bg-transparent">—</span>;
   const cls: Record<AnaliseStatus, string> = {
-    "Aprovada":   "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400",
+    "Buy":        "border-emerald-600 text-emerald-700 dark:border-emerald-500 dark:text-emerald-400",
+    "Hold":       "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400",
+    "Sell":       "border-rose-600 text-rose-700 dark:border-rose-500 dark:text-rose-400",
     "Em Análise": "border-sky-600 text-sky-700 dark:border-sky-500 dark:text-sky-400",
     "Pendente":   "border-violet-600 text-violet-700 dark:border-violet-500 dark:text-violet-400",
     "Concluída":  "border-slate-500 text-slate-600 dark:border-slate-400 dark:text-slate-300",
-    "Reprovada":  "border-rose-600 text-rose-700 dark:border-rose-500 dark:text-rose-400",
     "Vencida":    "border-amber-600 text-amber-700 dark:border-amber-500 dark:text-amber-400",
   };
   return <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border bg-transparent whitespace-nowrap ${cls[s]}`}>{s}</span>;
