@@ -636,6 +636,15 @@ export default function AssembleiasPage() {
                     </div>
                   </div>
                 )}
+                <Separator />
+                {ev.url_b3 && <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Abrir notícia na B3</a>}
+                <ParticipacoesPanel
+                  assembleiaId={ev.id}
+                  cnpjEmissor={ev.cnpj_emissor ?? ev.cnpj_empresa}
+                  tipo={ev.tipo}
+                  isinsVinculados={ev.isins_vinculados ?? []}
+                  canWrite={canWrite}
+                />
               </div>
               <DialogFooter>
                 {canWrite && <Button variant="outline" size="sm" onClick={() => abrirEditar(ev)}><Pencil className="h-3.5 w-3.5 mr-1.5" /> Editar</Button>}
