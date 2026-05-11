@@ -369,44 +369,42 @@ export default function AssembleiasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[105px]">Data</TableHead>
-                  <TableHead className="w-[170px]">Tipo</TableHead>
-                  <TableHead>Título</TableHead>
-                  <TableHead className="w-[160px]">Empresa / Emissão</TableHead>
-                  <TableHead className="w-[108px]">Status</TableHead>
-                  <TableHead className="w-[96px]">Voto Butia</TableHead>
-                  <TableHead className="w-[56px]">Docs</TableHead>
+                  <TableHead className="w-[100px]">Data</TableHead>
+                  <TableHead className="w-[90px]">Tipo</TableHead>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead className="w-[80px]">Ticker</TableHead>
+                  <TableHead className="w-[130px]">Triagem</TableHead>
+                  <TableHead className="w-[96px]">Voto Butiá</TableHead>
+                  <TableHead className="w-[60px]">B3</TableHead>
                   <TableHead className="w-[36px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtrados.map(ev => {
                   const urg = urgencyBadge(ev.data_evento, ev.status);
-                  const scfg = STATUS_CFG[ev.status];
-                  const nDocs = (ev.documentos ?? []).length;
+                  const tri = ev.triagem ?? 'sem_posicao';
+                  const triCfg = TRIAGEM_CFG[tri];
+                  const empresaNome = ev.cnpj_empresa ? (empresasMap.get(ev.cnpj_empresa) ?? ev.titulo) : ev.titulo;
+                  const nParts = participacoesCount[ev.id] ?? 0;
                   return (
                     <TableRow key={ev.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setDetalhe(ev)}>
                       <TableCell className="text-sm py-2.5">
                         <div className="font-medium tabular-nums">{format(parseISO(ev.data_evento), 'dd/MM/yyyy')}</div>
                         {urg && <div className={cn('text-[11px]', urg.cls)}>{urg.label}</div>}
-                        {ev.hora_evento && <div className="text-[11px] text-muted-foreground">{ev.hora_evento.slice(0,5)}</div>}
                       </TableCell>
                       <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px]', TIPO_COLOR[ev.tipo])}>{ev.tipo}</Badge></TableCell>
-                      <TableCell className="py-2.5"><div className="text-sm font-medium leading-snug">{ev.titulo}</div></TableCell>
                       <TableCell className="py-2.5">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          {ev.cnpj_empresa ? <><Building2 className="h-3 w-3 shrink-0" /><span className="truncate">{empresasMap.get(ev.cnpj_empresa) ?? ev.cnpj_empresa}</span></>
-                            : <><FileText className="h-3 w-3 shrink-0" /><span className="truncate">{vinculoLabel(ev)}</span></>}
-                        </div>
+                        <div className="text-sm font-medium leading-snug truncate">{empresaNome}</div>
                       </TableCell>
-                      <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px] flex items-center gap-1 w-fit', scfg.cls)}>{scfg.icon}{scfg.label}</Badge></TableCell>
+                      <TableCell className="py-2.5 text-xs font-mono text-muted-foreground">{ev.ticker ?? '—'}</TableCell>
+                      <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px]', triCfg.cls)}>{triCfg.label}</Badge></TableCell>
                       <TableCell className="py-2.5">
-                        {ev.voto_butia ? <Badge variant="outline" className={cn('text-[10px]', VOTO_CLS[ev.voto_butia])}>{ev.voto_butia}</Badge>
-                          : temVoto(ev.tipo) && ev.status === 'Agendado' ? <span className="text-[11px] text-muted-foreground italic">pendente</span>
+                        {nParts > 0 ? <Badge variant="outline" className="text-[10px] bg-status-success/15 text-status-success border-status-success/30">{nParts} voto{nParts > 1 ? 's' : ''}</Badge>
+                          : ev.voto_butia ? <Badge variant="outline" className={cn('text-[10px]', VOTO_CLS[ev.voto_butia])}>{ev.voto_butia}</Badge>
                           : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
-                      <TableCell className="py-2.5">
-                        {nDocs > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><FileText className="h-3 w-3" />{nDocs}</span> : <span className="text-muted-foreground text-xs">—</span>}
+                      <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
+                        {ev.url_b3 ? <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-primary inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a> : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
                         {canWrite && (
