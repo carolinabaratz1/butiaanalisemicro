@@ -174,23 +174,29 @@ export default function AssembleiasPage() {
   const filtrados = useMemo(() => eventos.filter(ev => {
     if (filtroStatus !== 'Todos' && ev.status !== filtroStatus) return false;
     if (filtroTipo !== 'Todos' && ev.tipo !== filtroTipo) return false;
+    if (filtroTriagem !== 'Todas' && (ev.triagem ?? 'sem_posicao') !== filtroTriagem) return false;
+    if (filtroOrigem !== 'Todas' && (ev.origem ?? 'manual') !== filtroOrigem) return false;
     if (busca) {
       const b = busca.toLowerCase();
-      if (!ev.titulo.toLowerCase().includes(b) && !vinculoLabel(ev).toLowerCase().includes(b) && !ev.tipo.toLowerCase().includes(b)) return false;
+      if (!ev.titulo.toLowerCase().includes(b) && !vinculoLabel(ev).toLowerCase().includes(b) && !ev.tipo.toLowerCase().includes(b) && !(ev.ticker ?? '').toLowerCase().includes(b)) return false;
     }
     return true;
-  }), [eventos, filtroStatus, filtroTipo, busca, empresasMap, emissoes]);
+  }), [eventos, filtroStatus, filtroTipo, filtroTriagem, filtroOrigem, busca, empresasMap, emissoes]);
 
   const alertas = useMemo(() =>
-    eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 30; })
+    eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 30 && (e.triagem === 'com_posicao' || e.triagem === 'pendente_vinculo' || e.origem === 'manual' || !e.origem); })
       .sort((a, b) => a.data_evento.localeCompare(b.data_evento)).slice(0, 6), [eventos]);
 
-  const kpis = useMemo(() => ({
-    agendados:  eventos.filter(e => e.status === 'Agendado').length,
-    semana:     eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 7; }).length,
-    realizados: eventos.filter(e => e.status === 'Realizado').length,
-    semVoto:    eventos.filter(e => temVoto(e.tipo) && e.status === 'Agendado' && !e.voto_butia).length,
-  }), [eventos]);
+  const kpis = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const inScope = (e: Assembleia) => e.triagem === 'com_posicao' || e.triagem === 'pendente_vinculo' || !e.origem || e.origem === 'manual';
+    return {
+      agendados:  eventos.filter(e => { const d = parseISO(e.data_evento); return d >= today && inScope(e); }).length,
+      semana:     eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), today); return d >= 0 && d <= 7 && inScope(e); }).length,
+      realizados: eventos.filter(e => { const d = parseISO(e.data_evento); return d < today && (participacoesCount[e.id] ?? 0) > 0; }).length,
+      semVoto:    eventos.filter(e => { const d = parseISO(e.data_evento); return d < today && inScope(e) && (participacoesCount[e.id] ?? 0) === 0; }).length,
+    };
+  }, [eventos, participacoesCount]);
 
   const upsert = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
