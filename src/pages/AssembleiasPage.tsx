@@ -146,6 +146,16 @@ export default function AssembleiasPage() {
     queryFn: async () => { const { data } = await supabase.from('profiles_public').select('id, nome').order('nome'); return data ?? []; },
   });
 
+  const { data: participacoesCount = {} as Record<string, number> } = useQuery({
+    queryKey: ['participacoes-count'],
+    queryFn: async () => {
+      const { data } = await supabase.from('assembleia_participacoes' as any).select('assembleia_id');
+      const map: Record<string, number> = {};
+      ((data ?? []) as Array<{ assembleia_id: string }>).forEach(r => { map[r.assembleia_id] = (map[r.assembleia_id] ?? 0) + 1; });
+      return map;
+    },
+  });
+
   const empresasMap = useMemo(() => new Map(empresas.map((e: any) => [e.cnpj, e.nome])), [empresas]);
   const nomePerfil = (id: string | null) => id ? (profiles.find((p: any) => p.id === id)?.nome ?? id) : '—';
 
