@@ -75,6 +75,15 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
     onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
   });
 
+  const marcarSemPosicao = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('assembleias' as any).update({ isins_vinculados: [], triagem: 'sem_posicao' }).eq('id', assembleiaId);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['assembleias'] }); toast({ title: 'Marcada como sem posição' }); },
+    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+  });
+
   const adicionar = useMutation({
     mutationFn: async () => {
       if (!novo.fundo || !novo.voto) throw new Error('Selecione fundo e voto');
@@ -126,10 +135,16 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
                 </label>
               ))}
               {canWrite && (
-                <Button size="sm" variant="outline" className="self-start mt-1" onClick={() => salvarVinculos.mutate(vinculos)} disabled={salvarVinculos.isPending}>
-                  {salvarVinculos.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-                  Salvar vínculos
-                </Button>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <Button size="sm" variant="outline" onClick={() => salvarVinculos.mutate(vinculos)} disabled={salvarVinculos.isPending}>
+                    {salvarVinculos.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+                    Salvar vínculos
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => marcarSemPosicao.mutate()} disabled={marcarSemPosicao.isPending}>
+                    {marcarSemPosicao.isPending && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+                    Marcar como sem posição
+                  </Button>
+                </div>
               )}
               {vinculos.length === 0 && (
                 <Badge variant="outline" className="self-start text-[10px] mt-1 bg-status-warning/15 text-status-warning border-status-warning/30">Pendente vinculação</Badge>
