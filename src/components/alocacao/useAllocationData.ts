@@ -125,7 +125,7 @@ export function useAllocationData(fundo: FundoKey) {
       const tickerToSub = new Map(tradeAtivos.map(t => [t.ticker, t.sub_indexador]));
       const cnpjToEmpresa = new Map(empresas.map(e => [e.cnpj, e]));
 
-      const totalFundo = positions.reduce((s, p) => s + (Number(p.financial_price) || 0), 0);
+      const totalFundo = positions.reduce((s, p) => s + p.posicao_rs, 0);
 
       const porTipo = new Map<string, AggBucket>();
       const porIndexador = new Map<string, AggBucket>();
@@ -139,7 +139,7 @@ export function useAllocationData(fundo: FundoKey) {
       };
 
       for (const p of positions) {
-        const fin = Number(p.financial_price) || 0;
+        const fin = p.posicao_rs;
         const tipo = tipoAtivoFromProduct(p.product, p.product_class);
         addTo(porTipo, tipo, fin);
 
