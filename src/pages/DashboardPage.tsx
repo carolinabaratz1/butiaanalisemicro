@@ -19,10 +19,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
-    Aprovada: "bg-status-success/15 text-status-success border-status-success/30",
+    Buy: "bg-status-success/15 text-status-success border-status-success/30",
+    Hold: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+    Sell: "bg-status-danger/15 text-status-danger border-status-danger/30",
     "Em Análise": "bg-status-info/15 text-status-info border-status-info/30",
     Pendente: "bg-status-warning/15 text-status-warning border-status-warning/30",
-    Reprovada: "bg-status-danger/15 text-status-danger border-status-danger/30",
     Concluída: "bg-muted/50 text-muted-foreground border-border",
   };
   return (
