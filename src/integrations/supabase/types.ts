@@ -119,10 +119,95 @@ export type Database = {
         }
         Relationships: []
       }
+      assembleia_participacoes: {
+        Row: {
+          assembleia_id: string
+          created_at: string
+          created_by: string | null
+          fundo: string
+          id: string
+          isin: string | null
+          observacoes: string | null
+          representante: string | null
+          voto: string | null
+        }
+        Insert: {
+          assembleia_id: string
+          created_at?: string
+          created_by?: string | null
+          fundo: string
+          id?: string
+          isin?: string | null
+          observacoes?: string | null
+          representante?: string | null
+          voto?: string | null
+        }
+        Update: {
+          assembleia_id?: string
+          created_at?: string
+          created_by?: string | null
+          fundo?: string
+          id?: string
+          isin?: string | null
+          observacoes?: string | null
+          representante?: string | null
+          voto?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assembleia_participacoes_assembleia_id_fkey"
+            columns: ["assembleia_id"]
+            isOneToOne: false
+            referencedRelation: "assembleias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assembleia_upload_log: {
+        Row: {
+          com_posicao: number | null
+          duplicadas: number | null
+          filename: string | null
+          id: string
+          novas: number | null
+          pendente_vinculo: number | null
+          sem_posicao: number | null
+          total_linhas: number | null
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          com_posicao?: number | null
+          duplicadas?: number | null
+          filename?: string | null
+          id?: string
+          novas?: number | null
+          pendente_vinculo?: number | null
+          sem_posicao?: number | null
+          total_linhas?: number | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          com_posicao?: number | null
+          duplicadas?: number | null
+          filename?: string | null
+          id?: string
+          novas?: number | null
+          pendente_vinculo?: number | null
+          sem_posicao?: number | null
+          total_linhas?: number | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       assembleias: {
         Row: {
+          cnpj_emissor: string | null
           cnpj_empresa: string | null
           created_at: string
+          data_assembleia: string | null
           data_evento: string
           data_limite_voto: string | null
           descricao: string | null
@@ -130,22 +215,29 @@ export type Database = {
           hora_evento: string | null
           id: string
           isin: string | null
+          isins_vinculados: string[] | null
           justificativa_voto: string | null
           local_link: string | null
           modalidade: string | null
           observacoes: string | null
+          origem: string | null
           quorum_atingido: boolean | null
           responsavel_id: string | null
           resultado: string | null
           status: string
+          ticker: string | null
           tipo: string
           titulo: string
+          triagem: string | null
           updated_at: string
+          url_b3: string | null
           voto_butia: string | null
         }
         Insert: {
+          cnpj_emissor?: string | null
           cnpj_empresa?: string | null
           created_at?: string
+          data_assembleia?: string | null
           data_evento: string
           data_limite_voto?: string | null
           descricao?: string | null
@@ -153,22 +245,29 @@ export type Database = {
           hora_evento?: string | null
           id?: string
           isin?: string | null
+          isins_vinculados?: string[] | null
           justificativa_voto?: string | null
           local_link?: string | null
           modalidade?: string | null
           observacoes?: string | null
+          origem?: string | null
           quorum_atingido?: boolean | null
           responsavel_id?: string | null
           resultado?: string | null
           status?: string
+          ticker?: string | null
           tipo: string
           titulo: string
+          triagem?: string | null
           updated_at?: string
+          url_b3?: string | null
           voto_butia?: string | null
         }
         Update: {
+          cnpj_emissor?: string | null
           cnpj_empresa?: string | null
           created_at?: string
+          data_assembleia?: string | null
           data_evento?: string
           data_limite_voto?: string | null
           descricao?: string | null
@@ -176,17 +275,22 @@ export type Database = {
           hora_evento?: string | null
           id?: string
           isin?: string | null
+          isins_vinculados?: string[] | null
           justificativa_voto?: string | null
           local_link?: string | null
           modalidade?: string | null
           observacoes?: string | null
+          origem?: string | null
           quorum_atingido?: boolean | null
           responsavel_id?: string | null
           resultado?: string | null
           status?: string
+          ticker?: string | null
           tipo?: string
           titulo?: string
+          triagem?: string | null
           updated_at?: string
+          url_b3?: string | null
           voto_butia?: string | null
         }
         Relationships: [

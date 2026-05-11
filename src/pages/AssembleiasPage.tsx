@@ -20,12 +20,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2 } from 'lucide-react';
+import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink } from 'lucide-react';
+import { UploadPanel } from '@/components/assembleias/UploadPanel';
+import { ParticipacoesPanel } from '@/components/assembleias/ParticipacoesPanel';
 
-type EventoTipo = 'AGO' | 'AGE' | 'Reunião de Debenturistas' | 'Assembleia de Cotistas' | 'Fato Relevante';
+type EventoTipo = 'AGO' | 'AGE' | 'AGO/E' | 'AGDEB' | 'Reunião de Debenturistas' | 'Assembleia de Cotistas' | 'Fato Relevante';
 type EventoStatus = 'Agendado' | 'Realizado' | 'Cancelado' | 'Adiado';
 type VotoButia = 'A favor' | 'Contra' | 'Abstenção' | 'Não votou';
 type Modalidade = 'Presencial' | 'Híbrida' | 'Digital';
+type Triagem = 'com_posicao' | 'sem_posicao' | 'pendente_vinculo';
+type Origem = 'manual' | 'upload';
 interface Documento { nome: string; url: string; }
 interface Assembleia {
   id: string; created_at: string; updated_at: string;
@@ -36,19 +40,30 @@ interface Assembleia {
   voto_butia: VotoButia | null; justificativa_voto: string | null; resultado: string | null;
   quorum_atingido: boolean | null; observacoes: string | null; responsavel_id: string | null;
   documentos: Documento[];
+  ticker: string | null; url_b3: string | null; data_assembleia: string | null;
+  origem: Origem | null; cnpj_emissor: string | null; triagem: Triagem | null;
+  isins_vinculados: string[] | null;
 }
 
-const TIPOS: EventoTipo[] = ['AGO', 'AGE', 'Fato Relevante', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
-const TIPOS_EMPRESA: EventoTipo[] = ['AGO', 'AGE', 'Fato Relevante'];
-const TIPOS_ISIN: EventoTipo[] = ['Reunião de Debenturistas', 'Assembleia de Cotistas'];
-const TIPOS_COM_VOTO: EventoTipo[] = ['AGO', 'AGE', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'AGDEB', 'Fato Relevante', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS_EMPRESA: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'Fato Relevante'];
+const TIPOS_ISIN: EventoTipo[] = ['AGDEB', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
+const TIPOS_COM_VOTO: EventoTipo[] = ['AGO', 'AGE', 'AGO/E', 'AGDEB', 'Reunião de Debenturistas', 'Assembleia de Cotistas'];
 
-const TIPO_COLOR: Record<EventoTipo, string> = {
+const TIPO_COLOR: Record<string, string> = {
   AGO: 'bg-blue-500/15 text-blue-700 border-blue-400/30 dark:text-blue-300',
-  AGE: 'bg-blue-500/15 text-blue-700 border-blue-400/30 dark:text-blue-300',
+  AGE: 'bg-orange-500/15 text-orange-700 border-orange-400/30 dark:text-orange-300',
+  'AGO/E': 'bg-muted/50 text-muted-foreground border-border',
+  AGDEB: 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
   'Fato Relevante': 'bg-amber-500/15 text-amber-700 border-amber-400/30 dark:text-amber-300',
   'Reunião de Debenturistas': 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
   'Assembleia de Cotistas': 'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-300',
+};
+
+const TRIAGEM_CFG: Record<Triagem, { label: string; cls: string }> = {
+  com_posicao: { label: 'Com posição', cls: 'bg-status-success/15 text-status-success border-status-success/30' },
+  pendente_vinculo: { label: 'Pendente vínculo', cls: 'bg-status-warning/15 text-status-warning border-status-warning/30' },
+  sem_posicao: { label: 'Sem posição', cls: 'bg-muted/50 text-muted-foreground border-border' },
 };
 
 const STATUS_CFG: Record<EventoStatus, { label: string; cls: string; icon: React.ReactNode }> = {
@@ -98,6 +113,8 @@ export default function AssembleiasPage() {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('Todos');
   const [filtroTipo, setFiltroTipo] = useState('Todos');
+  const [filtroTriagem, setFiltroTriagem] = useState('Todas');
+  const [filtroOrigem, setFiltroOrigem] = useState('Todas');
   const [formOpen, setFormOpen] = useState(false);
   const [detalheEvento, setDetalhe] = useState(null as Assembleia | null);
   const [editando, setEditando] = useState(null as Assembleia | null);
@@ -129,6 +146,16 @@ export default function AssembleiasPage() {
     queryFn: async () => { const { data } = await supabase.from('profiles_public').select('id, nome').order('nome'); return data ?? []; },
   });
 
+  const { data: participacoesCount = {} as Record<string, number> } = useQuery({
+    queryKey: ['participacoes-count'],
+    queryFn: async () => {
+      const { data } = await supabase.from('assembleia_participacoes' as any).select('assembleia_id');
+      const map: Record<string, number> = {};
+      ((data ?? []) as unknown as Array<{ assembleia_id: string }>).forEach(r => { map[r.assembleia_id] = (map[r.assembleia_id] ?? 0) + 1; });
+      return map;
+    },
+  });
+
   const empresasMap = useMemo(() => new Map(empresas.map((e: any) => [e.cnpj, e.nome])), [empresas]);
   const nomePerfil = (id: string | null) => id ? (profiles.find((p: any) => p.id === id)?.nome ?? id) : '—';
 
@@ -147,23 +174,29 @@ export default function AssembleiasPage() {
   const filtrados = useMemo(() => eventos.filter(ev => {
     if (filtroStatus !== 'Todos' && ev.status !== filtroStatus) return false;
     if (filtroTipo !== 'Todos' && ev.tipo !== filtroTipo) return false;
+    if (filtroTriagem !== 'Todas' && (ev.triagem ?? 'sem_posicao') !== filtroTriagem) return false;
+    if (filtroOrigem !== 'Todas' && (ev.origem ?? 'manual') !== filtroOrigem) return false;
     if (busca) {
       const b = busca.toLowerCase();
-      if (!ev.titulo.toLowerCase().includes(b) && !vinculoLabel(ev).toLowerCase().includes(b) && !ev.tipo.toLowerCase().includes(b)) return false;
+      if (!ev.titulo.toLowerCase().includes(b) && !vinculoLabel(ev).toLowerCase().includes(b) && !ev.tipo.toLowerCase().includes(b) && !(ev.ticker ?? '').toLowerCase().includes(b)) return false;
     }
     return true;
-  }), [eventos, filtroStatus, filtroTipo, busca, empresasMap, emissoes]);
+  }), [eventos, filtroStatus, filtroTipo, filtroTriagem, filtroOrigem, busca, empresasMap, emissoes]);
 
   const alertas = useMemo(() =>
-    eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 30; })
+    eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 30 && (e.triagem === 'com_posicao' || e.triagem === 'pendente_vinculo' || e.origem === 'manual' || !e.origem); })
       .sort((a, b) => a.data_evento.localeCompare(b.data_evento)).slice(0, 6), [eventos]);
 
-  const kpis = useMemo(() => ({
-    agendados:  eventos.filter(e => e.status === 'Agendado').length,
-    semana:     eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 7; }).length,
-    realizados: eventos.filter(e => e.status === 'Realizado').length,
-    semVoto:    eventos.filter(e => temVoto(e.tipo) && e.status === 'Agendado' && !e.voto_butia).length,
-  }), [eventos]);
+  const kpis = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const inScope = (e: Assembleia) => e.triagem === 'com_posicao' || e.triagem === 'pendente_vinculo' || !e.origem || e.origem === 'manual';
+    return {
+      agendados:  eventos.filter(e => { const d = parseISO(e.data_evento); return d >= today && inScope(e); }).length,
+      semana:     eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), today); return d >= 0 && d <= 7 && inScope(e); }).length,
+      realizados: eventos.filter(e => { const d = parseISO(e.data_evento); return d < today && (participacoesCount[e.id] ?? 0) > 0; }).length,
+      semVoto:    eventos.filter(e => { const d = parseISO(e.data_evento); return d < today && inScope(e) && (participacoesCount[e.id] ?? 0) === 0; }).length,
+    };
+  }, [eventos, participacoesCount]);
 
   const upsert = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -283,16 +316,35 @@ export default function AssembleiasPage() {
         </Card>
       )}
 
+      {canWrite && <UploadPanel />}
+
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-sm" placeholder="Buscar por título, empresa ou ISIN..." value={busca} onChange={e => setBusca(e.target.value)} />
+          <Input className="pl-8 h-8 text-sm" placeholder="Buscar por título, ticker, empresa ou ISIN..." value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
         <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="h-8 text-sm w-48"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="Todos">Todos os tipos</SelectItem>
             {TIPOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroTriagem} onValueChange={setFiltroTriagem}>
+          <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Triagem" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todas">Todas as triagens</SelectItem>
+            <SelectItem value="com_posicao">Com posição</SelectItem>
+            <SelectItem value="pendente_vinculo">Pendente vínculo</SelectItem>
+            <SelectItem value="sem_posicao">Sem posição</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroOrigem} onValueChange={setFiltroOrigem}>
+          <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="Origem" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todas">Todas</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+            <SelectItem value="upload">Upload</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
@@ -317,44 +369,42 @@ export default function AssembleiasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[105px]">Data</TableHead>
-                  <TableHead className="w-[170px]">Tipo</TableHead>
-                  <TableHead>Título</TableHead>
-                  <TableHead className="w-[160px]">Empresa / Emissão</TableHead>
-                  <TableHead className="w-[108px]">Status</TableHead>
-                  <TableHead className="w-[96px]">Voto Butia</TableHead>
-                  <TableHead className="w-[56px]">Docs</TableHead>
+                  <TableHead className="w-[100px]">Data</TableHead>
+                  <TableHead className="w-[90px]">Tipo</TableHead>
+                  <TableHead>Empresa</TableHead>
+                  <TableHead className="w-[80px]">Ticker</TableHead>
+                  <TableHead className="w-[130px]">Triagem</TableHead>
+                  <TableHead className="w-[96px]">Voto Butiá</TableHead>
+                  <TableHead className="w-[60px]">B3</TableHead>
                   <TableHead className="w-[36px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtrados.map(ev => {
                   const urg = urgencyBadge(ev.data_evento, ev.status);
-                  const scfg = STATUS_CFG[ev.status];
-                  const nDocs = (ev.documentos ?? []).length;
+                  const tri = ev.triagem ?? 'sem_posicao';
+                  const triCfg = TRIAGEM_CFG[tri];
+                  const empresaNome = ev.cnpj_empresa ? (empresasMap.get(ev.cnpj_empresa) ?? ev.titulo) : ev.titulo;
+                  const nParts = participacoesCount[ev.id] ?? 0;
                   return (
                     <TableRow key={ev.id} className="cursor-pointer hover:bg-muted/30" onClick={() => setDetalhe(ev)}>
                       <TableCell className="text-sm py-2.5">
                         <div className="font-medium tabular-nums">{format(parseISO(ev.data_evento), 'dd/MM/yyyy')}</div>
                         {urg && <div className={cn('text-[11px]', urg.cls)}>{urg.label}</div>}
-                        {ev.hora_evento && <div className="text-[11px] text-muted-foreground">{ev.hora_evento.slice(0,5)}</div>}
                       </TableCell>
                       <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px]', TIPO_COLOR[ev.tipo])}>{ev.tipo}</Badge></TableCell>
-                      <TableCell className="py-2.5"><div className="text-sm font-medium leading-snug">{ev.titulo}</div></TableCell>
                       <TableCell className="py-2.5">
-                        <div className="text-xs text-muted-foreground flex items-center gap-1">
-                          {ev.cnpj_empresa ? <><Building2 className="h-3 w-3 shrink-0" /><span className="truncate">{empresasMap.get(ev.cnpj_empresa) ?? ev.cnpj_empresa}</span></>
-                            : <><FileText className="h-3 w-3 shrink-0" /><span className="truncate">{vinculoLabel(ev)}</span></>}
-                        </div>
+                        <div className="text-sm font-medium leading-snug truncate">{empresaNome}</div>
                       </TableCell>
-                      <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px] flex items-center gap-1 w-fit', scfg.cls)}>{scfg.icon}{scfg.label}</Badge></TableCell>
+                      <TableCell className="py-2.5 text-xs font-mono text-muted-foreground">{ev.ticker ?? '—'}</TableCell>
+                      <TableCell className="py-2.5"><Badge variant="outline" className={cn('text-[10px]', triCfg.cls)}>{triCfg.label}</Badge></TableCell>
                       <TableCell className="py-2.5">
-                        {ev.voto_butia ? <Badge variant="outline" className={cn('text-[10px]', VOTO_CLS[ev.voto_butia])}>{ev.voto_butia}</Badge>
-                          : temVoto(ev.tipo) && ev.status === 'Agendado' ? <span className="text-[11px] text-muted-foreground italic">pendente</span>
+                        {nParts > 0 ? <Badge variant="outline" className="text-[10px] bg-status-success/15 text-status-success border-status-success/30">{nParts} voto{nParts > 1 ? 's' : ''}</Badge>
+                          : ev.voto_butia ? <Badge variant="outline" className={cn('text-[10px]', VOTO_CLS[ev.voto_butia])}>{ev.voto_butia}</Badge>
                           : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
-                      <TableCell className="py-2.5">
-                        {nDocs > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><FileText className="h-3 w-3" />{nDocs}</span> : <span className="text-muted-foreground text-xs">—</span>}
+                      <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
+                        {ev.url_b3 ? <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-primary inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a> : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
                         {canWrite && (
@@ -586,6 +636,15 @@ export default function AssembleiasPage() {
                     </div>
                   </div>
                 )}
+                <Separator />
+                {ev.url_b3 && <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Abrir notícia na B3</a>}
+                <ParticipacoesPanel
+                  assembleiaId={ev.id}
+                  cnpjEmissor={ev.cnpj_emissor ?? ev.cnpj_empresa}
+                  tipo={ev.tipo}
+                  isinsVinculados={ev.isins_vinculados ?? []}
+                  canWrite={canWrite}
+                />
               </div>
               <DialogFooter>
                 {canWrite && <Button variant="outline" size="sm" onClick={() => abrirEditar(ev)}><Pencil className="h-3.5 w-3.5 mr-1.5" /> Editar</Button>}
