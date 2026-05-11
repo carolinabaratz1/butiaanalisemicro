@@ -1122,14 +1122,14 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Entregar Modal (Conclusão) */}
-      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
+      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
               {isAcoes
-                ? 'Preencha o relatório, recomendação e preços sugeridos para concluir.'
-                : 'Preencha o relatório para concluir a análise.'}
+                ? 'Preencha o relatório, link, recomendação e preços sugeridos para concluir.'
+                : 'Preencha o relatório, link e recomendação para concluir a análise.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1137,6 +1137,31 @@ export default function PipelineResearchPage() {
               <Label className="text-xs">Relatório (obrigatório)</Label>
               <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
             </div>
+            <div>
+              <Label className="text-xs">Link da Análise (obrigatório)</Label>
+              <Input
+                type="url"
+                value={linkAnalise}
+                onChange={e => setLinkAnalise(e.target.value)}
+                className="mt-1 h-8 text-sm bg-surface-1 border-border"
+                placeholder="https://..."
+                title="Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)</p>
+            </div>
+            {!isAcoes && (
+              <div>
+                <Label className="text-xs">Recomendação (obrigatório)</Label>
+                <Select value={recomendacaoRf} onValueChange={setRecomendacaoRf}>
+                  <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="Buy">Buy</SelectItem>
+                    <SelectItem value="Hold">Hold</SelectItem>
+                    <SelectItem value="Sell">Sell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {isAcoes && (
               <>
                 <div>
@@ -1180,7 +1205,7 @@ export default function PipelineResearchPage() {
                 </div>
               </>
             )}
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || (isAcoes && !recomendacao) || updateStatus.isPending}>
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (isAcoes && !recomendacao) || (!isAcoes && !recomendacaoRf) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
             </Button>
