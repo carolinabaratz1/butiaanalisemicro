@@ -48,11 +48,14 @@ function deriveTipo(empresaTipo?: string | null, setor?: string | null): Analise
 
 const STATUS_ENTREGUE = new Set([
   'Concluída',
-  'Aprovada',
-  'Reprovada',
+  'Buy',
+  'Hold',
+  'Sell',
   'Vencida c/ Alocação',
   'Vencida s/ Alocação',
 ]);
+
+const STATUS_DELIBERADO = new Set(['Buy', 'Hold', 'Sell']);
 
 function deriveStatusEntrega(
   dataEntregueEm: string | undefined,
@@ -143,7 +146,7 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     supabase
       .from('analises')
       .select('id,empresa_id,tipo,status,analista_responsavel,data_inicio,prazo,data_conclusao,versao')
-      .gte('data_inicio', isoInicio),
+      .or(`data_inicio.gte.${isoInicio},data_conclusao.gte.${isoInicio}`),
     supabase.from('empresas').select('cnpj,nome,tipo,setor'),
     supabase.from('profiles').select('id,nome'),
   ]);
@@ -205,8 +208,13 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     const dataEntrega = a.prazo ?? addDaysISO(dataInicio, SLA_META_DIAS_UTEIS + 2);
     const dataEntregueEm = STATUS_ENTREGUE.has(a.status) ? a.data_conclusao ?? undefined : undefined;
     const statusEntrega = deriveStatusEntrega(dataEntregueEm, dataEntrega, hoje);
-    const aprovadoPrimeiraRevisao = a.status === 'Aprovada';
-    const etapasKanban = buildEtapas(eventosByAnalise.get(a.id) ?? [], dataEntregueEm);
+    // Aprovado em 1ª revisão: deliberado pelo Comitê (Buy/Hold/Sell) sem ter sido devolvido para revisão
+    const eventos = eventosByAnalise.get(a.id) ?? [];
+    const foiDevolvida = eventos.some(
+      (e) => e.etapa_anterior === 'Concluída' && e.etapa_nova === 'Em Análise',
+    );
+    const aprovadoPrimeiraRevisao = STATUS_DELIBERADO.has(a.status) && !foiDevolvida;
+    const etapasKanban = buildEtapas(eventos, dataEntregueEm);
 
     return {
       id: a.id,

@@ -19,10 +19,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
-    Aprovada: "bg-status-success/15 text-status-success border-status-success/30",
+    Buy: "bg-status-success/15 text-status-success border-status-success/30",
+    Hold: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+    Sell: "bg-status-danger/15 text-status-danger border-status-danger/30",
     "Em Análise": "bg-status-info/15 text-status-info border-status-info/30",
     Pendente: "bg-status-warning/15 text-status-warning border-status-warning/30",
-    Reprovada: "bg-status-danger/15 text-status-danger border-status-danger/30",
     Concluída: "bg-muted/50 text-muted-foreground border-border",
   };
   return (
@@ -71,7 +72,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("analises")
-        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, decisao, conviccao");
+        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, data_comite, decisao, conviccao");
       return data ?? [];
     },
   });
@@ -127,9 +128,11 @@ export default function DashboardPage() {
 
   // Compute statuses (same logic as PipelineResearchPage)
   // FIDC analyses do not expire — they have continuous monitoring instead
+  const APROVADOS = new Set(["Buy", "Hold", "Sell"]);
   const computedAnalisesRaw = analises.map((a) => {
     let computedStatus = a.status;
-    if (a.status === "Aprovada" && a.data_conclusao) {
+    // Vencimento aplica-se a Buy/Hold (Sell = posição encerrada não expira)
+    if ((a.status === "Buy" || a.status === "Hold") && a.data_conclusao) {
       const tipoEmissor = empresaMap.get(a.empresa_id)?.tipo ?? null;
       if (tipoEmissor !== "FIDC") {
         const dt = new Date(a.data_conclusao.split("T")[0]);
@@ -142,8 +145,7 @@ export default function DashboardPage() {
     return { ...a, computedStatus };
   });
 
-  // Deduplicate by (empresa_id + tipo) keeping highest versao — mirrors PipelineResearchPage
-  // Exception: if latest is Reprovada, also include the previous Aprovada/Vencida version
+  // Deduplicate by (empresa_id + tipo) keeping highest versao
   const groupedDedup = new Map<string, typeof computedAnalisesRaw>();
   computedAnalisesRaw.forEach((a) => {
     const key = `${a.empresa_id}::${a.tipo}`;
@@ -158,50 +160,41 @@ export default function DashboardPage() {
       return;
     }
     items.sort((a, b) => ((b as any).versao || 1) - ((a as any).versao || 1));
-    const latest = items[0];
-    computedAnalises.push(latest);
-    if (latest.computedStatus === "Reprovada") {
-      const prev = items.find(
-        (i) =>
-          i.id !== latest.id &&
-          (i.computedStatus === "Aprovada" ||
-            i.computedStatus === "Vencida c/ Alocação" ||
-            i.computedStatus === "Vencida s/ Alocação"),
-      );
-      if (prev) computedAnalises.push(prev);
-    }
+    computedAnalises.push(items[0]);
   });
 
   const pendentes = computedAnalises.filter((a) => a.computedStatus === "Pendente");
   const emAnalise = computedAnalises.filter((a) => a.computedStatus === "Em Análise");
   const concluidas = computedAnalises.filter((a) => a.computedStatus === "Concluída");
-  const aprovadas = computedAnalises.filter((a) => a.computedStatus === "Aprovada");
-  const reprovadas = computedAnalises.filter((a) => a.computedStatus === "Reprovada");
+  const buys = computedAnalises.filter((a) => a.computedStatus === "Buy");
+  const holds = computedAnalises.filter((a) => a.computedStatus === "Hold");
+  const sells = computedAnalises.filter((a) => a.computedStatus === "Sell");
+  const deliberadas = computedAnalises.filter((a) => APROVADOS.has(a.computedStatus));
   const vencidasComAlocacao = computedAnalises.filter((a) => a.computedStatus === "Vencida c/ Alocação");
   const vencidasSemAlocacao = computedAnalises.filter((a) => a.computedStatus === "Vencida s/ Alocação");
 
   // KPIs
   const analisesEmAndamento = pendentes.length + emAnalise.length;
 
-  // Aprovadas no mês atual
+  // Aprovadas no mês atual: status IN (Buy,Hold,Sell) E data_comite >= início do mês
   const now = new Date();
-  const mesAtual = now.getMonth();
-  const anoAtual = now.getFullYear();
-  const aprovadasMes = aprovadas.filter((a) => {
-    if (!a.data_conclusao) return false;
-    const dt = new Date(a.data_conclusao.split("T")[0]);
-    return dt.getMonth() === mesAtual && dt.getFullYear() === anoAtual;
+  const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
+  const aprovadasMes = deliberadas.filter((a) => {
+    const ref = (a as any).data_comite || a.data_conclusao;
+    if (!ref) return false;
+    const dt = new Date(String(ref).split("T")[0]);
+    return dt >= inicioMes;
   }).length;
 
-  // Alertas: vencidas com alocação (precisam de nova análise urgente)
+  // Alertas: vencidas com alocação
   const alertasPendentes = vencidasComAlocacao.length;
 
-  // Cobertura ativa: CNPJs com posição que TÊM análise válida (<1 ano aprovada)
-  const cnpjsComAnaliseValida = new Set(aprovadas.map((a) => a.empresa_id));
-  const coberturaAtiva = [...cnpjSet].filter((cnpj) => cnpjsComAnaliseValida.has(cnpj)).length;
+  // Cobertura ativa: emissores distintos com pelo menos uma análise Buy ou Hold
+  const cnpjsCobertura = new Set([...buys, ...holds].map((a) => a.empresa_id));
+  const coberturaAtiva = cnpjsCobertura.size;
 
-  // Sem análise vinculada: CNPJs com posição ativa sem análise aprovada válida
-  const semAnalise = [...cnpjSet].filter((cnpj) => !cnpjsComAnaliseValida.has(cnpj)).length;
+  // Sem análise vinculada: CNPJs com posição ativa sem análise Buy/Hold
+  const semAnalise = [...cnpjSet].filter((cnpj) => !cnpjsCobertura.has(cnpj)).length;
 
   const posicoesValue = (posicoesHoje ?? 0) > 0 ? `Sim — ${hojeFormatado}` : "Não";
   const posicoesColor = (posicoesHoje ?? 0) > 0 ? "text-status-success" : "text-status-danger";
@@ -221,9 +214,13 @@ export default function DashboardPage() {
     .sort((a, b) => (a.data_inicio ?? "").localeCompare(b.data_inicio ?? ""))
     .slice(0, 5);
 
-  // Últimas aprovadas (5 mais recentes)
-  const ultimasAprovadas = [...aprovadas]
-    .sort((a, b) => (b.data_conclusao ?? "").localeCompare(a.data_conclusao ?? ""))
+  // Últimas análises deliberadas pelo Comitê (5 mais recentes por data_comite)
+  const ultimasAprovadas = [...deliberadas]
+    .sort((a, b) => {
+      const da = String((b as any).data_comite || b.data_conclusao || "");
+      const db = String((a as any).data_comite || a.data_conclusao || "");
+      return da.localeCompare(db);
+    })
     .slice(0, 5);
 
   // Alertas dinâmicos: vencidas com alocação (mais urgentes)
@@ -278,12 +275,16 @@ export default function DashboardPage() {
               <p className="text-[10px] text-muted-foreground uppercase">Concluída</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-status-success">{aprovadas.length}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Aprovada</p>
+              <p className="text-xl font-bold text-status-success">{buys.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Buy</p>
             </div>
             <div className="text-center">
-              <p className="text-xl font-bold text-status-danger">{reprovadas.length}</p>
-              <p className="text-[10px] text-muted-foreground uppercase">Reprovada</p>
+              <p className="text-xl font-bold text-amber-500">{holds.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Hold</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-status-danger">{sells.length}</p>
+              <p className="text-[10px] text-muted-foreground uppercase">Sell</p>
             </div>
             <div className="text-center">
               <p className="text-xl font-bold text-orange-400">{vencidasComAlocacao.length}</p>
@@ -343,6 +344,7 @@ export default function DashboardPage() {
                   <TableRow className="border-border">
                     <TableHead className="text-[11px] h-8">Empresa</TableHead>
                     <TableHead className="text-[11px] h-8">Tipo</TableHead>
+                    <TableHead className="text-[11px] h-8">Decisão</TableHead>
                     <TableHead className="text-[11px] h-8 hidden sm:table-cell">Analista</TableHead>
                     <TableHead className="text-[11px] h-8">Data</TableHead>
                   </TableRow>
@@ -350,21 +352,25 @@ export default function DashboardPage() {
                 <TableBody>
                   {ultimasAprovadas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                      <TableCell colSpan={5} className="text-sm text-muted-foreground">
                         Nenhuma
                       </TableCell>
                     </TableRow>
                   )}
-                  {ultimasAprovadas.map((a) => (
-                    <TableRow key={a.id} className="border-border">
-                      <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
-                      <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                      <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
-                      <TableCell className="text-sm py-2">
-                        {a.data_conclusao ? new Date(a.data_conclusao.split("T")[0]).toLocaleDateString("pt-BR") : "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {ultimasAprovadas.map((a) => {
+                    const ref = (a as any).data_comite || a.data_conclusao;
+                    return (
+                      <TableRow key={a.id} className="border-border">
+                        <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
+                        <TableCell className="text-sm py-2">{a.tipo}</TableCell>
+                        <TableCell className="text-sm py-2">{statusBadge(a.computedStatus)}</TableCell>
+                        <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
+                        <TableCell className="text-sm py-2">
+                          {ref ? new Date(String(ref).split("T")[0]).toLocaleDateString("pt-BR") : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
