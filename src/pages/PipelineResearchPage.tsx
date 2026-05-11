@@ -313,9 +313,9 @@ export default function PipelineResearchPage() {
       items.sort((a, b) => (b.versao || 1) - (a.versao || 1));
       const latest = items[0];
       result.push(latest);
-      // If latest is Reprovada, also show the previous approved/vencida version
-      if (latest.displayStatus === 'Reprovada') {
-        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Aprovada' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
+      // If latest is Sell, also show the previous Buy/Hold/vencida version
+      if (latest.displayStatus === 'Sell') {
+        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Buy' || i.displayStatus === 'Hold' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
         if (prev) result.push(prev);
       }
     });
