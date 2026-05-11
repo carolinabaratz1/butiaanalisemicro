@@ -1,0 +1,1 @@
+UPDATE assembleias SET triagem = 'com_posicao', isins_vinculados = ARRAY['BR0NG1CTF005']::text[] WHERE isin = 'BR0NG1CTF005' AND (triagem IS NULL OR triagem = 'sem_posicao');
