@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
-import { FUNDOS_BUTIA } from '@/data/fundos';
+import { useFundos } from '@/hooks/useFundos';
 
 interface Props {
   assembleiaId: string;
