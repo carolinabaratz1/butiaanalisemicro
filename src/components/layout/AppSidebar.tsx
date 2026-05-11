@@ -1,10 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, FileSearch, Kanban, CreditCard,
-  TrendingUp, Users, Settings, ChevronDown, ChevronRight, Briefcase,
+  LayoutDashboard, Building2, FileSearch, Kanban, Settings, Briefcase,
   CalendarDays, ArrowLeftRight, Upload, BarChart3
 } from 'lucide-react';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { ButiaLogo } from '@/components/ui/ButiaLogo';
@@ -22,14 +20,7 @@ const mainItems = [
   { label: 'Atualizar Dados',   icon: Upload,           path: '/trade/upload' },
 ];
 
-const creditoItems = [
-  { label: 'Crédito Corporativo', path: '/credito/corporativo' },
-  { label: 'Crédito Estruturado', path: '/credito/estruturado' },
-];
-
 const bottomItems = [
-  { label: 'Ações',         icon: TrendingUp, path: '/acoes' },
-  { label: 'Analistas',     icon: Users,      path: '/analistas' },
   { label: 'Configurações', icon: Settings,   path: '/configuracoes' },
 ];
 
@@ -42,13 +33,8 @@ interface Props {
 export function AppSidebar({ collapsed, onNavigate }: Props) {
   const location = useLocation();
   const { hasAccess } = useAuth();
-  const [creditoOpen, setCreditoOpen] = useState(
-    location.pathname.startsWith('/credito')
-  );
 
   const isActive = (path: string) => location.pathname === path;
-  const isCreditoActive = location.pathname.startsWith('/credito');
-  const hasCreditoAccess = hasAccess('/credito/corporativo') || hasAccess('/credito/estruturado');
 
   const linkClass = (path: string) =>
     cn(
@@ -74,11 +60,6 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
             <item.icon className="h-4 w-4" />
           </Link>
         ))}
-        {hasCreditoAccess && (
-          <Link to="/credito/corporativo" onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isCreditoActive ? 'bg-white/15 text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8')}>
-            <CreditCard className="h-4 w-4" />
-          </Link>
-        )}
         {filteredBottom.map(item => (
           <Link key={item.path} to={item.path} onClick={handleNav} className={cn('p-2 rounded-md transition-colors', isActive(item.path) ? 'bg-white/15 text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8')}>
             <item.icon className="h-4 w-4" />
@@ -106,30 +87,6 @@ export function AppSidebar({ collapsed, onNavigate }: Props) {
             <span>{item.label}</span>
           </Link>
         ))}
-        {hasCreditoAccess && (
-          <>
-            <button
-              onClick={() => setCreditoOpen(!creditoOpen)}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full transition-colors',
-                isCreditoActive ? 'text-sidebar-foreground' : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/8'
-              )}
-            >
-              <CreditCard className="h-4 w-4 shrink-0" />
-              <span className="flex-1 text-left">Crédito</span>
-              {creditoOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            </button>
-            {creditoOpen && (
-              <div className="ml-7 space-y-0.5">
-                {creditoItems.filter(item => hasAccess(item.path)).map(item => (
-                  <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
-                    <span>{item.label}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </>
-        )}
         {filteredBottom.map(item => (
           <Link key={item.path} to={item.path} onClick={handleNav} className={linkClass(item.path)}>
             <item.icon className="h-4 w-4 shrink-0" />
