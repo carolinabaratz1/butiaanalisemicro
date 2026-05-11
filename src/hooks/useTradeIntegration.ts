@@ -252,9 +252,9 @@ export function useTradeIntegration() {
       const a = resolveAnalise(ticker);
       if (!a) return null;
       const raw = (a.status as AnaliseStatus) ?? null;
-      // Vencida: aprovada há mais de 1 ano
-      if (raw === "Aprovada") {
-        const ap = parseAprovacao(a.data_aprovacao);
+      // Vencida: Buy/Hold há mais de 1 ano
+      if (raw === "Buy" || raw === "Hold") {
+        const ap = parseAprovacao(a.data_aprovacao || (a as any).data_comite);
         if (ap) {
           const expires = new Date(ap);
           expires.setFullYear(expires.getFullYear() + 1);
