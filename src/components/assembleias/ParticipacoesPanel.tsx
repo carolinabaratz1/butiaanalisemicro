@@ -34,6 +34,7 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
   const [adding, setAdding] = useState(false);
   const [novo, setNovo] = useState({ fundo: '', isin: '__none__', voto: '', representante: '', observacoes: '' });
   const [vinculos, setVinculos] = useState<string[]>(isinsVinculados ?? []);
+  const { data: fundos = [], isLoading: fundosLoading } = useFundos();
   const isAGDEB = tipo === 'AGDEB';
 
   // Emissões do emissor (para AGDEB)
