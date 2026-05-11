@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink } from 'lucide-react';
 import { UploadPanel } from '@/components/assembleias/UploadPanel';
 import { ParticipacoesPanel } from '@/components/assembleias/ParticipacoesPanel';
