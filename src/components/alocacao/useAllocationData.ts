@@ -97,12 +97,15 @@ export function useAllocationData(fundo: FundoKey) {
       // 2. Positions for this fund/date
       const { data: posicoes, error: posErr } = await supabase
         .from("posicoes")
-        .select("isin,product,product_class,financial_price")
+        .select("isin,product,product_class,amount,financial_price")
         .eq("trading_desk_share_source", source)
         .eq("val_date", valDate);
       if (posErr) throw posErr;
 
-      const positions = (posicoes ?? []) as any[];
+      const positions = (posicoes ?? []).map((p: any) => ({
+        ...p,
+        posicao_rs: (Number(p.amount) || 0) * (Number(p.financial_price) || 0),
+      })) as any[];
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
       // 3. Lookups: emissoes (isin -> cnpj, ticker), trade_ativos (ticker -> sub_indexador), empresas (cnpj -> rating, grupo, nome, id)
