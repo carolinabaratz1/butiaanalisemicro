@@ -316,16 +316,35 @@ export default function AssembleiasPage() {
         </Card>
       )}
 
+      {canWrite && <UploadPanel />}
+
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input className="pl-8 h-8 text-sm" placeholder="Buscar por título, empresa ou ISIN..." value={busca} onChange={e => setBusca(e.target.value)} />
+          <Input className="pl-8 h-8 text-sm" placeholder="Buscar por título, ticker, empresa ou ISIN..." value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
         <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="h-8 text-sm w-48"><SelectValue placeholder="Tipo" /></SelectTrigger>
+          <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Tipo" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="Todos">Todos os tipos</SelectItem>
             {TIPOS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroTriagem} onValueChange={setFiltroTriagem}>
+          <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="Triagem" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todas">Todas as triagens</SelectItem>
+            <SelectItem value="com_posicao">Com posição</SelectItem>
+            <SelectItem value="pendente_vinculo">Pendente vínculo</SelectItem>
+            <SelectItem value="sem_posicao">Sem posição</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroOrigem} onValueChange={setFiltroOrigem}>
+          <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="Origem" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Todas">Todas</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+            <SelectItem value="upload">Upload</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
