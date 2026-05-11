@@ -154,7 +154,7 @@ export function useTradeIntegration() {
         supabase
           .from("analises")
           .select(
-            "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_conclusao, prazo, versao, created_at",
+            "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_comite, data_conclusao, prazo, versao, created_at",
           )
           .order("versao", { ascending: false })
           .range(from, to) as unknown as PromiseLike<{ data: AnaliseRow[] | null; error: unknown }>,
