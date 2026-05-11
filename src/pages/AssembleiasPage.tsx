@@ -220,7 +220,8 @@ export default function AssembleiasPage() {
 
   function abrirEditar(ev: Assembleia) {
     setEditando(ev);
-    setForm({ tipo: ev.tipo, cnpj_empresa: ev.cnpj_empresa ?? '', isin: ev.isin ?? '', titulo: ev.titulo, descricao: ev.descricao ?? '',
+    const isinsIniciais = (ev.isins_vinculados && ev.isins_vinculados.length > 0) ? ev.isins_vinculados : (ev.isin ? [ev.isin] : []);
+    setForm({ tipo: ev.tipo, cnpj_empresa: ev.cnpj_empresa ?? '', isin: ev.isin ?? '', isins: isinsIniciais, titulo: ev.titulo, descricao: ev.descricao ?? '',
       data_evento: parseISO(ev.data_evento), hora_evento: ev.hora_evento ?? '',
       data_limite_voto: ev.data_limite_voto ? parseISO(ev.data_limite_voto) : undefined,
       modalidade: ev.modalidade ?? '', local_link: ev.local_link ?? '', status: ev.status,
