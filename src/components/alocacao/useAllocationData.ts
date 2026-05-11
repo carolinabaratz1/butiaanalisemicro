@@ -74,14 +74,18 @@ export function useAllocationData(fundo: FundoKey) {
     queryFn: async (): Promise<AllocationData> => {
       const source = sourceFromFundo(fundo);
 
-      // 1. Get latest val_date for this fund
+      // 1. Get latest val_date for this fund (val_date stored as MM/DD/YYYY text — must parse to compare)
       const { data: dateData } = await supabase
         .from("posicoes")
         .select("val_date")
-        .eq("trading_desk_share_source", source)
-        .order("val_date", { ascending: false })
-        .limit(1);
-      const valDate = dateData?.[0]?.val_date ?? null;
+        .eq("trading_desk_share_source", source);
+      const parseDate = (s: string): number => {
+        const [m, d, y] = s.split("/").map(Number);
+        return new Date(y, (m || 1) - 1, d || 1).getTime();
+      };
+      const allDates = Array.from(new Set((dateData ?? []).map((r: any) => r.val_date).filter(Boolean))) as string[];
+      allDates.sort((a, b) => parseDate(b) - parseDate(a));
+      const valDate = allDates[0] ?? null;
 
       if (!valDate) {
         return {
@@ -93,12 +97,15 @@ export function useAllocationData(fundo: FundoKey) {
       // 2. Positions for this fund/date
       const { data: posicoes, error: posErr } = await supabase
         .from("posicoes")
-        .select("isin,product,product_class,financial_price")
+        .select("isin,product,product_class,amount,financial_price")
         .eq("trading_desk_share_source", source)
         .eq("val_date", valDate);
       if (posErr) throw posErr;
 
-      const positions = (posicoes ?? []) as any[];
+      const positions = (posicoes ?? []).map((p: any) => ({
+        ...p,
+        posicao_rs: (Number(p.amount) || 0) * (Number(p.financial_price) || 0),
+      })) as any[];
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
       // 3. Lookups: emissoes (isin -> cnpj, ticker), trade_ativos (ticker -> sub_indexador), empresas (cnpj -> rating, grupo, nome, id)
@@ -118,7 +125,7 @@ export function useAllocationData(fundo: FundoKey) {
       const tickerToSub = new Map(tradeAtivos.map(t => [t.ticker, t.sub_indexador]));
       const cnpjToEmpresa = new Map(empresas.map(e => [e.cnpj, e]));
 
-      const totalFundo = positions.reduce((s, p) => s + (Number(p.financial_price) || 0), 0);
+      const totalFundo = positions.reduce((s, p) => s + p.posicao_rs, 0);
 
       const porTipo = new Map<string, AggBucket>();
       const porIndexador = new Map<string, AggBucket>();
@@ -132,7 +139,7 @@ export function useAllocationData(fundo: FundoKey) {
       };
 
       for (const p of positions) {
-        const fin = Number(p.financial_price) || 0;
+        const fin = p.posicao_rs;
         const tipo = tipoAtivoFromProduct(p.product, p.product_class);
         addTo(porTipo, tipo, fin);
 
