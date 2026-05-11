@@ -26,14 +26,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
 
-type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Aprovada' | 'Reprovada' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
+type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Buy' | 'Hold' | 'Sell' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
 const columns: { key: AnaliseStatus; label: string; color: string }[] = [
   { key: 'Pendente', label: 'Pendente', color: 'text-status-warning' },
   { key: 'Em Análise', label: 'Em Análise', color: 'text-status-info' },
   { key: 'Concluída', label: 'Concluída', color: 'text-muted-foreground' },
-  { key: 'Aprovada', label: 'Aprovada', color: 'text-status-success' },
-  { key: 'Reprovada', label: 'Reprovada', color: 'text-status-danger' },
+  { key: 'Buy', label: 'Buy', color: 'text-status-success' },
+  { key: 'Hold', label: 'Hold', color: 'text-status-warning' },
+  { key: 'Sell', label: 'Sell', color: 'text-status-danger' },
   { key: 'Vencida c/ Alocação', label: 'Vencida c/ Alocação', color: 'text-red-400' },
   { key: 'Vencida s/ Alocação', label: 'Vencida s/ Alocação', color: 'text-orange-400' },
 ];
@@ -76,7 +77,7 @@ function fmtDateBR(d: string | null | undefined): string {
 function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
   // FIDC analyses do not expire — they have continuous monitoring instead
   if (tipoEmissor === 'FIDC') return false;
-  if (status !== 'Aprovada' || !dataConclusao) return false;
+  if ((status !== 'Buy' && status !== 'Hold') || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
   umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
@@ -130,9 +131,10 @@ export default function PipelineResearchPage() {
   const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
   const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
 
-  // Comitê modal (Aprovada / Reprovada)
-  const [comiteModal, setComiteModal] = useState<{ id: string; targetStatus: 'Aprovada' | 'Reprovada' } | null>(null);
+  // Comitê modal (Buy / Hold / Sell)
+  const [comiteModal, setComiteModal] = useState<{ id: string; recoInicial?: string } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
+  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
 
   // Reabrir modal (com novo prazo)
@@ -311,9 +313,9 @@ export default function PipelineResearchPage() {
       items.sort((a, b) => (b.versao || 1) - (a.versao || 1));
       const latest = items[0];
       result.push(latest);
-      // If latest is Reprovada, also show the previous approved/vencida version
-      if (latest.displayStatus === 'Reprovada') {
-        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Aprovada' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
+      // If latest is Sell, also show the previous Buy/Hold/vencida version
+      if (latest.displayStatus === 'Sell') {
+        const prev = items.find(i => i.id !== latest.id && (i.displayStatus === 'Buy' || i.displayStatus === 'Hold' || i.displayStatus === 'Vencida c/ Alocação' || i.displayStatus === 'Vencida s/ Alocação'));
         if (prev) result.push(prev);
       }
     });
@@ -432,28 +434,29 @@ export default function PipelineResearchPage() {
   };
 
   const handleComite = () => {
-    if (!comiteModal || !dataComite) return;
-    if (comiteModal.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) return;
+    if (!comiteModal || !dataComite || !comiteDecisao) return;
+    if (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) return;
     const analise = analisesComStatus.find(a => a.id === comiteModal.id);
     const etapaAnterior = analise?.displayStatus || analise?.status || '';
     updateStatus.mutate({
       id: comiteModal.id,
-      status: comiteModal.targetStatus,
+      status: comiteDecisao,
       extras: {
         data_comite: format(dataComite, 'yyyy-MM-dd'),
-        ...(comiteModal.targetStatus === 'Reprovada' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
+        ...(comiteDecisao === 'Sell' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
       },
     });
     registrarEvento({
       analise_id: comiteModal.id,
-      acao: comiteModal.targetStatus === 'Aprovada' ? 'aprovado' : 'reprovado',
+      acao: comiteDecisao === 'Sell' ? 'reprovado' : 'aprovado',
       etapa_anterior: etapaAnterior,
-      etapa_nova: comiteModal.targetStatus,
+      etapa_nova: comiteDecisao,
       data_comite: format(dataComite, 'yyyy-MM-dd'),
-      comentario: comiteModal.targetStatus === 'Reprovada' ? comentarioReprovacao : null,
+      comentario: comiteDecisao === 'Sell' ? comentarioReprovacao : null,
     });
     setComiteModal(null);
     setDataComite(undefined);
+    setComiteDecisao('');
     setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
@@ -519,8 +522,10 @@ export default function PipelineResearchPage() {
       return;
     }
 
-    if (targetStatus === 'Aprovada' || targetStatus === 'Reprovada') {
-      setComiteModal({ id: draggedId, targetStatus });
+    if (targetStatus === 'Buy' || targetStatus === 'Hold' || targetStatus === 'Sell') {
+      const recoInicial = (item as any).recomendacao || (item as any).recomendacao_rf || '';
+      setComiteModal({ id: draggedId, recoInicial });
+      setComiteDecisao(targetStatus);
       setDraggedId(null);
       return;
     }
@@ -538,7 +543,7 @@ export default function PipelineResearchPage() {
 
   // History for drawer
   const historico = drawerAnalise
-    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Aprovada' || a.displayStatus === 'Reprovada' || a.displayStatus === 'Vencida c/ Alocação' || a.displayStatus === 'Vencida s/ Alocação'))
+    ? analisesComStatus.filter(a => a.empresa_id === drawerAnalise.empresa_id && a.id !== drawerAnalise.id && (a.displayStatus === 'Concluída' || a.displayStatus === 'Buy' || a.displayStatus === 'Hold' || a.displayStatus === 'Sell' || a.displayStatus === 'Vencida c/ Alocação' || a.displayStatus === 'Vencida s/ Alocação'))
         .sort((a, b) => (b.data_conclusao || '').localeCompare(a.data_conclusao || ''))
     : [];
 
@@ -663,7 +668,7 @@ export default function PipelineResearchPage() {
                               <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
                                 <LinkIcon className="h-3 w-3" />
                               </a>
-                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Aprovada' || item.displayStatus === 'Reprovada' ? (
+                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Buy' || item.displayStatus === 'Hold' || item.displayStatus === 'Sell' ? (
                               <LinkIcon className="h-3 w-3 text-muted-foreground/40" />
                             ) : null}
                             {posAtiva && (
@@ -712,17 +717,14 @@ export default function PipelineResearchPage() {
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsDown className="h-2.5 w-2.5" /> Reprovar
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                                  <ThumbsUp className="h-2.5 w-2.5" /> Comitê
                                 </Button>
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
                                 </Button>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReatribuirModal(item.id); setNovoAnalista(item.analista_responsavel); }}>
@@ -730,7 +732,7 @@ export default function PipelineResearchPage() {
                                 </Button>
                               </>
                             )}
-                            {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Sell' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
@@ -817,7 +819,7 @@ export default function PipelineResearchPage() {
                               <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
                                 <LinkIcon className="h-3 w-3" />
                               </a>
-                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Aprovada' || item.displayStatus === 'Reprovada' ? (
+                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Buy' || item.displayStatus === 'Hold' || item.displayStatus === 'Sell' ? (
                               <LinkIcon className="h-3 w-3 text-muted-foreground/40" />
                             ) : null}
                             {posAtiva && (
@@ -861,16 +863,11 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
-                              <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsUp className="h-2.5 w-2.5" /> Aprovar
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-danger" onClick={() => { setComiteModal({ id: item.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
-                                  <ThumbsDown className="h-2.5 w-2.5" /> Reprovar
-                                </Button>
-                              </>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                                <ThumbsUp className="h-2.5 w-2.5" /> Comitê
+                              </Button>
                             )}
-                            {(isGestor || isCoord) && (item.displayStatus === 'Reprovada' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
+                            {(isGestor || isCoord) && (item.displayStatus === 'Sell' || item.displayStatus === 'Vencida c/ Alocação' || item.displayStatus === 'Vencida s/ Alocação') && (
                               <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReabrirModal(item); setNovoPrazoReabrir(undefined); }}>
                                 <RotateCcw className="h-2.5 w-2.5" /> Reabrir
                               </Button>
@@ -1015,17 +1012,12 @@ export default function PipelineResearchPage() {
                     </>
                   )}
                   {(isGestor || isCoord) && drawerAnalise.status === 'Concluída' && (
-                    <>
-                      <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
-                        <ThumbsUp className="h-3 w-3" /> Aprovar
-                      </Button>
-                      <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
-                        <ThumbsDown className="h-3 w-3" /> Reprovar
-                      </Button>
-                    </>
+                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { const r = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf || ''; setComiteModal({ id: drawerAnalise.id, recoInicial: r }); setComiteDecisao((r === 'Buy' || r === 'Hold' || r === 'Sell') ? r : 'Buy'); setDataComite(undefined); }}>
+                      <ThumbsUp className="h-3 w-3" /> Decisão do Comitê
+                    </Button>
                   )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
-                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
@@ -1034,7 +1026,7 @@ export default function PipelineResearchPage() {
                       <CalendarIcon className="h-3 w-3" /> Alterar Prazo
                     </Button>
                   )}
-                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Sell' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
@@ -1271,14 +1263,29 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Comitê Modal (Aprovar / Reprovar) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComentarioReprovacao(''); }}>
+      {/* Comitê Modal (Buy / Hold / Sell) */}
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
-            <DialogTitle>{comiteModal?.targetStatus === 'Aprovada' ? 'Aprovar Análise' : 'Reprovar Análise'}</DialogTitle>
-            <DialogDescription>Informe a data do Comitê de Investimentos em que a decisão foi tomada.</DialogDescription>
+            <DialogTitle>Decisão do Comitê</DialogTitle>
+            <DialogDescription>
+              {comiteModal?.recoInicial
+                ? `Recomendação do analista: ${comiteModal.recoInicial}. Confirme ou altere a decisão.`
+                : 'Selecione a decisão final do Comitê.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Decisão (obrigatória)</Label>
+              <Select value={comiteDecisao} onValueChange={(v) => setComiteDecisao(v as 'Buy' | 'Hold' | 'Sell')}>
+                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="Buy">Buy</SelectItem>
+                  <SelectItem value="Hold">Hold</SelectItem>
+                  <SelectItem value="Sell">Sell</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div>
               <Label className="text-xs">Data do Comitê (obrigatória)</Label>
               <Popover>
@@ -1293,21 +1300,21 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            {comiteModal?.targetStatus === 'Reprovada' && (
+            {comiteDecisao === 'Sell' && (
               <div>
-                <Label className="text-xs">Motivo da Reprovação (obrigatório)</Label>
-                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo da reprovação..." />
+                <Label className="text-xs">Motivo (obrigatório)</Label>
+                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
               </div>
             )}
             <Button
               size="sm"
               className="w-full"
-              variant={comiteModal?.targetStatus === 'Aprovada' ? 'default' : 'destructive'}
+              variant={comiteDecisao === 'Sell' ? 'destructive' : 'default'}
               onClick={handleComite}
-              disabled={!dataComite || (comiteModal?.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) || updateStatus.isPending}
+              disabled={!dataComite || !comiteDecisao || (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) || updateStatus.isPending}
             >
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {comiteModal?.targetStatus === 'Aprovada' ? 'Confirmar Aprovação' : 'Confirmar Reprovação'}
+              Confirmar {comiteDecisao || 'Decisão'}
             </Button>
           </div>
         </DialogContent>
