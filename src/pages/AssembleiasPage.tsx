@@ -236,7 +236,7 @@ export default function AssembleiasPage() {
   function set(field: string, value: unknown) { setForm(f => ({ ...f, [field]: value })); }
 
   function setTipo(v: EventoTipo) {
-    setForm(f => ({ ...f, tipo: v, cnpj_empresa: usaIsin(v) ? '' : f.cnpj_empresa, isin: usaIsin(v) ? f.isin : '' }));
+    setForm(f => ({ ...f, tipo: v, cnpj_empresa: usaIsin(v) ? '' : f.cnpj_empresa, isin: usaIsin(v) ? f.isin : '', isins: usaIsin(v) ? f.isins : [] }));
   }
 
   function adicionarDoc() {
