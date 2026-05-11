@@ -17,11 +17,7 @@ import EmpresasPage from "./pages/EmpresasPage";
 import EmpresaDetailPage from "./pages/EmpresaDetailPage";
 import AnalisesPage from "./pages/AnalisesPage";
 import PipelineResearchPage from "./pages/PipelineResearchPage";
-import CreditoCorporativoPage from "./pages/CreditoCorporativoPage";
-import CreditoEstruturadoPage from "./pages/CreditoEstruturadoPage";
-import AcoesPage from "./pages/AcoesPage";
 import PosicoesPage from "./pages/PosicoesPage";
-import AnalistasPage from "./pages/AnalistasPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import AssembleiasPage from "./pages/AssembleiasPage";
 import DesempenhoPage from "./pages/DesempenhoPage";
@@ -73,10 +69,6 @@ function ProtectedRoutes() {
         <Route path="/empresas/:cnpj" element={<EmpresaDetailPage />} />
         <Route path="/analises" element={<AnalisesPage />} />
         <Route path="/pipeline-de-research" element={<PipelineResearchPage />} />
-        <Route path="/credito/corporativo" element={<CreditoCorporativoPage />} />
-        <Route path="/credito/estruturado" element={<CreditoEstruturadoPage />} />
-        <Route path="/acoes" element={<AcoesPage />} />
-        <Route path="/analistas" element={<AnalistasPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/assembleias" element={<AssembleiasPage />} />
         <Route path="/desempenho" element={<DesempenhoPage />} />
