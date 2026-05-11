@@ -434,28 +434,29 @@ export default function PipelineResearchPage() {
   };
 
   const handleComite = () => {
-    if (!comiteModal || !dataComite) return;
-    if (comiteModal.targetStatus === 'Reprovada' && !comentarioReprovacao.trim()) return;
+    if (!comiteModal || !dataComite || !comiteDecisao) return;
+    if (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) return;
     const analise = analisesComStatus.find(a => a.id === comiteModal.id);
     const etapaAnterior = analise?.displayStatus || analise?.status || '';
     updateStatus.mutate({
       id: comiteModal.id,
-      status: comiteModal.targetStatus,
+      status: comiteDecisao,
       extras: {
         data_comite: format(dataComite, 'yyyy-MM-dd'),
-        ...(comiteModal.targetStatus === 'Reprovada' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
+        ...(comiteDecisao === 'Sell' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
       },
     });
     registrarEvento({
       analise_id: comiteModal.id,
-      acao: comiteModal.targetStatus === 'Aprovada' ? 'aprovado' : 'reprovado',
+      acao: comiteDecisao === 'Sell' ? 'reprovado' : 'aprovado',
       etapa_anterior: etapaAnterior,
-      etapa_nova: comiteModal.targetStatus,
+      etapa_nova: comiteDecisao,
       data_comite: format(dataComite, 'yyyy-MM-dd'),
-      comentario: comiteModal.targetStatus === 'Reprovada' ? comentarioReprovacao : null,
+      comentario: comiteDecisao === 'Sell' ? comentarioReprovacao : null,
     });
     setComiteModal(null);
     setDataComite(undefined);
+    setComiteDecisao('');
     setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
