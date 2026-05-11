@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
-import { FUNDOS_BUTIA } from '@/data/fundos';
+import { useFundos } from '@/hooks/useFundos';
 
 interface Props {
   assembleiaId: string;
@@ -34,6 +34,7 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
   const [adding, setAdding] = useState(false);
   const [novo, setNovo] = useState({ fundo: '', isin: '__none__', voto: '', representante: '', observacoes: '' });
   const [vinculos, setVinculos] = useState<string[]>(isinsVinculados ?? []);
+  const { data: fundos = [], isLoading: fundosLoading } = useFundos();
   const isAGDEB = tipo === 'AGDEB';
 
   // Emissões do emissor (para AGDEB)
@@ -174,9 +175,9 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-[11px]">Fundo *</Label>
-                <Select value={novo.fundo} onValueChange={v => setNovo(n => ({ ...n, fundo: v }))}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                  <SelectContent>{FUNDOS_BUTIA.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                <Select value={novo.fundo} onValueChange={v => setNovo(n => ({ ...n, fundo: v }))} disabled={fundosLoading}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={fundosLoading ? 'Carregando...' : 'Selecionar...'} /></SelectTrigger>
+                  <SelectContent>{fundos.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
