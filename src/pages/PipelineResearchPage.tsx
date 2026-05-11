@@ -391,15 +391,18 @@ export default function PipelineResearchPage() {
   const isAcoes = entregarAnalise?.tipo === 'Ações';
 
   const handleEntregar = () => {
-    if (!entregarModal || !relatorio.trim()) return;
+    if (!entregarModal || !relatorio.trim() || !linkAnalise.trim()) return;
     if (isAcoes && !recomendacao) return;
+    if (!isAcoes && !recomendacaoRf) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
       extras: {
         relatorio,
+        link_analise: linkAnalise.trim(),
         data_conclusao: new Date().toISOString().split('T')[0],
         recomendacao: isAcoes ? recomendacao : null,
+        recomendacao_rf: !isAcoes ? recomendacaoRf : null,
         preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
         preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
         preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
@@ -408,7 +411,7 @@ export default function PipelineResearchPage() {
     });
     registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
-    setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
+    setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
   };
 
