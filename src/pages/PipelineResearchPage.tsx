@@ -904,32 +904,56 @@ export default function PipelineResearchPage() {
                 </div>
 
                 {/* Recomendação + Preços */}
-                {drawerAnalise.recomendacao && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
-                      <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[drawerAnalise.recomendacao] || ''}`}>
-                        {drawerAnalise.recomendacao}
-                      </Badge>
-                    </div>
-                    {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
-                        </div>
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
-                        </div>
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
-                        </div>
+                {(() => {
+                  const reco = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf;
+                  if (!reco) return null;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
+                        <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[reco] || ''}`}>
+                          {reco}
+                        </Badge>
                       </div>
-                    )}
-                    {drawerAnalise.data_alvo && (
-                      <div><p className="text-[10px] text-muted-foreground uppercase">Data-Alvo</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_alvo)}</p></div>
+                      {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
+                          </div>
+                        </div>
+                      )}
+                      {drawerAnalise.data_alvo && (
+                        <div><p className="text-[10px] text-muted-foreground uppercase">Data-Alvo</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_alvo)}</p></div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Link da Análise (apenas para análises concluídas/aprovadas/reprovadas que tenham link) */}
+                {(drawerAnalise.status === 'Concluída' || drawerAnalise.status === 'Aprovada' || drawerAnalise.status === 'Reprovada') && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Link da Análise</p>
+                    {drawerAnalise.link_analise ? (
+                      <a
+                        href={drawerAnalise.link_analise}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1 break-all"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{drawerAnalise.link_analise}</span>
+                      </a>
+                    ) : (
+                      <p className="text-xs">—</p>
                     )}
                   </div>
                 )}
