@@ -522,8 +522,10 @@ export default function PipelineResearchPage() {
       return;
     }
 
-    if (targetStatus === 'Aprovada' || targetStatus === 'Reprovada') {
-      setComiteModal({ id: draggedId, targetStatus });
+    if (targetStatus === 'Buy' || targetStatus === 'Hold' || targetStatus === 'Sell') {
+      const recoInicial = (item as any).recomendacao || (item as any).recomendacao_rf || '';
+      setComiteModal({ id: draggedId, recoInicial });
+      setComiteDecisao(targetStatus);
       setDraggedId(null);
       return;
     }
