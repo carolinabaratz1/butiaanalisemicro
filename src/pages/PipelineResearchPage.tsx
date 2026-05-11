@@ -77,7 +77,7 @@ function fmtDateBR(d: string | null | undefined): string {
 function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
   // FIDC analyses do not expire — they have continuous monitoring instead
   if (tipoEmissor === 'FIDC') return false;
-  if (status !== 'Aprovada' || !dataConclusao) return false;
+  if ((status !== 'Buy' && status !== 'Hold') || !dataConclusao) return false;
   const conclusao = new Date(dataConclusao.split('T')[0]);
   const umAnoAtras = new Date();
   umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
