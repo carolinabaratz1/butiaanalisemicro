@@ -13,8 +13,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type AnaliseStatus =
-  | "Aprovada"
-  | "Reprovada"
+  | "Buy"
+  | "Hold"
+  | "Sell"
   | "Pendente"
   | "Em Análise"
   | "Concluída"
@@ -153,7 +154,7 @@ export function useTradeIntegration() {
         supabase
           .from("analises")
           .select(
-            "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_conclusao, prazo, versao, created_at",
+            "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_comite, data_conclusao, prazo, versao, created_at",
           )
           .order("versao", { ascending: false })
           .range(from, to) as unknown as PromiseLike<{ data: AnaliseRow[] | null; error: unknown }>,
@@ -251,9 +252,9 @@ export function useTradeIntegration() {
       const a = resolveAnalise(ticker);
       if (!a) return null;
       const raw = (a.status as AnaliseStatus) ?? null;
-      // Vencida: aprovada há mais de 1 ano
-      if (raw === "Aprovada") {
-        const ap = parseAprovacao(a.data_aprovacao);
+      // Vencida: Buy/Hold há mais de 1 ano
+      if (raw === "Buy" || raw === "Hold") {
+        const ap = parseAprovacao(a.data_aprovacao || (a as any).data_comite);
         if (ap) {
           const expires = new Date(ap);
           expires.setFullYear(expires.getFullYear() + 1);
