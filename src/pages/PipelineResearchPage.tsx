@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, Trash2, MoreVertical, Check, ChevronsUpDown } from 'lucide-react';
+import { Plus, Search, CalendarIcon, Play, CheckCircle, X, RotateCcw, UserRoundCog, Loader2, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, Trash2, MoreVertical, Check, ChevronsUpDown, ExternalLink, Link as LinkIcon } from 'lucide-react';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from '@/components/ui/command';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -119,6 +119,8 @@ export default function PipelineResearchPage() {
 
   // Entrega (conclusão) extra fields
   const [recomendacao, setRecomendacao] = useState('');
+  const [recomendacaoRf, setRecomendacaoRf] = useState('');
+  const [linkAnalise, setLinkAnalise] = useState('');
   const [precoMin, setPrecoMin] = useState('');
   const [precoMedio, setPrecoMedio] = useState('');
   const [precoMaximo, setPrecoMaximo] = useState('');
@@ -389,15 +391,18 @@ export default function PipelineResearchPage() {
   const isAcoes = entregarAnalise?.tipo === 'Ações';
 
   const handleEntregar = () => {
-    if (!entregarModal || !relatorio.trim()) return;
+    if (!entregarModal || !relatorio.trim() || !linkAnalise.trim()) return;
     if (isAcoes && !recomendacao) return;
+    if (!isAcoes && !recomendacaoRf) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
       extras: {
         relatorio,
+        link_analise: linkAnalise.trim(),
         data_conclusao: new Date().toISOString().split('T')[0],
         recomendacao: isAcoes ? recomendacao : null,
+        recomendacao_rf: !isAcoes ? recomendacaoRf : null,
         preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
         preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
         preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
@@ -406,7 +411,7 @@ export default function PipelineResearchPage() {
     });
     registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
-    setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
+    setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
   };
 
@@ -649,11 +654,18 @@ export default function PipelineResearchPage() {
                                 {item.tipo}
                               </Badge>
                             )}
-                            {(item as any).recomendacao && (
-                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`}>
-                                {(item as any).recomendacao}
+                            {((item as any).recomendacao || (item as any).recomendacao_rf) && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao || (item as any).recomendacao_rf] || ''}`}>
+                                {(item as any).recomendacao || (item as any).recomendacao_rf}
                               </Badge>
                             )}
+                            {(item as any).link_analise ? (
+                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                                <LinkIcon className="h-3 w-3" />
+                              </a>
+                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Aprovada' || item.displayStatus === 'Reprovada' ? (
+                              <LinkIcon className="h-3 w-3 text-muted-foreground/40" />
+                            ) : null}
                             {posAtiva && (
                               <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
                                 ⚠️ Posição Ativa
@@ -796,11 +808,18 @@ export default function PipelineResearchPage() {
                                 {item.tipo}
                               </Badge>
                             )}
-                            {(item as any).recomendacao && (
-                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`}>
-                                {(item as any).recomendacao}
+                            {((item as any).recomendacao || (item as any).recomendacao_rf) && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao || (item as any).recomendacao_rf] || ''}`}>
+                                {(item as any).recomendacao || (item as any).recomendacao_rf}
                               </Badge>
                             )}
+                            {(item as any).link_analise ? (
+                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                                <LinkIcon className="h-3 w-3" />
+                              </a>
+                            ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Aprovada' || item.displayStatus === 'Reprovada' ? (
+                              <LinkIcon className="h-3 w-3 text-muted-foreground/40" />
+                            ) : null}
                             {posAtiva && (
                               <Badge variant="outline" className="text-[9px] bg-orange-500/15 text-orange-400 border-orange-500/30">
                                 ⚠️ Posição Ativa
@@ -899,32 +918,56 @@ export default function PipelineResearchPage() {
                 </div>
 
                 {/* Recomendação + Preços */}
-                {drawerAnalise.recomendacao && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
-                      <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[drawerAnalise.recomendacao] || ''}`}>
-                        {drawerAnalise.recomendacao}
-                      </Badge>
-                    </div>
-                    {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
-                        </div>
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
-                        </div>
-                        <div className="bg-surface-1 p-2 rounded text-center">
-                          <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
-                          <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
-                        </div>
+                {(() => {
+                  const reco = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf;
+                  if (!reco) return null;
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] text-muted-foreground uppercase">Recomendação</p>
+                        <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[reco] || ''}`}>
+                          {reco}
+                        </Badge>
                       </div>
-                    )}
-                    {drawerAnalise.data_alvo && (
-                      <div><p className="text-[10px] text-muted-foreground uppercase">Data-Alvo</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_alvo)}</p></div>
+                      {(drawerAnalise.preco_min || drawerAnalise.preco_medio || drawerAnalise.preco_maximo) && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Mínimo</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_min ? `R$ ${Number(drawerAnalise.preco_min).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Médio</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_medio ? `R$ ${Number(drawerAnalise.preco_medio).toFixed(2)}` : '—'}</p>
+                          </div>
+                          <div className="bg-surface-1 p-2 rounded text-center">
+                            <p className="text-[9px] text-muted-foreground uppercase">Máximo</p>
+                            <p className="text-xs font-medium">{drawerAnalise.preco_maximo ? `R$ ${Number(drawerAnalise.preco_maximo).toFixed(2)}` : '—'}</p>
+                          </div>
+                        </div>
+                      )}
+                      {drawerAnalise.data_alvo && (
+                        <div><p className="text-[10px] text-muted-foreground uppercase">Data-Alvo</p><p className="text-xs">{fmtDateBR(drawerAnalise.data_alvo)}</p></div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Link da Análise (apenas para análises concluídas/aprovadas/reprovadas que tenham link) */}
+                {(drawerAnalise.status === 'Concluída' || drawerAnalise.status === 'Aprovada' || drawerAnalise.status === 'Reprovada') && (
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">Link da Análise</p>
+                    {drawerAnalise.link_analise ? (
+                      <a
+                        href={drawerAnalise.link_analise}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1 break-all"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{drawerAnalise.link_analise}</span>
+                      </a>
+                    ) : (
+                      <p className="text-xs">—</p>
                     )}
                   </div>
                 )}
@@ -1117,14 +1160,14 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Entregar Modal (Conclusão) */}
-      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
+      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
         <DialogContent className="max-w-lg bg-card border-border">
           <DialogHeader>
             <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
               {isAcoes
-                ? 'Preencha o relatório, recomendação e preços sugeridos para concluir.'
-                : 'Preencha o relatório para concluir a análise.'}
+                ? 'Preencha o relatório, link, recomendação e preços sugeridos para concluir.'
+                : 'Preencha o relatório, link e recomendação para concluir a análise.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1132,6 +1175,31 @@ export default function PipelineResearchPage() {
               <Label className="text-xs">Relatório (obrigatório)</Label>
               <Textarea value={relatorio} onChange={e => setRelatorio(e.target.value)} rows={4} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Descreva os resultados..." />
             </div>
+            <div>
+              <Label className="text-xs">Link da Análise (obrigatório)</Label>
+              <Input
+                type="url"
+                value={linkAnalise}
+                onChange={e => setLinkAnalise(e.target.value)}
+                className="mt-1 h-8 text-sm bg-surface-1 border-border"
+                placeholder="https://..."
+                title="Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)</p>
+            </div>
+            {!isAcoes && (
+              <div>
+                <Label className="text-xs">Recomendação (obrigatório)</Label>
+                <Select value={recomendacaoRf} onValueChange={setRecomendacaoRf}>
+                  <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="Buy">Buy</SelectItem>
+                    <SelectItem value="Hold">Hold</SelectItem>
+                    <SelectItem value="Sell">Sell</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {isAcoes && (
               <>
                 <div>
@@ -1175,7 +1243,7 @@ export default function PipelineResearchPage() {
                 </div>
               </>
             )}
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || (isAcoes && !recomendacao) || updateStatus.isPending}>
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (isAcoes && !recomendacao) || (!isAcoes && !recomendacaoRf) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
             </Button>
