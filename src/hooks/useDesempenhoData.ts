@@ -208,8 +208,13 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     const dataEntrega = a.prazo ?? addDaysISO(dataInicio, SLA_META_DIAS_UTEIS + 2);
     const dataEntregueEm = STATUS_ENTREGUE.has(a.status) ? a.data_conclusao ?? undefined : undefined;
     const statusEntrega = deriveStatusEntrega(dataEntregueEm, dataEntrega, hoje);
-    const aprovadoPrimeiraRevisao = a.status === 'Aprovada';
-    const etapasKanban = buildEtapas(eventosByAnalise.get(a.id) ?? [], dataEntregueEm);
+    // Aprovado em 1ª revisão: deliberado pelo Comitê (Buy/Hold/Sell) sem ter sido devolvido para revisão
+    const eventos = eventosByAnalise.get(a.id) ?? [];
+    const foiDevolvida = eventos.some(
+      (e) => e.etapa_anterior === 'Concluída' && e.etapa_nova === 'Em Análise',
+    );
+    const aprovadoPrimeiraRevisao = STATUS_DELIBERADO.has(a.status) && !foiDevolvida;
+    const etapasKanban = buildEtapas(eventos, dataEntregueEm);
 
     return {
       id: a.id,
