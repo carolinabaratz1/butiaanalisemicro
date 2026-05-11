@@ -13,8 +13,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type AnaliseStatus =
-  | "Aprovada"
-  | "Reprovada"
+  | "Buy"
+  | "Hold"
+  | "Sell"
   | "Pendente"
   | "Em Análise"
   | "Concluída"
