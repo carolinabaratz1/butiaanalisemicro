@@ -1012,17 +1012,12 @@ export default function PipelineResearchPage() {
                     </>
                   )}
                   {(isGestor || isCoord) && drawerAnalise.status === 'Concluída' && (
-                    <>
-                      <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Aprovada' }); setDataComite(undefined); }}>
-                        <ThumbsUp className="h-3 w-3" /> Aprovar
-                      </Button>
-                      <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
-                        <ThumbsDown className="h-3 w-3" /> Reprovar
-                      </Button>
-                    </>
+                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { const r = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf || ''; setComiteModal({ id: drawerAnalise.id, recoInicial: r }); setComiteDecisao((r === 'Buy' || r === 'Hold' || r === 'Sell') ? r : 'Buy'); setDataComite(undefined); }}>
+                      <ThumbsUp className="h-3 w-3" /> Decisão do Comitê
+                    </Button>
                   )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
-                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, targetStatus: 'Reprovada' }); setDataComite(undefined); }}>
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
@@ -1031,7 +1026,7 @@ export default function PipelineResearchPage() {
                       <CalendarIcon className="h-3 w-3" /> Alterar Prazo
                     </Button>
                   )}
-                  {(isGestor || isCoord) && (drawerAnalise.status === 'Reprovada' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
+                  {(isGestor || isCoord) && (drawerAnalise.status === 'Sell' || isVencida(drawerAnalise.status, drawerAnalise.data_conclusao, tipoEmissorDe(drawerAnalise.empresa_id))) && (
                     <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setReabrirModal(drawerAnalise); setNovoPrazoReabrir(undefined); setDrawerAnalise(null); }}>
                       <RotateCcw className="h-3 w-3" /> Reabrir
                     </Button>
