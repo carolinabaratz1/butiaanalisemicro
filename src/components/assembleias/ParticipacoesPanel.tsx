@@ -175,9 +175,9 @@ export function ParticipacoesPanel({ assembleiaId, cnpjEmissor, tipo, isinsVincu
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-[11px]">Fundo *</Label>
-                <Select value={novo.fundo} onValueChange={v => setNovo(n => ({ ...n, fundo: v }))}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-                  <SelectContent>{FUNDOS_BUTIA.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                <Select value={novo.fundo} onValueChange={v => setNovo(n => ({ ...n, fundo: v }))} disabled={fundosLoading}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={fundosLoading ? 'Carregando...' : 'Selecionar...'} /></SelectTrigger>
+                  <SelectContent>{fundos.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
