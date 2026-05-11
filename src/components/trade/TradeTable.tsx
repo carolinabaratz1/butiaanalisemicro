@@ -354,7 +354,7 @@ export function TradeTable({ data, mode, modeColor, onSelectTicker, selectedTick
                       </td>
                     )}
                     <td className="hidden md:table-cell px-2.5 py-2">{rBadge(t.rating)}</td>
-                    <td className="hidden md:table-cell px-2.5 py-2">{statusBadge(integration.getStatus(t.ticker))}</td>
+                    <td className="hidden md:table-cell px-2.5 py-2">{statusBadge(integration.getStatus(t.ticker, t.emissor_cnpj))}</td>
                     <td className="hidden md:table-cell px-2.5 py-2">
                       {integration.hasPosition(t.ticker) ? (
                         <div className="flex items-center gap-1.5" title={`${integration.getAllocations(t.ticker).length} fundo(s) com posição`}>
