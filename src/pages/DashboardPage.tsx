@@ -344,6 +344,7 @@ export default function DashboardPage() {
                   <TableRow className="border-border">
                     <TableHead className="text-[11px] h-8">Empresa</TableHead>
                     <TableHead className="text-[11px] h-8">Tipo</TableHead>
+                    <TableHead className="text-[11px] h-8">Decisão</TableHead>
                     <TableHead className="text-[11px] h-8 hidden sm:table-cell">Analista</TableHead>
                     <TableHead className="text-[11px] h-8">Data</TableHead>
                   </TableRow>
@@ -351,21 +352,25 @@ export default function DashboardPage() {
                 <TableBody>
                   {ultimasAprovadas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-muted-foreground">
+                      <TableCell colSpan={5} className="text-sm text-muted-foreground">
                         Nenhuma
                       </TableCell>
                     </TableRow>
                   )}
-                  {ultimasAprovadas.map((a) => (
-                    <TableRow key={a.id} className="border-border">
-                      <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
-                      <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                      <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
-                      <TableCell className="text-sm py-2">
-                        {a.data_conclusao ? new Date(a.data_conclusao.split("T")[0]).toLocaleDateString("pt-BR") : "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {ultimasAprovadas.map((a) => {
+                    const ref = (a as any).data_comite || a.data_conclusao;
+                    return (
+                      <TableRow key={a.id} className="border-border">
+                        <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
+                        <TableCell className="text-sm py-2">{a.tipo}</TableCell>
+                        <TableCell className="text-sm py-2">{statusBadge(a.computedStatus)}</TableCell>
+                        <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
+                        <TableCell className="text-sm py-2">
+                          {ref ? new Date(String(ref).split("T")[0]).toLocaleDateString("pt-BR") : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
