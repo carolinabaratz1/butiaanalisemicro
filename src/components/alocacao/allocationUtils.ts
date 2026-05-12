@@ -72,7 +72,7 @@ export function tipoAtivoFromProduct(product: string, productClass: string): str
   if (!p && !c) return "Outros";
 
   if (p.includes("fidc")) {
-    if (p.includes("sub") || p.includes("mz") || p.includes("jr")) return "FIDC Subordinado";
+    if (p.includes("sub") || p.includes("mz") || p.includes("mezan") || p.includes("jr")) return "FIDC Mezanino";
     if (p.includes("np")) return "FIDC NP";
     return "FIDC Cota Sênior";
   }
@@ -80,7 +80,7 @@ export function tipoAtivoFromProduct(product: string, productClass: string): str
   if (p.includes("nota promissoria") || p.includes("nota promissória") || p === "np") return "Crédito Corporativo";
   if (p.includes("cdb") || p.includes("letra financeira") || p.includes("lf ") || p.includes(" lf") || p.includes("lci") || p.includes("lca")) return "Crédito Financeiro";
   if (p.includes("funds")) return "Cotas de Fundos CP";
-  if (p.includes("termo")) return "Termo > 60 dias";
+  if (p.includes("termo")) return "Termo ≤ 60 dias";
   if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss") || p.includes("ntn") || p.includes("ltn")) {
     return "Caixa Mínimo";
   }
