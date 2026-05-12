@@ -100,30 +100,23 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       let valDate: string | null = valDateOverride ?? null;
       if (!valDate) {
-        // Fall back to latest date via RPC (no 1000-row cap, correct ordering)
-        const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
-        if (error) throw error;
-        const allDates = ((data as any[]) ?? [])
-          .map((r) => r.val_date_text as string)
-          .filter(Boolean);
-        // Find the most recent date that has data for this fund
-        for (const d of allDates) {
-          const { data: chk } = await supabase
-            .from("posicoes")
-            .select("id", { head: true, count: "exact" })
-            .eq("trading_desk_share_source", source)
-            .eq("val_date", d)
-            .limit(1);
-          if ((chk as any) || true) {
-            // do a real check via count
+        // Fetch dates for this fund via direct query (paginated to bypass 1000-row cap)
+        const { data: fundDates } = await supabase
+          .from("posicoes")
+          .select("val_date")
+          .eq("trading_desk_share_source", source)
+          .limit(10000);
+        const uniq = Array.from(new Set(((fundDates as any[]) ?? []).map((r) => r.val_date).filter(Boolean))) as string[];
+        const parseDate = (s: string): number => {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+            const [y, m, d] = s.split("-").map(Number);
+            return new Date(y, (m || 1) - 1, d || 1).getTime();
           }
-          const { count } = await supabase
-            .from("posicoes")
-            .select("id", { head: true, count: "exact" })
-            .eq("trading_desk_share_source", source)
-            .eq("val_date", d);
-          if ((count ?? 0) > 0) { valDate = d; break; }
-        }
+          const [m, d, y] = s.split("/").map(Number);
+          return new Date(y, (m || 1) - 1, d || 1).getTime();
+        };
+        uniq.sort((a, b) => parseDate(b) - parseDate(a));
+        valDate = uniq[0] ?? null;
       }
 
       if (!valDate) {
