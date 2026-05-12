@@ -11,6 +11,22 @@ export type FundoKey = typeof FUNDOS[number]["key"];
 
 export const ALERT_THRESHOLD = 0.8; // 80% of consumption
 
+// Tipos que somam em "Crédito Privado"
+export const CREDITO_PRIVADO_TIPOS = new Set<string>([
+  "Crédito Corporativo",
+  "Crédito Financeiro",
+  "FIDC Cota Sênior",
+  "FIDC Subordinado",
+  "FIDC NP",
+]);
+
+// Tesouro Nacional - identificação por nome (case-insensitive). CNPJ pode variar.
+const TESOURO_REGEX = /tesouro\s*nacional/i;
+export function isTesouroNacional(nome?: string | null): boolean {
+  if (!nome) return false;
+  return TESOURO_REGEX.test(nome);
+}
+
 export function fundoFromSource(source: string | null | undefined): FundoKey | null {
   if (!source) return null;
   const normalized = source.trim().toUpperCase();
@@ -24,13 +40,27 @@ export function sourceFromFundo(fundo: FundoKey): string {
   return FUNDOS.find(f => f.key === fundo)!.source;
 }
 
+// DAP / Futuro -> excluídos do PL e de toda agregação
+export function isExcludedFromPL(product: string, productClass: string): boolean {
+  const p = (product || "").toLowerCase();
+  const c = (productClass || "").toLowerCase();
+  if (p.includes("dap") || c.includes("dap")) return true;
+  if (p.includes("futur") || c.includes("futur")) return true;
+  return false;
+}
+
+export function isTermo(product: string, productClass: string): boolean {
+  const p = (product || "").toLowerCase();
+  const c = (productClass || "").toLowerCase();
+  return p.includes("termo") || c.includes("termo");
+}
+
 // Map product / product_class to a tipo_ativo recognised by allocation_limits.
 export function tipoAtivoFromProduct(product: string, productClass: string): string {
   const p = (product || "").toLowerCase();
   const c = (productClass || "").toLowerCase();
   if (!p && !c) return "Outros";
 
-  // FIDC (none in db today, but reserved)
   if (p.includes("fidc")) {
     if (p.includes("sub") || p.includes("mz") || p.includes("jr")) return "FIDC Subordinado";
     if (p.includes("np")) return "FIDC NP";
@@ -38,10 +68,10 @@ export function tipoAtivoFromProduct(product: string, productClass: string): str
   }
   if (p.includes("debenture")) return "Crédito Corporativo";
   if (p.includes("nota promissoria") || p.includes("nota promissória") || p === "np") return "Crédito Corporativo";
-  if (p.includes("cdb") || p.includes("letra financeira") || p.includes("lf ") || p.includes(" lf")) return "Crédito Financeiro";
+  if (p.includes("cdb") || p.includes("letra financeira") || p.includes("lf ") || p.includes(" lf") || p.includes("lci") || p.includes("lca")) return "Crédito Financeiro";
   if (p.includes("funds")) return "Cotas de Fundos CP";
-  if (p.includes("termo")) return "Termo > 60 dias"; // we don't know prazo here; fallback
-  if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss") || p.includes("dap") || p.includes("ntn") || p.includes("ltn")) {
+  if (p.includes("termo")) return "Termo > 60 dias";
+  if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss") || p.includes("ntn") || p.includes("ltn")) {
     return "Caixa Mínimo";
   }
   if (p.includes("equity") || p.includes("bdr")) return "Outros";
@@ -58,6 +88,37 @@ export function indexadorFromSub(sub: string | null | undefined): string {
   if (s === "PRE") return "Pré";
   if (s === "SELIC" || s === "SELIC_PCT") return "%Selic";
   if (s === "CAMBIAL" || s === "USD") return "Cambial";
+  return "Outros";
+}
+
+// Tenta inferir indexador a partir da descrição do produto (CDB, LF, etc.) quando não há sub_indexador.
+export function indexadorFromProductFallback(product: string): string | null {
+  const p = (product || "").toUpperCase();
+  if (!p) return null;
+  // ordem importa
+  if (/IPCA\s*\+/.test(p)) return "IPCA";
+  if (/%\s*(DO\s+)?(CDI|DI)\b/.test(p) || /\bCDI\s*PCT\b/.test(p)) return "%CDI";
+  if (/(CDI|DI)\s*\+/.test(p)) return "CDI+";
+  if (/%\s*SELIC\b/.test(p) || /\bSELIC\s*PCT\b/.test(p)) return "%Selic";
+  if (/\bSELIC\b/.test(p)) return "%Selic";
+  if (/\bPR[ÉE]\b/.test(p) || /PRE-?FIXAD/.test(p)) return "Pré";
+  return null;
+}
+
+// Indexador final aplicando regras de produto antes do sub_indexador.
+export function resolveIndexador(product: string, productClass: string, sub: string | null | undefined): string {
+  const p = (product || "").toLowerCase();
+  // Termo -> Pré
+  if (p.includes("termo")) return "Pré";
+  // LFT / Overnight / Compromissadas -> %Selic
+  if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss")) return "%Selic";
+  // FIDC -> CDI+
+  if (p.includes("fidc")) return "CDI+";
+  // Tem sub_indexador (caso típico de debêntures e ativos cadastrados)
+  if (sub) return indexadorFromSub(sub);
+  // Fallback parsing da descrição (CDB, LF, LCI, LCA)
+  const fb = indexadorFromProductFallback(product);
+  if (fb) return fb;
   return "Outros";
 }
 

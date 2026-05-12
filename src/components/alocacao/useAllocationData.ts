@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  FundoKey, sourceFromFundo, tipoAtivoFromProduct, indexadorFromSub, ratingBucket, worstRating,
+  FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
+  isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
 } from "./allocationUtils";
 
 export interface LimitRow {
@@ -24,30 +25,88 @@ export function useAllocationLimits() {
   });
 }
 
-export interface TargetRow {
+export interface TargetPeriod {
+  id: string;
   fundo: string;
-  tipo_ativo: string;
-  target_pct: number | null;
-  updated_at: string;
+  nome: string;
+  data_inicio: string;
+  data_fim: string | null;
+  ativo: boolean;
+  created_at: string;
 }
 
-export function useAllocationTargets() {
+export function useAllocationTargetPeriods(fundo?: FundoKey) {
   return useQuery({
-    queryKey: ["allocation_targets"],
-    queryFn: async (): Promise<TargetRow[]> => {
-      const { data, error } = await supabase
-        .from("allocation_targets" as any)
-        .select("fundo,tipo_ativo,target_pct,updated_at");
+    queryKey: ["allocation_target_periods", fundo ?? "all"],
+    queryFn: async (): Promise<TargetPeriod[]> => {
+      let q: any = supabase
+        .from("allocation_target_periods" as any)
+        .select("id,fundo,nome,data_inicio,data_fim,ativo,created_at")
+        .order("data_inicio", { ascending: false });
+      if (fundo) q = q.eq("fundo", fundo);
+      const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as any;
     },
   });
 }
 
+export interface TargetRow {
+  id?: string;
+  period_id: string | null;
+  fundo: string;
+  tipo_ativo: string;
+  target_pct: number | null;
+  updated_at: string;
+}
+
+export function useAllocationTargets(periodId?: string | null) {
+  return useQuery({
+    queryKey: ["allocation_targets", periodId ?? "all"],
+    queryFn: async (): Promise<TargetRow[]> => {
+      let q: any = supabase
+        .from("allocation_targets" as any)
+        .select("id,period_id,fundo,tipo_ativo,target_pct,updated_at");
+      if (periodId) q = q.eq("period_id", periodId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+    enabled: periodId !== undefined,
+  });
+}
+
+export interface EmissorTargetRow {
+  id?: string;
+  period_id: string;
+  fundo: string;
+  cnpj_emissor: string;
+  target_pct: number | null;
+  updated_at?: string;
+}
+
+export function useAllocationEmissorTargets(periodId?: string | null, fundo?: FundoKey) {
+  return useQuery({
+    queryKey: ["allocation_targets_emissor", periodId ?? "none", fundo ?? "all"],
+    queryFn: async (): Promise<EmissorTargetRow[]> => {
+      if (!periodId) return [];
+      let q: any = supabase
+        .from("allocation_targets_emissor" as any)
+        .select("id,period_id,fundo,cnpj_emissor,target_pct,updated_at")
+        .eq("period_id", periodId);
+      if (fundo) q = q.eq("fundo", fundo);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+    enabled: !!periodId,
+  });
+}
+
 export interface AggBucket {
   key: string;
-  total: number;       // financial sum
-  pct: number;         // percent of fund
+  total: number;
+  pct: number;
 }
 
 export interface IssuerRow {
@@ -56,6 +115,8 @@ export interface IssuerRow {
   ratingBucket: string;
   total: number;
   pct: number;
+  isSoberano?: boolean;
+  isTermoSummary?: boolean;
 }
 
 export interface AllocationData {
@@ -73,13 +134,11 @@ export function useAllocationDates(fundo: FundoKey) {
   return useQuery({
     queryKey: ["alocacao-dates", fundo],
     queryFn: async (): Promise<string[]> => {
-      // Use RPC to bypass the 1000-row default cap and get correct date sort
       const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
       if (error) throw error;
       const allDates = ((data as any[]) ?? [])
         .map((r) => r.val_date_text as string)
         .filter(Boolean);
-      // Filter to dates that actually have rows for this fund
       if (allDates.length === 0) return [];
       const { data: fundDates } = await supabase
         .from("posicoes")
@@ -100,7 +159,6 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       let valDate: string | null = valDateOverride ?? null;
       if (!valDate) {
-        // Fetch dates for this fund via direct query (paginated to bypass 1000-row cap)
         const { data: fundDates } = await supabase
           .from("posicoes")
           .select("val_date")
@@ -126,7 +184,6 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         };
       }
 
-      // 2. Positions for this fund/date
       const { data: posicoes, error: posErr } = await supabase
         .from("posicoes")
         .select("isin,product,product_class,amount,financial_price")
@@ -134,13 +191,15 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         .eq("val_date", valDate);
       if (posErr) throw posErr;
 
-      const positions = (posicoes ?? []).map((p: any) => ({
+      // Excluir DAP/Futuros do PL e de toda agregação
+      const positionsAll = (posicoes ?? []).map((p: any) => ({
         ...p,
         posicao_rs: (Number(p.amount) || 0) * (Number(p.financial_price) || 0),
       })) as any[];
+      const positions = positionsAll.filter(p => !isExcludedFromPL(p.product, p.product_class));
+
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
-      // 3. Lookups: emissoes (isin -> cnpj, ticker), trade_ativos (ticker -> sub_indexador), empresas (cnpj -> rating, grupo, nome, id)
       const [emissoesRes, empresasRes] = await Promise.all([
         isins.length ? supabase.from("emissoes").select("isin,cnpj_emissor,ticker").in("isin", isins) : Promise.resolve({ data: [] as any }),
         supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating"),
@@ -163,6 +222,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const porIndexador = new Map<string, AggBucket>();
       const porRating = new Map<string, AggBucket>();
       const grupoMap = new Map<string, IssuerRow>();
+      let termoTotal = 0;
 
       const addTo = (map: Map<string, AggBucket>, key: string, value: number) => {
         const cur = map.get(key) ?? { key, total: 0, pct: 0 };
@@ -174,18 +234,32 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         const fin = p.posicao_rs;
         const tipo = tipoAtivoFromProduct(p.product, p.product_class);
         addTo(porTipo, tipo, fin);
+        // Agregador "Crédito Privado"
+        if (CREDITO_PRIVADO_TIPOS.has(tipo)) {
+          addTo(porTipo, "Crédito Privado", fin);
+        }
 
         const emissao = p.isin ? isinToEmissao.get(p.isin) : null;
         const sub = emissao?.ticker ? tickerToSub.get(emissao.ticker) : null;
-        const indexLabel = indexadorFromSub(sub);
+        const indexLabel = resolveIndexador(p.product, p.product_class, sub);
         addTo(porIndexador, indexLabel, fin);
 
         const empresa = emissao?.cnpj_emissor ? cnpjToEmpresa.get(emissao.cnpj_emissor) : null;
-        const ratingB = ratingBucket(empresa?.rating);
+        // Rating: Termo -> AAA (risco B3)
+        const ratingB = isTermo(p.product, p.product_class) ? "AAA" : ratingBucket(empresa?.rating);
         addTo(porRating, ratingB, fin);
 
+        // Termo: não listar como emissor, agregar em linha resumo
+        if (isTermo(p.product, p.product_class)) {
+          termoTotal += fin;
+          continue;
+        }
+
         if (empresa) {
-          const grupoKey = empresa.grupo_economico?.trim() || empresa.nome;
+          const isSoberano = isTesouroNacional(empresa.nome) || isTesouroNacional(empresa.grupo_economico);
+          const grupoKey = isSoberano
+            ? "Tesouro Nacional"
+            : (empresa.grupo_economico?.trim() || empresa.nome);
           const existing = grupoMap.get(grupoKey);
           if (existing) {
             existing.total += fin;
@@ -196,25 +270,37 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
             grupoMap.set(grupoKey, {
               grupo: grupoKey,
               emissores: [{ nome: empresa.nome, cnpj: empresa.cnpj, empresaId: empresa.id, rating: empresa.rating }],
-              ratingBucket: ratingB,
+              ratingBucket: isSoberano ? "AAA" : ratingB,
               total: fin,
               pct: 0,
+              isSoberano,
             });
           }
         }
       }
 
-      // compute pct
       const finalize = (map: Map<string, AggBucket>) => {
         for (const v of map.values()) v.pct = totalFundo > 0 ? (v.total / totalFundo) * 100 : 0;
       };
       finalize(porTipo); finalize(porIndexador); finalize(porRating);
 
-      const porGrupo = Array.from(grupoMap.values()).map(g => ({
+      const porGrupo: IssuerRow[] = Array.from(grupoMap.values()).map(g => ({
         ...g,
         pct: totalFundo > 0 ? (g.total / totalFundo) * 100 : 0,
-        ratingBucket: worstRating(g.emissores.map(e => ratingBucket(e.rating))),
+        ratingBucket: g.isSoberano ? "AAA" : worstRating(g.emissores.map(e => ratingBucket(e.rating))),
       })).sort((a, b) => b.pct - a.pct);
+
+      // Linha resumo de Termo
+      if (termoTotal > 0) {
+        porGrupo.push({
+          grupo: "Termo (B3)",
+          emissores: [],
+          ratingBucket: "AAA",
+          total: termoTotal,
+          pct: totalFundo > 0 ? (termoTotal / totalFundo) * 100 : 0,
+          isTermoSummary: true,
+        });
+      }
 
       return { loading: false, valDate, totalFundo, porTipo, porIndexador, porRating, porGrupo };
     },
