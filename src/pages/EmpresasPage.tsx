@@ -32,6 +32,7 @@ export default function EmpresasPage() {
   const [formSetor, setFormSetor] = useState('');
   const [formRating, setFormRating] = useState('');
   const [formGrupo, setFormGrupo] = useState('');
+  const [formCodigo, setFormCodigo] = useState('');
 
   // Rating edit state
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export default function EmpresasPage() {
         setor: formSetor.trim() || null,
         rating: formRating.trim() || null,
         grupo_economico: formGrupo.trim() || null,
+        codigo_emissor: formCodigo.trim().toUpperCase() || null,
       });
       if (error) throw error;
     },
@@ -112,7 +114,7 @@ export default function EmpresasPage() {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
       toast.success('Empresa criada com sucesso');
       setCreateOpen(false);
-      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating(''); setFormGrupo('');
+      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating(''); setFormGrupo(''); setFormCodigo('');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Erro ao criar empresa');
@@ -170,6 +172,10 @@ export default function EmpresasPage() {
                   <Input value={formCnpj} onChange={e => setFormCnpj(e.target.value)} placeholder="00.000.000/0001-00" className="h-8 text-sm bg-background" />
                 </div>
                 <div>
+                  <Label className="text-xs">Código Emissor *</Label>
+                  <Input value={formCodigo} onChange={e => setFormCodigo(e.target.value.toUpperCase())} placeholder="Ex: TTEN" maxLength={10} className="h-8 text-sm bg-background font-mono" />
+                </div>
+                <div>
                   <Label className="text-xs">Tipo</Label>
                   <Select value={formTipo} onValueChange={setFormTipo}>
                     <SelectTrigger className="h-8 text-sm bg-background"><SelectValue /></SelectTrigger>
@@ -192,7 +198,7 @@ export default function EmpresasPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button size="sm" disabled={!formNome.trim() || !formCnpj.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+                <Button size="sm" disabled={!formNome.trim() || !formCnpj.trim() || !formCodigo.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
                   {createMutation.isPending ? 'Salvando...' : 'Salvar'}
                 </Button>
               </DialogFooter>
