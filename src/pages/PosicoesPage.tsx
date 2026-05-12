@@ -271,22 +271,45 @@ export default function PosicoesPage() {
   // Posições que requerem análise (exclui Termo)
   const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
 
+  // Normaliza recomendação para BUY / HOLD / SELL (cobre Buy/Comprar/Manter/Vender etc.)
+  const recBucket = (r: string | null): 'BUY' | 'HOLD' | 'SELL' | null => {
+    if (!r) return null;
+    const u = r.toUpperCase().trim();
+    if (u.startsWith('BUY') || u.startsWith('COMPR')) return 'BUY';
+    if (u.startsWith('HOLD') || u.startsWith('MANT') || u.startsWith('NEUT')) return 'HOLD';
+    if (u.startsWith('SELL') || u.startsWith('VEND') || u.startsWith('REDU')) return 'SELL';
+    return null;
+  };
+
   const biMetrics = useMemo(() => {
-    const aprovadas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada').length;
+    // Conta EMISSORES distintos por bucket de recomendação (apenas análises Aprovadas)
+    const buyEm = new Set<string>(), holdEm = new Set<string>(), sellEm = new Set<string>();
+    for (const p of biFilteredForAnalysis) {
+      if (!p.cnpj) continue;
+      if (p.analiseStatus !== 'Aprovada') continue;
+      const b = recBucket(p.analiseRecomendacao);
+      if (b === 'BUY') buyEm.add(p.cnpj);
+      else if (b === 'HOLD') holdEm.add(p.cnpj);
+      else if (b === 'SELL') sellEm.add(p.cnpj);
+    }
     const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
     const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
-    const cobertura = biFilteredForAnalysis.length > 0 ? ((aprovadas / biFilteredForAnalysis.length) * 100).toFixed(1) : '0';
-    return { aprovadas, vencidas, semAnalise, cobertura };
+    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, vencidas, semAnalise };
   }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
+    if (drillStatus === 'BUY' || drillStatus === 'HOLD' || drillStatus === 'SELL') {
+      return biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada' && recBucket(p.analiseRecomendacao) === drillStatus);
+    }
     return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
   }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
-    : drillStatus === 'Aprovada' ? 'Posições com Análise Aprovada'
+    : drillStatus === 'BUY' ? 'Posições de Emissores BUY'
+    : drillStatus === 'HOLD' ? 'Posições de Emissores HOLD'
+    : drillStatus === 'SELL' ? 'Posições de Emissores SELL'
     : `Posições: ${drillStatus}`;
 
   const handleDrillExport = () => {
