@@ -68,24 +68,63 @@ export interface AllocationData {
   porGrupo: IssuerRow[];
 }
 
-export function useAllocationData(fundo: FundoKey) {
+export function useAllocationDates(fundo: FundoKey) {
+  const source = sourceFromFundo(fundo);
   return useQuery({
-    queryKey: ["alocacao", fundo],
+    queryKey: ["alocacao-dates", fundo],
+    queryFn: async (): Promise<string[]> => {
+      // Use RPC to bypass the 1000-row default cap and get correct date sort
+      const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
+      if (error) throw error;
+      const allDates = ((data as any[]) ?? [])
+        .map((r) => r.val_date_text as string)
+        .filter(Boolean);
+      // Filter to dates that actually have rows for this fund
+      if (allDates.length === 0) return [];
+      const { data: fundDates } = await supabase
+        .from("posicoes")
+        .select("val_date")
+        .eq("trading_desk_share_source", source)
+        .limit(10000);
+      const fundSet = new Set(((fundDates as any[]) ?? []).map((r) => r.val_date));
+      return allDates.filter((d) => fundSet.has(d));
+    },
+  });
+}
+
+export function useAllocationData(fundo: FundoKey, valDateOverride?: string | null) {
+  return useQuery({
+    queryKey: ["alocacao", fundo, valDateOverride ?? "latest"],
     queryFn: async (): Promise<AllocationData> => {
       const source = sourceFromFundo(fundo);
 
-      // 1. Get latest val_date for this fund (val_date stored as MM/DD/YYYY text — must parse to compare)
-      const { data: dateData } = await supabase
-        .from("posicoes")
-        .select("val_date")
-        .eq("trading_desk_share_source", source);
-      const parseDate = (s: string): number => {
-        const [m, d, y] = s.split("/").map(Number);
-        return new Date(y, (m || 1) - 1, d || 1).getTime();
-      };
-      const allDates = Array.from(new Set((dateData ?? []).map((r: any) => r.val_date).filter(Boolean))) as string[];
-      allDates.sort((a, b) => parseDate(b) - parseDate(a));
-      const valDate = allDates[0] ?? null;
+      let valDate: string | null = valDateOverride ?? null;
+      if (!valDate) {
+        // Fall back to latest date via RPC (no 1000-row cap, correct ordering)
+        const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
+        if (error) throw error;
+        const allDates = ((data as any[]) ?? [])
+          .map((r) => r.val_date_text as string)
+          .filter(Boolean);
+        // Find the most recent date that has data for this fund
+        for (const d of allDates) {
+          const { data: chk } = await supabase
+            .from("posicoes")
+            .select("id", { head: true, count: "exact" })
+            .eq("trading_desk_share_source", source)
+            .eq("val_date", d)
+            .limit(1);
+          if ((chk as any) || true) {
+            // do a real check via count
+          }
+          const { count } = await supabase
+            .from("posicoes")
+            .select("id", { head: true, count: "exact" })
+            .eq("trading_desk_share_source", source)
+            .eq("val_date", d);
+          if ((count ?? 0) > 0) { valDate = d; break; }
+        }
+      }
 
       if (!valDate) {
         return {
