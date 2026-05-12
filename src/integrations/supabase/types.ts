@@ -462,6 +462,8 @@ export type Database = {
         Row: {
           cnpj_emissor: string
           created_at: string
+          fidc_classe: string | null
+          fidc_tipo: string | null
           id: string
           isin: string
           ticker: string | null
@@ -471,6 +473,8 @@ export type Database = {
         Insert: {
           cnpj_emissor: string
           created_at?: string
+          fidc_classe?: string | null
+          fidc_tipo?: string | null
           id?: string
           isin: string
           ticker?: string | null
@@ -480,6 +484,8 @@ export type Database = {
         Update: {
           cnpj_emissor?: string
           created_at?: string
+          fidc_classe?: string | null
+          fidc_tipo?: string | null
           id?: string
           isin?: string
           ticker?: string | null
