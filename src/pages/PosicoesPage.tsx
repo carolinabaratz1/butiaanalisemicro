@@ -207,7 +207,7 @@ export default function PosicoesPage() {
         empresaNome: empresa?.nome,
         empresaRating: empresa?.rating,
         analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
-        analiseRecomendacao: analise?.recomendacao || null,
+        analiseRecomendacao: (analise?.recomendacao || (analise as any)?.recomendacao_rf || null),
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
         analisePrecoMax: analise?.preco_maximo ?? null,
