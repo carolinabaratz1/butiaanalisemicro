@@ -9,7 +9,7 @@ import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
 
-interface Props { fundo: FundoKey }
+interface Props { fundo: FundoKey; valDate?: string | null }
 
 const CATEGORIAS: { key: "tipo_ativo" | "indexador" | "rating"; titulo: string }[] = [
   { key: "tipo_ativo", titulo: "Limites por Tipo de Ativo" },
@@ -17,9 +17,9 @@ const CATEGORIAS: { key: "tipo_ativo" | "indexador" | "rating"; titulo: string }
   { key: "rating", titulo: "Limites por Faixa de Rating" },
 ];
 
-export function FundLimitsPanel({ fundo }: Props) {
+export function FundLimitsPanel({ fundo, valDate }: Props) {
   const { data: limits = [], isLoading: lLoading } = useAllocationLimits();
-  const { data: agg, isLoading: aLoading } = useAllocationData(fundo);
+  const { data: agg, isLoading: aLoading } = useAllocationData(fundo, valDate ?? null);
 
   const limitsByCat = useMemo(() => {
     const m: Record<string, { sub: string; lim: number | null }[]> = {};
