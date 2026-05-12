@@ -254,7 +254,11 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       for (const p of positions) {
         const fin = p.posicao_rs;
-        const tipo = tipoAtivoFromProduct(p.product, p.product_class);
+        let tipo = tipoAtivoFromProduct(p.product, p.product_class);
+        // Cotas de Fundos CP -> classifica via fidc_classes pelo ISIN
+        if (tipo === "Cotas de Fundos CP" && p.isin) {
+          tipo = fidcTipoFromClasse(isinToFidcClasse.get(p.isin) ?? null);
+        }
         addTo(porTipo, tipo, fin);
         // Agregador "Crédito Privado"
         if (CREDITO_PRIVADO_TIPOS.has(tipo)) {
