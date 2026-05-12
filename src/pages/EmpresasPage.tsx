@@ -106,6 +106,7 @@ export default function EmpresasPage() {
         setor: formSetor.trim() || null,
         rating: formRating.trim() || null,
         grupo_economico: formGrupo.trim() || null,
+        codigo_emissor: formCodigo.trim().toUpperCase() || null,
       });
       if (error) throw error;
     },
@@ -113,7 +114,7 @@ export default function EmpresasPage() {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
       toast.success('Empresa criada com sucesso');
       setCreateOpen(false);
-      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating(''); setFormGrupo('');
+      setFormNome(''); setFormCnpj(''); setFormTipo('CORPORATIVO'); setFormSetor(''); setFormRating(''); setFormGrupo(''); setFormCodigo('');
     },
     onError: (err: any) => {
       toast.error(err.message || 'Erro ao criar empresa');
