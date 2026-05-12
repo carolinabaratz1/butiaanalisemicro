@@ -268,8 +268,17 @@ export default function PosicoesPage() {
   };
 
   // ── BI Metrics ──
-  // Posições que requerem análise (exclui Termo)
-  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
+  // Produtos que não passam por análise de research (não entram nas métricas de cobertura)
+  const isNonAnalyzable = (p: EnrichedPosition) => {
+    const prod = (p.product || '').toUpperCase();
+    const cls = (p.product_class || '').toUpperCase();
+    if (prod === 'TERMO') return true;
+    if (prod.includes('DAP')) return true;          // DAP Futuro
+    if (cls.includes('DAP')) return true;
+    return false;
+  };
+  // Posições que requerem análise (exclui Termo, DAP Futuro, etc.)
+  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => !isNonAnalyzable(p)), [biFiltered]);
 
   // Normaliza recomendação para BUY / HOLD / SELL (cobre Buy/Comprar/Manter/Vender etc.)
   const recBucket = (r: string | null): 'BUY' | 'HOLD' | 'SELL' | null => {
