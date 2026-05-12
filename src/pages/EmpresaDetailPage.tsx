@@ -355,6 +355,8 @@ export default function EmpresaDetailPage() {
                     <TableHead className="text-[11px] h-9">ISIN</TableHead>
                     <TableHead className="text-[11px] h-9">Ticker</TableHead>
                     <TableHead className="text-[11px] h-9">Val Date</TableHead>
+                    {isFidc && <TableHead className="text-[11px] h-9">Tipo FIDC</TableHead>}
+                    {isFidc && <TableHead className="text-[11px] h-9">Classe</TableHead>}
                     <TableHead className="text-[11px] h-9">Status Análise</TableHead>
                     <TableHead className="text-[11px] h-9">Analista</TableHead>
                     <TableHead className="text-[11px] h-9">Prazo</TableHead>
