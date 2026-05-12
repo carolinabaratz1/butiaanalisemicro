@@ -430,7 +430,7 @@ export default function EmpresaDetailPage() {
                     );
                   })}
                   {emissoesList.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhuma emissão vinculada a este emissor</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isFidc ? 9 : 7} className="text-center text-sm text-muted-foreground py-8">Nenhuma emissão vinculada a este emissor</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
