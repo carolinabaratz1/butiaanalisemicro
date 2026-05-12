@@ -70,13 +70,11 @@ export default function PosicoesPage() {
   const { data: availableDates = [] } = useQuery({
     queryKey: ['posicoes-dates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('posicoes')
-        .select('val_date')
-        .order('val_date', { ascending: false });
+      const { data, error } = await supabase.rpc('get_posicoes_val_dates' as any);
       if (error) throw error;
-      const unique = [...new Set((data as any[]).map(d => d.val_date))].filter(Boolean);
-      return unique as string[];
+      return ((data as any[]) ?? [])
+        .map((r) => r.val_date_text as string)
+        .filter(Boolean);
     },
   });
 
