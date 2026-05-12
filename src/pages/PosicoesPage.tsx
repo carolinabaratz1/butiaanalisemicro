@@ -786,13 +786,27 @@ export default function PosicoesPage() {
           </div>
 
           {/* KPIs Row 2 - Research */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Aprovada')}><CardContent className="p-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('BUY')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <p className="text-[11px] text-muted-foreground uppercase">Análise Aprovada</p>
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores BUY</p>
               </div>
-              <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.aprovadas}</p>
+              <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.buy}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-blue-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('HOLD')}><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores HOLD</p>
+              </div>
+              <p className="text-xl font-bold text-blue-400 mt-1">{biMetrics.hold}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-red-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('SELL')}><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores SELL</p>
+              </div>
+              <p className="text-xl font-bold text-red-400 mt-1">{biMetrics.sell}</p>
             </CardContent></Card>
             <Card className="bg-card border-border border-l-4 border-l-yellow-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Vencida')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
@@ -807,13 +821,6 @@ export default function PosicoesPage() {
                 <p className="text-[11px] text-muted-foreground uppercase">Sem Análise</p>
               </div>
               <p className="text-xl font-bold text-muted-foreground mt-1">{biMetrics.semAnalise}</p>
-            </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-blue-500"><CardContent className="p-4">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-blue-400" />
-                <p className="text-[11px] text-muted-foreground uppercase">% Cobertura</p>
-              </div>
-              <p className="text-xl font-bold text-blue-400 mt-1">{biMetrics.cobertura}%</p>
             </CardContent></Card>
           </div>
 
