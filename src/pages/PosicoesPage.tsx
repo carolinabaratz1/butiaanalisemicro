@@ -139,13 +139,13 @@ export default function PosicoesPage() {
       let from = 0;
       let hasMore = true;
       while (hasMore) {
-        const { data, error } = await supabase.from('analises').select('empresa_id, status, tipo, recomendacao, preco_min, preco_medio, preco_maximo, data_conclusao, data_inicio').range(from, from + 999);
+        const { data, error } = await supabase.from('analises').select('empresa_id, status, tipo, recomendacao, recomendacao_rf, preco_min, preco_medio, preco_maximo, data_conclusao, data_inicio').range(from, from + 999);
         if (error) throw error;
         all = [...all, ...data];
         hasMore = data.length === 1000;
         from += 1000;
       }
-      return all as { empresa_id: string; status: string; tipo: string; recomendacao: string | null; preco_min: number | null; preco_medio: number | null; preco_maximo: number | null; data_conclusao: string | null; data_inicio: string }[];
+      return all as { empresa_id: string; status: string; tipo: string; recomendacao: string | null; recomendacao_rf: string | null; preco_min: number | null; preco_medio: number | null; preco_maximo: number | null; data_conclusao: string | null; data_inicio: string }[];
     },
   });
 
