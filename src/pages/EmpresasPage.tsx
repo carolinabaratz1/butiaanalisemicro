@@ -198,7 +198,7 @@ export default function EmpresasPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button size="sm" disabled={!formNome.trim() || !formCnpj.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+                <Button size="sm" disabled={!formNome.trim() || !formCnpj.trim() || !formCodigo.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
                   {createMutation.isPending ? 'Salvando...' : 'Salvar'}
                 </Button>
               </DialogFooter>
