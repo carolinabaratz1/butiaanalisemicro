@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { Save, Plus, Search } from "lucide-react";
+import { Save, Plus, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   useAllocationLimits, useAllocationTargets, useAllocationTargetPeriods, useAllocationEmissorTargets,
 } from "./useAllocationData";
@@ -160,6 +160,9 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
   const qc = useQueryClient();
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<"tipo" | "target" | "limite" | "headroom" | "status">("tipo");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const rows = useMemo(() => {
     const tipos = Array.from(new Set(limits.filter(l => l.categoria === "tipo_ativo" && l.fundo === fundo).map(l => l.subcategoria)));
@@ -169,6 +172,40 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
       return { fundo, tipo_ativo: t, limite: lim, target: tgt, key: `${fundo}::${t}` };
     });
   }, [limits, targets, fundo]);
+
+  const toggleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir(k === "tipo" || k === "status" ? "asc" : "desc"); }
+  };
+  const SortIcon = ({ k }: { k: typeof sortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="w-3 h-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3 inline ml-1" /> : <ArrowDown className="w-3 h-3 inline ml-1" />;
+  };
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q ? rows.filter(r => r.tipo_ativo.toLowerCase().includes(q)) : rows;
+    const arr = [...list];
+    arr.sort((a, b) => {
+      const tgtA = drafts[a.key]?.trim() === "" || drafts[a.key] == null ? a.target : Number((drafts[a.key] ?? "").replace(",", "."));
+      const tgtB = drafts[b.key]?.trim() === "" || drafts[b.key] == null ? b.target : Number((drafts[b.key] ?? "").replace(",", "."));
+      const headA = a.limite != null && tgtA != null ? a.limite - (tgtA as number) : null;
+      const headB = b.limite != null && tgtB != null ? b.limite - (tgtB as number) : null;
+      const stA = tgtA == null || a.limite == null ? 0 : (tgtA as number) > a.limite ? 2 : 1;
+      const stB = tgtB == null || b.limite == null ? 0 : (tgtB as number) > b.limite ? 2 : 1;
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "tipo": av = a.tipo_ativo; bv = b.tipo_ativo; break;
+        case "target": av = (tgtA as number) ?? -Infinity; bv = (tgtB as number) ?? -Infinity; break;
+        case "limite": av = a.limite ?? -Infinity; bv = b.limite ?? -Infinity; break;
+        case "headroom": av = headA ?? -Infinity; bv = headB ?? -Infinity; break;
+        case "status": av = stA; bv = stB; break;
+      }
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? (av - bv) : (bv - av);
+    });
+    return arr;
+  }, [rows, search, sortKey, sortDir, drafts]);
 
   useEffect(() => {
     const initial: Record<string, string> = {};
@@ -205,19 +242,27 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
   if (!periodId) return <div className="text-sm text-muted-foreground p-4">Nenhum período disponível. Crie um novo período para começar.</div>;
 
   return (
-    <div className="border rounded-lg overflow-x-auto">
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Filtrar tipo de ativo..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
+        </div>
+        <span className="text-xs text-muted-foreground">{visible.length} {visible.length === 1 ? "linha" : "linhas"}</span>
+      </div>
+      <div className="border rounded-lg overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Tipo de Ativo</TableHead>
-            <TableHead className="text-right w-[140px]">Target</TableHead>
-            <TableHead className="text-right">Limite Gerencial</TableHead>
-            <TableHead className="text-right">Headroom vs. Target</TableHead>
-            <TableHead className="text-center">Status</TableHead>
+            <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("tipo")}>Tipo de Ativo<SortIcon k="tipo" /></TableHead>
+            <TableHead className="text-right w-[140px] cursor-pointer select-none" onClick={() => toggleSort("target")}>Target<SortIcon k="target" /></TableHead>
+            <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("limite")}>Limite Gerencial<SortIcon k="limite" /></TableHead>
+            <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("headroom")}>Headroom vs. Target<SortIcon k="headroom" /></TableHead>
+            <TableHead className="text-center cursor-pointer select-none" onClick={() => toggleSort("status")}>Status<SortIcon k="status" /></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map(r => {
+          {visible.map(r => {
             const raw = drafts[r.key] ?? "";
             const target = raw.trim() === "" ? null : Number(raw.replace(",", "."));
             const headroom = r.limite != null && target != null ? r.limite - target : null;
@@ -253,6 +298,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
           })}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
@@ -262,6 +308,17 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [sortKey, setSortKey] = useState<"nome" | "grupo" | "rating" | "target">("nome");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir(k === "target" ? "desc" : "asc"); }
+  };
+  const SortIcon = ({ k }: { k: typeof sortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="w-3 h-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3 inline ml-1" /> : <ArrowDown className="w-3 h-3 inline ml-1" />;
+  };
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["empresas-for-targets"],
@@ -290,13 +347,30 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return empresas as any[];
-    return (empresas as any[]).filter(e =>
+    const list = !q ? (empresas as any[]) : (empresas as any[]).filter(e =>
       e.nome?.toLowerCase().includes(q) ||
       e.cnpj?.toLowerCase().includes(q) ||
       e.grupo_economico?.toLowerCase().includes(q)
     );
-  }, [empresas, search]);
+    const arr = [...list];
+    arr.sort((a: any, b: any) => {
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "nome": av = a.nome ?? ""; bv = b.nome ?? ""; break;
+        case "grupo": av = a.grupo_economico ?? ""; bv = b.grupo_economico ?? ""; break;
+        case "rating": av = a.rating ?? ""; bv = b.rating ?? ""; break;
+        case "target": {
+          const ra = drafts[a.cnpj]; const rb = drafts[b.cnpj];
+          av = ra == null || ra.trim() === "" ? -Infinity : Number(ra.replace(",", "."));
+          bv = rb == null || rb.trim() === "" ? -Infinity : Number(rb.replace(",", "."));
+          break;
+        }
+      }
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? (av - bv) : (bv - av);
+    });
+    return arr;
+  }, [empresas, search, sortKey, sortDir, drafts]);
 
   async function saveOne(cnpj: string, raw: string) {
     if (!editable || !periodId) return;
@@ -330,10 +404,10 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Emissor</TableHead>
-              <TableHead>Grupo</TableHead>
-              <TableHead className="text-center">Rating</TableHead>
-              <TableHead className="text-right w-[140px]">Target %</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("nome")}>Emissor<SortIcon k="nome" /></TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("grupo")}>Grupo<SortIcon k="grupo" /></TableHead>
+              <TableHead className="text-center cursor-pointer select-none" onClick={() => toggleSort("rating")}>Rating<SortIcon k="rating" /></TableHead>
+              <TableHead className="text-right w-[140px] cursor-pointer select-none" onClick={() => toggleSort("target")}>Target %<SortIcon k="target" /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
