@@ -1022,6 +1022,13 @@ export type Database = {
               ticker: string
             }[]
           }
+      get_posicoes_val_dates: {
+        Args: never
+        Returns: {
+          val_date_parsed: string
+          val_date_text: string
+        }[]
+      }
       get_trade_summary: {
         Args: { p_indexador: string; p_sub_indexador?: string }
         Returns: {
