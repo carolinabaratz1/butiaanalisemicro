@@ -267,22 +267,44 @@ export default function EmpresaDetailPage() {
     setRelatorio('');
   };
 
+  const isFidc = ((emissor?.tipo || '').toUpperCase() === 'FIDC');
+  const canEditEmissao = isGestor || currentUser?.funcao === 'Coordenação/Especialista' || isAnalista;
+
   const handleNovaEmissao = async () => {
     if (!novoIsin || !novoTicker || !novoValDate) return;
-    const { error } = await supabase.from('emissoes').upsert({
+    if (isFidc && (!novoFidcClasse || !novoFidcTipo)) {
+      toast({ title: 'Campos obrigatórios', description: 'Para FIDC informe Classe e Tipo.', variant: 'destructive' });
+      return;
+    }
+    const payload: any = {
       isin: novoIsin,
       ticker: novoTicker,
       val_date: format(novoValDate, 'yyyy-MM-dd'),
       cnpj_emissor: decodedCnpj,
-    }, { onConflict: 'isin' });
-    if (!error) {
-      // Refetch emissoes
-      window.location.reload();
+    };
+    if (isFidc) {
+      payload.fidc_classe = novoFidcClasse;
+      payload.fidc_tipo = novoFidcTipo;
     }
+    const { error } = await supabase.from('emissoes').upsert(payload, { onConflict: 'isin' });
+    if (error) {
+      toast({ title: 'Erro ao salvar emissão', description: error.message, variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['emissoes-by-cnpj', decodedCnpj] });
     setNovaEmissaoModal(false);
-    setNovoIsin('');
-    setNovoTicker('');
-    setNovoValDate(undefined);
+    setNovoIsin(''); setNovoTicker(''); setNovoValDate(undefined);
+    setNovoFidcClasse(''); setNovoFidcTipo('');
+  };
+
+  const updateFidcField = async (isin: string, field: 'fidc_classe' | 'fidc_tipo', value: string) => {
+    const { error } = await supabase.from('emissoes').update({ [field]: value } as any).eq('isin', isin);
+    if (error) {
+      toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['emissoes-by-cnpj', decodedCnpj] });
+    queryClient.invalidateQueries({ queryKey: ['alocacao'] });
   };
 
   return (
