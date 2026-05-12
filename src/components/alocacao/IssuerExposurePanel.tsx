@@ -8,11 +8,11 @@ import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
 
-interface Props { fundo: FundoKey }
+interface Props { fundo: FundoKey; valDate?: string | null }
 
-export function IssuerExposurePanel({ fundo }: Props) {
+export function IssuerExposurePanel({ fundo, valDate }: Props) {
   const { data: limits = [] } = useAllocationLimits();
-  const { data: agg, isLoading } = useAllocationData(fundo);
+  const { data: agg, isLoading } = useAllocationData(fundo, valDate ?? null);
   const navigate = useNavigate();
 
   const limitByRating = useMemo(() => {
