@@ -311,13 +311,16 @@ export default function PosicoesPage() {
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
     if (drillStatus === 'BUY' || drillStatus === 'HOLD' || drillStatus === 'SELL') {
-      return biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada' && recBucket(p.analiseRecomendacao) === drillStatus);
+      return biFilteredForAnalysis.filter(p =>
+        p.analiseStatus !== 'Sem Análise' && recBucket(p.analiseRecomendacao) === drillStatus
+      );
     }
     return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
   }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
+    : drillStatus === 'Em Análise' ? 'Posições em Análise'
     : drillStatus === 'BUY' ? 'Posições de Emissores BUY'
     : drillStatus === 'HOLD' ? 'Posições de Emissores HOLD'
     : drillStatus === 'SELL' ? 'Posições de Emissores SELL'
