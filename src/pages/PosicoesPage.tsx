@@ -291,19 +291,21 @@ export default function PosicoesPage() {
   };
 
   const biMetrics = useMemo(() => {
-    // Conta EMISSORES distintos por bucket de recomendação (apenas análises Aprovadas)
+    // Conta EMISSORES distintos por bucket de recomendação
+    // (considera análises Aprovadas, Em Análise e Vencidas — qualquer recomendação registrada)
     const buyEm = new Set<string>(), holdEm = new Set<string>(), sellEm = new Set<string>();
     for (const p of biFilteredForAnalysis) {
       if (!p.cnpj) continue;
-      if (p.analiseStatus !== 'Aprovada') continue;
+      if (p.analiseStatus === 'Sem Análise') continue;
       const b = recBucket(p.analiseRecomendacao);
       if (b === 'BUY') buyEm.add(p.cnpj);
       else if (b === 'HOLD') holdEm.add(p.cnpj);
       else if (b === 'SELL') sellEm.add(p.cnpj);
     }
+    const emAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Em Análise').length;
     const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
     const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
-    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, vencidas, semAnalise };
+    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, emAnalise, vencidas, semAnalise };
   }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
