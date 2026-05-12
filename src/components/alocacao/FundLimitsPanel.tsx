@@ -27,6 +27,14 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
       if (l.fundo !== fundo) continue;
       (m[l.categoria] ??= []).push({ sub: l.subcategoria, lim: l.limite_pct });
     }
+    // "Crédito Privado" sempre primeiro em tipo_ativo
+    if (m["tipo_ativo"]) {
+      m["tipo_ativo"].sort((a, b) => {
+        if (a.sub === "Crédito Privado") return -1;
+        if (b.sub === "Crédito Privado") return 1;
+        return 0;
+      });
+    }
     return m;
   }, [limits, fundo]);
 
