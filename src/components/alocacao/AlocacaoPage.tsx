@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FundLimitsPanel } from "./FundLimitsPanel";
 import { IssuerExposurePanel } from "./IssuerExposurePanel";
 import { TargetsPanel } from "./TargetsPanel";
+import { FidcClassesPanel } from "./FidcClassesPanel";
 import { FUNDOS, FundoKey } from "./allocationUtils";
 import { useAllocationDates } from "./useAllocationData";
 
