@@ -16,9 +16,19 @@ export const CREDITO_PRIVADO_TIPOS = new Set<string>([
   "Crédito Corporativo",
   "Crédito Financeiro",
   "FIDC Cota Sênior",
-  "FIDC Subordinado",
+  "FIDC Mezanino",
   "FIDC NP",
 ]);
+
+// Cotas de Fundos CP -> classificadas como FIDC pela tabela fidc_classes (por ISIN).
+export type FidcClasse = "Sênior" | "Mezanino" | "NP";
+export function fidcTipoFromClasse(c: FidcClasse | null | undefined): string {
+  if (c === "Mezanino") return "FIDC Mezanino";
+  if (c === "NP") return "FIDC NP";
+  if (c === "Sênior") return "FIDC Cota Sênior";
+  // Sem classificação: tratamos como Cotas de Fundos CP (não entra em Crédito Privado).
+  return "Cotas de Fundos CP";
+}
 
 // Tesouro Nacional - identificação por nome (case-insensitive). CNPJ pode variar.
 const TESOURO_REGEX = /tesouro\s*nacional/i;
