@@ -176,10 +176,20 @@ export default function PosicoesPage() {
     return map;
   }, [analises]);
 
+  // Normaliza valores que representam recomendação (Buy/Hold/Sell etc.)
+  const isRecLike = (s: string | null | undefined): boolean => {
+    if (!s) return false;
+    const u = s.toUpperCase().trim();
+    return u.startsWith('BUY') || u.startsWith('COMPR')
+      || u.startsWith('HOLD') || u.startsWith('MANT') || u.startsWith('NEUT')
+      || u.startsWith('SELL') || u.startsWith('VEND') || u.startsWith('REDU');
+  };
+
   const getAnaliseStatus = (analise: typeof analises[0] | undefined, tipoEmissor?: string | null): string => {
     if (!analise) return 'Sem Análise';
-    if (analise.status === 'Aprovada') {
-      // FIDC: análise aprovada não vence
+    const s = analise.status;
+    // Status "Buy/Hold/Sell" ou "Concluída" → análise concluída/aprovada (sujeita a vencimento)
+    if (s === 'Aprovada' || s === 'Concluída' || isRecLike(s)) {
       if (tipoEmissor === 'FIDC') return 'Aprovada';
       if (analise.data_conclusao) {
         const conclusao = new Date(analise.data_conclusao);
@@ -189,10 +199,10 @@ export default function PosicoesPage() {
       }
       return 'Aprovada';
     }
-    if (analise.status === 'Reprovada') return 'Reprovada';
-    if (analise.status === 'Em Análise' || analise.status === 'em_andamento') return 'Em Análise';
-    if (analise.status === 'Pendente' || analise.status === 'pendente') return 'Pendente';
-    return analise.status;
+    if (s === 'Reprovada') return 'Reprovada';
+    if (s === 'Em Análise' || s === 'em_andamento') return 'Em Análise';
+    if (s === 'Pendente' || s === 'pendente') return 'Pendente';
+    return s;
   };
 
   // Enriched positions
@@ -201,13 +211,18 @@ export default function PosicoesPage() {
       const cnpj = p.isin ? isinToCnpj[p.isin] : undefined;
       const empresa = cnpj ? cnpjToEmpresa[cnpj] : undefined;
       const analise = cnpj ? latestAnaliseByEmpresa[cnpj] : undefined;
+      // Recomendação efetiva: campos explícitos OU o próprio status quando for Buy/Hold/Sell
+      const recEfetiva =
+        analise?.recomendacao
+        || (analise as any)?.recomendacao_rf
+        || (analise && isRecLike(analise.status) ? analise.status : null);
       return {
         ...p,
         cnpj,
         empresaNome: empresa?.nome,
         empresaRating: empresa?.rating,
         analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
-        analiseRecomendacao: (analise?.recomendacao || (analise as any)?.recomendacao_rf || null),
+        analiseRecomendacao: recEfetiva,
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
         analisePrecoMax: analise?.preco_maximo ?? null,
