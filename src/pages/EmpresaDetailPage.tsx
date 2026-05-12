@@ -58,6 +58,8 @@ export default function EmpresaDetailPage() {
   const [novoIsin, setNovoIsin] = useState('');
   const [novoTicker, setNovoTicker] = useState('');
   const [novoValDate, setNovoValDate] = useState<Date>();
+  const [novoFidcClasse, setNovoFidcClasse] = useState<string>('');
+  const [novoFidcTipo, setNovoFidcTipo] = useState<string>('');
 
   // ── Fetch empresa from DB ──
   const { data: emissor, isLoading: loadingEmpresa } = useQuery({
@@ -265,22 +267,44 @@ export default function EmpresaDetailPage() {
     setRelatorio('');
   };
 
+  const isFidc = ((emissor?.tipo || '').toUpperCase() === 'FIDC');
+  const canEditEmissao = isGestor || currentUser?.funcao === 'Coordenação/Especialista' || isAnalista;
+
   const handleNovaEmissao = async () => {
     if (!novoIsin || !novoTicker || !novoValDate) return;
-    const { error } = await supabase.from('emissoes').upsert({
+    if (isFidc && (!novoFidcClasse || !novoFidcTipo)) {
+      toast({ title: 'Campos obrigatórios', description: 'Para FIDC informe Classe e Tipo.', variant: 'destructive' });
+      return;
+    }
+    const payload: any = {
       isin: novoIsin,
       ticker: novoTicker,
       val_date: format(novoValDate, 'yyyy-MM-dd'),
       cnpj_emissor: decodedCnpj,
-    }, { onConflict: 'isin' });
-    if (!error) {
-      // Refetch emissoes
-      window.location.reload();
+    };
+    if (isFidc) {
+      payload.fidc_classe = novoFidcClasse;
+      payload.fidc_tipo = novoFidcTipo;
     }
+    const { error } = await supabase.from('emissoes').upsert(payload, { onConflict: 'isin' });
+    if (error) {
+      toast({ title: 'Erro ao salvar emissão', description: error.message, variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['emissoes-by-cnpj', decodedCnpj] });
     setNovaEmissaoModal(false);
-    setNovoIsin('');
-    setNovoTicker('');
-    setNovoValDate(undefined);
+    setNovoIsin(''); setNovoTicker(''); setNovoValDate(undefined);
+    setNovoFidcClasse(''); setNovoFidcTipo('');
+  };
+
+  const updateFidcField = async (isin: string, field: 'fidc_classe' | 'fidc_tipo', value: string) => {
+    const { error } = await supabase.from('emissoes').update({ [field]: value } as any).eq('isin', isin);
+    if (error) {
+      toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['emissoes-by-cnpj', decodedCnpj] });
+    queryClient.invalidateQueries({ queryKey: ['alocacao'] });
   };
 
   return (
@@ -331,6 +355,8 @@ export default function EmpresaDetailPage() {
                     <TableHead className="text-[11px] h-9">ISIN</TableHead>
                     <TableHead className="text-[11px] h-9">Ticker</TableHead>
                     <TableHead className="text-[11px] h-9">Val Date</TableHead>
+                    {isFidc && <TableHead className="text-[11px] h-9">Tipo FIDC</TableHead>}
+                    {isFidc && <TableHead className="text-[11px] h-9">Classe</TableHead>}
                     <TableHead className="text-[11px] h-9">Status Análise</TableHead>
                     <TableHead className="text-[11px] h-9">Analista</TableHead>
                     <TableHead className="text-[11px] h-9">Prazo</TableHead>
@@ -350,6 +376,32 @@ export default function EmpresaDetailPage() {
                         <TableCell className="text-xs py-2 font-mono">{em.isin}</TableCell>
                         <TableCell className="text-sm py-2">{em.ticker || '—'}</TableCell>
                         <TableCell className="text-sm py-2 text-muted-foreground">{em.val_date || '—'}</TableCell>
+                        {isFidc && (
+                          <TableCell className="py-2">
+                            {canEditEmissao ? (
+                              <Select value={(em as any).fidc_tipo ?? ''} onValueChange={(v) => updateFidcField(em.isin, 'fidc_tipo', v)}>
+                                <SelectTrigger className="h-7 w-[150px] text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Padronizado">Padronizado</SelectItem>
+                                  <SelectItem value="Não Padronizado">Não Padronizado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : <span className="text-xs">{(em as any).fidc_tipo || '—'}</span>}
+                          </TableCell>
+                        )}
+                        {isFidc && (
+                          <TableCell className="py-2">
+                            {canEditEmissao ? (
+                              <Select value={(em as any).fidc_classe ?? ''} onValueChange={(v) => updateFidcField(em.isin, 'fidc_classe', v)}>
+                                <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Sênior">Sênior</SelectItem>
+                                  <SelectItem value="Mezanino">Mezanino</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : <span className="text-xs">{(em as any).fidc_classe || '—'}</span>}
+                          </TableCell>
+                        )}
                         <TableCell className="py-2">
                           <Badge variant="outline" className={`text-[10px] ${cfg.className}`}>{cfg.label}</Badge>
                         </TableCell>
@@ -378,7 +430,7 @@ export default function EmpresaDetailPage() {
                     );
                   })}
                   {emissoesList.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhuma emissão vinculada a este emissor</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={isFidc ? 9 : 7} className="text-center text-sm text-muted-foreground py-8">Nenhuma emissão vinculada a este emissor</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -565,7 +617,31 @@ export default function EmpresaDetailPage() {
               <Label className="text-xs">CNPJ do Emissor</Label>
               <Input value={decodedCnpj} disabled className="mt-1 h-8 text-sm bg-muted border-border" />
             </div>
-            <Button size="sm" className="w-full" onClick={handleNovaEmissao} disabled={!novoIsin || !novoTicker || !novoValDate}>Salvar</Button>
+            {isFidc && (
+              <>
+                <div>
+                  <Label className="text-xs">Tipo FIDC <span className="text-status-danger">*</span></Label>
+                  <Select value={novoFidcTipo} onValueChange={setNovoFidcTipo}>
+                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Padronizado">Padronizado</SelectItem>
+                      <SelectItem value="Não Padronizado">Não Padronizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Classe <span className="text-status-danger">*</span></Label>
+                  <Select value={novoFidcClasse} onValueChange={setNovoFidcClasse}>
+                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Sênior">Sênior</SelectItem>
+                      <SelectItem value="Mezanino">Mezanino</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            <Button size="sm" className="w-full" onClick={handleNovaEmissao} disabled={!novoIsin || !novoTicker || !novoValDate || (isFidc && (!novoFidcClasse || !novoFidcTipo))}>Salvar</Button>
           </div>
         </DialogContent>
       </Dialog>

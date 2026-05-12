@@ -219,14 +219,12 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
-      const [emissoesRes, empresasRes, fidcRes] = await Promise.all([
-        isins.length ? supabase.from("emissoes").select("isin,cnpj_emissor,ticker").in("isin", isins) : Promise.resolve({ data: [] as any }),
+      const [emissoesRes, empresasRes] = await Promise.all([
+        isins.length ? supabase.from("emissoes").select("isin,cnpj_emissor,ticker,fidc_classe,fidc_tipo" as any).in("isin", isins) : Promise.resolve({ data: [] as any }),
         supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating"),
-        supabase.from("fidc_classes" as any).select("isin,classe"),
       ]);
       const emissoes = (emissoesRes.data ?? []) as any[];
       const empresas = (empresasRes.data ?? []) as any[];
-      const fidcRows = (fidcRes.data ?? []) as any[];
       const tickers = Array.from(new Set(emissoes.map(e => e.ticker).filter(Boolean))) as string[];
       const tradeAtivosRes = tickers.length
         ? await supabase.from("trade_ativos").select("ticker,sub_indexador").in("ticker", tickers)
@@ -236,7 +234,12 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const isinToEmissao = new Map(emissoes.map(e => [e.isin, e]));
       const tickerToSub = new Map(tradeAtivos.map(t => [t.ticker, t.sub_indexador]));
       const cnpjToEmpresa = new Map(empresas.map(e => [e.cnpj, e]));
-      const isinToFidcClasse = new Map<string, FidcClasse>(fidcRows.map(r => [r.isin, r.classe as FidcClasse]));
+      // Classificação FIDC vinda da emissão: fidc_tipo='Não Padronizado' => NP; senão fidc_classe (Sênior/Mezanino)
+      const isinToFidcClasse = new Map<string, FidcClasse>(
+        emissoes
+          .filter(e => e.fidc_tipo === "Não Padronizado" || e.fidc_classe === "Sênior" || e.fidc_classe === "Mezanino")
+          .map(e => [e.isin, (e.fidc_tipo === "Não Padronizado" ? "NP" : e.fidc_classe) as FidcClasse])
+      );
 
       const totalFundo = positions.reduce((s, p) => s + p.posicao_rs, 0);
 
