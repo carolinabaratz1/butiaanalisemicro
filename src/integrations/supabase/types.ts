@@ -44,11 +44,48 @@ export type Database = {
         }
         Relationships: []
       }
+      allocation_target_periods: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          created_by: string | null
+          data_fim: string | null
+          data_inicio: string
+          fundo: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          fundo: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          fundo?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       allocation_targets: {
         Row: {
           created_at: string
           fundo: string
           id: string
+          period_id: string | null
           target_pct: number | null
           tipo_ativo: string
           updated_at: string
@@ -58,6 +95,7 @@ export type Database = {
           created_at?: string
           fundo: string
           id?: string
+          period_id?: string | null
           target_pct?: number | null
           tipo_ativo: string
           updated_at?: string
@@ -67,12 +105,62 @@ export type Database = {
           created_at?: string
           fundo?: string
           id?: string
+          period_id?: string | null
           target_pct?: number | null
           tipo_ativo?: string
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "allocation_targets_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "allocation_target_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      allocation_targets_emissor: {
+        Row: {
+          cnpj_emissor: string
+          created_at: string
+          fundo: string
+          id: string
+          period_id: string
+          target_pct: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cnpj_emissor: string
+          created_at?: string
+          fundo: string
+          id?: string
+          period_id: string
+          target_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cnpj_emissor?: string
+          created_at?: string
+          fundo?: string
+          id?: string
+          period_id?: string
+          target_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allocation_targets_emissor_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "allocation_target_periods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       analises: {
         Row: {
