@@ -172,6 +172,10 @@ export default function EmpresasPage() {
                   <Input value={formCnpj} onChange={e => setFormCnpj(e.target.value)} placeholder="00.000.000/0001-00" className="h-8 text-sm bg-background" />
                 </div>
                 <div>
+                  <Label className="text-xs">Código Emissor *</Label>
+                  <Input value={formCodigo} onChange={e => setFormCodigo(e.target.value.toUpperCase())} placeholder="Ex: TTEN" maxLength={10} className="h-8 text-sm bg-background font-mono" />
+                </div>
+                <div>
                   <Label className="text-xs">Tipo</Label>
                   <Select value={formTipo} onValueChange={setFormTipo}>
                     <SelectTrigger className="h-8 text-sm bg-background"><SelectValue /></SelectTrigger>
