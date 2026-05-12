@@ -79,7 +79,6 @@ export function AlocacaoPage() {
         </TabsList>
         <TabsContent value="fundo" className="mt-4 space-y-4">
           <FundLimitsPanel fundo={fundo} valDate={selectedDate} />
-          <FidcClassesPanel fundo={fundo} valDate={selectedDate} />
         </TabsContent>
         <TabsContent value="emissor" className="mt-4">
           <IssuerExposurePanel fundo={fundo} valDate={selectedDate} />
