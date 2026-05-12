@@ -32,6 +32,7 @@ export default function EmpresasPage() {
   const [formSetor, setFormSetor] = useState('');
   const [formRating, setFormRating] = useState('');
   const [formGrupo, setFormGrupo] = useState('');
+  const [formCodigo, setFormCodigo] = useState('');
 
   // Rating edit state
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
