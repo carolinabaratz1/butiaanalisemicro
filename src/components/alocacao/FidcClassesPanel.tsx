@@ -43,7 +43,7 @@ export function FidcClassesPanel({ fundo, valDate }: Props) {
     queryFn: async () => {
       const { data, error } = await supabase.from("fidc_classes" as any).select("isin,classe");
       if (error) throw error;
-      return (data ?? []) as { isin: string; classe: FidcClasse }[];
+      return ((data ?? []) as any) as { isin: string; classe: FidcClasse }[];
     },
   });
 
