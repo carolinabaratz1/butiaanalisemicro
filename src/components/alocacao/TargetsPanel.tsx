@@ -298,6 +298,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
           })}
         </TableBody>
       </Table>
+      </div>
     </div>
   );
 }
