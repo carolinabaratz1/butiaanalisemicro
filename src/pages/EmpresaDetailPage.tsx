@@ -376,6 +376,32 @@ export default function EmpresaDetailPage() {
                         <TableCell className="text-xs py-2 font-mono">{em.isin}</TableCell>
                         <TableCell className="text-sm py-2">{em.ticker || '—'}</TableCell>
                         <TableCell className="text-sm py-2 text-muted-foreground">{em.val_date || '—'}</TableCell>
+                        {isFidc && (
+                          <TableCell className="py-2">
+                            {canEditEmissao ? (
+                              <Select value={(em as any).fidc_tipo ?? ''} onValueChange={(v) => updateFidcField(em.isin, 'fidc_tipo', v)}>
+                                <SelectTrigger className="h-7 w-[150px] text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Padronizado">Padronizado</SelectItem>
+                                  <SelectItem value="Não Padronizado">Não Padronizado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : <span className="text-xs">{(em as any).fidc_tipo || '—'}</span>}
+                          </TableCell>
+                        )}
+                        {isFidc && (
+                          <TableCell className="py-2">
+                            {canEditEmissao ? (
+                              <Select value={(em as any).fidc_classe ?? ''} onValueChange={(v) => updateFidcField(em.isin, 'fidc_classe', v)}>
+                                <SelectTrigger className="h-7 w-[120px] text-xs"><SelectValue placeholder="—" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Sênior">Sênior</SelectItem>
+                                  <SelectItem value="Mezanino">Mezanino</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : <span className="text-xs">{(em as any).fidc_classe || '—'}</span>}
+                          </TableCell>
+                        )}
                         <TableCell className="py-2">
                           <Badge variant="outline" className={`text-[10px] ${cfg.className}`}>{cfg.label}</Badge>
                         </TableCell>
