@@ -530,6 +530,30 @@ export type Database = {
         }
         Relationships: []
       }
+      fidc_classes: {
+        Row: {
+          classe: string
+          created_at: string
+          isin: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          classe: string
+          created_at?: string
+          isin: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          classe?: string
+          created_at?: string
+          isin?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       pipeline_eventos: {
         Row: {
           acao: string
