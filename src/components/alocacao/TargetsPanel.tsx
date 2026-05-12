@@ -308,6 +308,17 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [sortKey, setSortKey] = useState<"nome" | "grupo" | "rating" | "target">("nome");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir(k === "target" ? "desc" : "asc"); }
+  };
+  const SortIcon = ({ k }: { k: typeof sortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="w-3 h-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3 inline ml-1" /> : <ArrowDown className="w-3 h-3 inline ml-1" />;
+  };
 
   const { data: empresas = [] } = useQuery({
     queryKey: ["empresas-for-targets"],
@@ -336,13 +347,30 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return empresas as any[];
-    return (empresas as any[]).filter(e =>
+    const list = !q ? (empresas as any[]) : (empresas as any[]).filter(e =>
       e.nome?.toLowerCase().includes(q) ||
       e.cnpj?.toLowerCase().includes(q) ||
       e.grupo_economico?.toLowerCase().includes(q)
     );
-  }, [empresas, search]);
+    const arr = [...list];
+    arr.sort((a: any, b: any) => {
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "nome": av = a.nome ?? ""; bv = b.nome ?? ""; break;
+        case "grupo": av = a.grupo_economico ?? ""; bv = b.grupo_economico ?? ""; break;
+        case "rating": av = a.rating ?? ""; bv = b.rating ?? ""; break;
+        case "target": {
+          const ra = drafts[a.cnpj]; const rb = drafts[b.cnpj];
+          av = ra == null || ra.trim() === "" ? -Infinity : Number(ra.replace(",", "."));
+          bv = rb == null || rb.trim() === "" ? -Infinity : Number(rb.replace(",", "."));
+          break;
+        }
+      }
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? (av - bv) : (bv - av);
+    });
+    return arr;
+  }, [empresas, search, sortKey, sortDir, drafts]);
 
   async function saveOne(cnpj: string, raw: string) {
     if (!editable || !periodId) return;
@@ -376,10 +404,10 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Emissor</TableHead>
-              <TableHead>Grupo</TableHead>
-              <TableHead className="text-center">Rating</TableHead>
-              <TableHead className="text-right w-[140px]">Target %</TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("nome")}>Emissor<SortIcon k="nome" /></TableHead>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("grupo")}>Grupo<SortIcon k="grupo" /></TableHead>
+              <TableHead className="text-center cursor-pointer select-none" onClick={() => toggleSort("rating")}>Rating<SortIcon k="rating" /></TableHead>
+              <TableHead className="text-right w-[140px] cursor-pointer select-none" onClick={() => toggleSort("target")}>Target %<SortIcon k="target" /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
