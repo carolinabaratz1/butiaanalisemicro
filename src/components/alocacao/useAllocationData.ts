@@ -3,7 +3,26 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
+  fidcTipoFromClasse, FidcClasse,
 } from "./allocationUtils";
+
+export interface FidcClassRow {
+  isin: string;
+  classe: FidcClasse;
+}
+
+export function useFidcClasses() {
+  return useQuery({
+    queryKey: ["fidc_classes"],
+    queryFn: async (): Promise<FidcClassRow[]> => {
+      const { data, error } = await supabase
+        .from("fidc_classes" as any)
+        .select("isin,classe");
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+  });
+}
 
 export interface LimitRow {
   fundo: string;
