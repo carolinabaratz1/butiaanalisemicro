@@ -268,8 +268,17 @@ export default function PosicoesPage() {
   };
 
   // ── BI Metrics ──
-  // Posições que requerem análise (exclui Termo)
-  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
+  // Produtos que não passam por análise de research (não entram nas métricas de cobertura)
+  const isNonAnalyzable = (p: EnrichedPosition) => {
+    const prod = (p.product || '').toUpperCase();
+    const cls = (p.product_class || '').toUpperCase();
+    if (prod === 'TERMO') return true;
+    if (prod.includes('DAP')) return true;          // DAP Futuro
+    if (cls.includes('DAP')) return true;
+    return false;
+  };
+  // Posições que requerem análise (exclui Termo, DAP Futuro, etc.)
+  const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => !isNonAnalyzable(p)), [biFiltered]);
 
   // Normaliza recomendação para BUY / HOLD / SELL (cobre Buy/Comprar/Manter/Vender etc.)
   const recBucket = (r: string | null): 'BUY' | 'HOLD' | 'SELL' | null => {
@@ -282,31 +291,36 @@ export default function PosicoesPage() {
   };
 
   const biMetrics = useMemo(() => {
-    // Conta EMISSORES distintos por bucket de recomendação (apenas análises Aprovadas)
+    // Conta EMISSORES distintos por bucket de recomendação
+    // (considera análises Aprovadas, Em Análise e Vencidas — qualquer recomendação registrada)
     const buyEm = new Set<string>(), holdEm = new Set<string>(), sellEm = new Set<string>();
     for (const p of biFilteredForAnalysis) {
       if (!p.cnpj) continue;
-      if (p.analiseStatus !== 'Aprovada') continue;
+      if (p.analiseStatus === 'Sem Análise') continue;
       const b = recBucket(p.analiseRecomendacao);
       if (b === 'BUY') buyEm.add(p.cnpj);
       else if (b === 'HOLD') holdEm.add(p.cnpj);
       else if (b === 'SELL') sellEm.add(p.cnpj);
     }
+    const emAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Em Análise').length;
     const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
     const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
-    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, vencidas, semAnalise };
+    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, emAnalise, vencidas, semAnalise };
   }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
     if (drillStatus === 'BUY' || drillStatus === 'HOLD' || drillStatus === 'SELL') {
-      return biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada' && recBucket(p.analiseRecomendacao) === drillStatus);
+      return biFilteredForAnalysis.filter(p =>
+        p.analiseStatus !== 'Sem Análise' && recBucket(p.analiseRecomendacao) === drillStatus
+      );
     }
     return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
   }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
+    : drillStatus === 'Em Análise' ? 'Posições em Análise'
     : drillStatus === 'BUY' ? 'Posições de Emissores BUY'
     : drillStatus === 'HOLD' ? 'Posições de Emissores HOLD'
     : drillStatus === 'SELL' ? 'Posições de Emissores SELL'
@@ -786,7 +800,7 @@ export default function PosicoesPage() {
           </div>
 
           {/* KPIs Row 2 - Research */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
             <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('BUY')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -807,6 +821,13 @@ export default function PosicoesPage() {
                 <p className="text-[11px] text-muted-foreground uppercase">Emissores SELL</p>
               </div>
               <p className="text-xl font-bold text-red-400 mt-1">{biMetrics.sell}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-indigo-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Em Análise')}><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-indigo-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Em Análise</p>
+              </div>
+              <p className="text-xl font-bold text-indigo-400 mt-1">{biMetrics.emAnalise}</p>
             </CardContent></Card>
             <Card className="bg-card border-border border-l-4 border-l-yellow-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Vencida')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
