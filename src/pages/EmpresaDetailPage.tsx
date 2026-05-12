@@ -617,7 +617,31 @@ export default function EmpresaDetailPage() {
               <Label className="text-xs">CNPJ do Emissor</Label>
               <Input value={decodedCnpj} disabled className="mt-1 h-8 text-sm bg-muted border-border" />
             </div>
-            <Button size="sm" className="w-full" onClick={handleNovaEmissao} disabled={!novoIsin || !novoTicker || !novoValDate}>Salvar</Button>
+            {isFidc && (
+              <>
+                <div>
+                  <Label className="text-xs">Tipo FIDC <span className="text-status-danger">*</span></Label>
+                  <Select value={novoFidcTipo} onValueChange={setNovoFidcTipo}>
+                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Padronizado">Padronizado</SelectItem>
+                      <SelectItem value="Não Padronizado">Não Padronizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Classe <span className="text-status-danger">*</span></Label>
+                  <Select value={novoFidcClasse} onValueChange={setNovoFidcClasse}>
+                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Sênior">Sênior</SelectItem>
+                      <SelectItem value="Mezanino">Mezanino</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+            <Button size="sm" className="w-full" onClick={handleNovaEmissao} disabled={!novoIsin || !novoTicker || !novoValDate || (isFidc && (!novoFidcClasse || !novoFidcTipo))}>Salvar</Button>
           </div>
         </DialogContent>
       </Dialog>
