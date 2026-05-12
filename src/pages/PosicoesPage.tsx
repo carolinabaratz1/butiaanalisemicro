@@ -139,13 +139,13 @@ export default function PosicoesPage() {
       let from = 0;
       let hasMore = true;
       while (hasMore) {
-        const { data, error } = await supabase.from('analises').select('empresa_id, status, tipo, recomendacao, preco_min, preco_medio, preco_maximo, data_conclusao, data_inicio').range(from, from + 999);
+        const { data, error } = await supabase.from('analises').select('empresa_id, status, tipo, recomendacao, recomendacao_rf, preco_min, preco_medio, preco_maximo, data_conclusao, data_inicio').range(from, from + 999);
         if (error) throw error;
         all = [...all, ...data];
         hasMore = data.length === 1000;
         from += 1000;
       }
-      return all as { empresa_id: string; status: string; tipo: string; recomendacao: string | null; preco_min: number | null; preco_medio: number | null; preco_maximo: number | null; data_conclusao: string | null; data_inicio: string }[];
+      return all as { empresa_id: string; status: string; tipo: string; recomendacao: string | null; recomendacao_rf: string | null; preco_min: number | null; preco_medio: number | null; preco_maximo: number | null; data_conclusao: string | null; data_inicio: string }[];
     },
   });
 
@@ -207,7 +207,7 @@ export default function PosicoesPage() {
         empresaNome: empresa?.nome,
         empresaRating: empresa?.rating,
         analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
-        analiseRecomendacao: analise?.recomendacao || null,
+        analiseRecomendacao: (analise?.recomendacao || (analise as any)?.recomendacao_rf || null),
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
         analisePrecoMax: analise?.preco_maximo ?? null,
@@ -271,22 +271,45 @@ export default function PosicoesPage() {
   // Posições que requerem análise (exclui Termo)
   const biFilteredForAnalysis = useMemo(() => biFiltered.filter(p => p.product !== 'Termo'), [biFiltered]);
 
+  // Normaliza recomendação para BUY / HOLD / SELL (cobre Buy/Comprar/Manter/Vender etc.)
+  const recBucket = (r: string | null): 'BUY' | 'HOLD' | 'SELL' | null => {
+    if (!r) return null;
+    const u = r.toUpperCase().trim();
+    if (u.startsWith('BUY') || u.startsWith('COMPR')) return 'BUY';
+    if (u.startsWith('HOLD') || u.startsWith('MANT') || u.startsWith('NEUT')) return 'HOLD';
+    if (u.startsWith('SELL') || u.startsWith('VEND') || u.startsWith('REDU')) return 'SELL';
+    return null;
+  };
+
   const biMetrics = useMemo(() => {
-    const aprovadas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada').length;
+    // Conta EMISSORES distintos por bucket de recomendação (apenas análises Aprovadas)
+    const buyEm = new Set<string>(), holdEm = new Set<string>(), sellEm = new Set<string>();
+    for (const p of biFilteredForAnalysis) {
+      if (!p.cnpj) continue;
+      if (p.analiseStatus !== 'Aprovada') continue;
+      const b = recBucket(p.analiseRecomendacao);
+      if (b === 'BUY') buyEm.add(p.cnpj);
+      else if (b === 'HOLD') holdEm.add(p.cnpj);
+      else if (b === 'SELL') sellEm.add(p.cnpj);
+    }
     const vencidas = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Vencida').length;
     const semAnalise = biFilteredForAnalysis.filter(p => p.analiseStatus === 'Sem Análise').length;
-    const cobertura = biFilteredForAnalysis.length > 0 ? ((aprovadas / biFilteredForAnalysis.length) * 100).toFixed(1) : '0';
-    return { aprovadas, vencidas, semAnalise, cobertura };
+    return { buy: buyEm.size, hold: holdEm.size, sell: sellEm.size, vencidas, semAnalise };
   }, [biFilteredForAnalysis]);
 
   const drillPositions = useMemo(() => {
     if (!drillStatus) return [];
+    if (drillStatus === 'BUY' || drillStatus === 'HOLD' || drillStatus === 'SELL') {
+      return biFilteredForAnalysis.filter(p => p.analiseStatus === 'Aprovada' && recBucket(p.analiseRecomendacao) === drillStatus);
+    }
     return biFilteredForAnalysis.filter(p => p.analiseStatus === drillStatus);
   }, [biFilteredForAnalysis, drillStatus]);
 
   const drillTitle = drillStatus === 'Vencida' ? 'Posições com Análise Vencida'
     : drillStatus === 'Sem Análise' ? 'Posições sem Análise'
-    : drillStatus === 'Aprovada' ? 'Posições com Análise Aprovada'
+    : drillStatus === 'BUY' ? 'Posições de Emissores BUY'
+    : drillStatus === 'HOLD' ? 'Posições de Emissores HOLD'
+    : drillStatus === 'SELL' ? 'Posições de Emissores SELL'
     : `Posições: ${drillStatus}`;
 
   const handleDrillExport = () => {
@@ -763,13 +786,27 @@ export default function PosicoesPage() {
           </div>
 
           {/* KPIs Row 2 - Research */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Aprovada')}><CardContent className="p-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <Card className="bg-card border-border border-l-4 border-l-emerald-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('BUY')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <p className="text-[11px] text-muted-foreground uppercase">Análise Aprovada</p>
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores BUY</p>
               </div>
-              <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.aprovadas}</p>
+              <p className="text-xl font-bold text-emerald-400 mt-1">{biMetrics.buy}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-blue-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('HOLD')}><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores HOLD</p>
+              </div>
+              <p className="text-xl font-bold text-blue-400 mt-1">{biMetrics.hold}</p>
+            </CardContent></Card>
+            <Card className="bg-card border-border border-l-4 border-l-red-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('SELL')}><CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <p className="text-[11px] text-muted-foreground uppercase">Emissores SELL</p>
+              </div>
+              <p className="text-xl font-bold text-red-400 mt-1">{biMetrics.sell}</p>
             </CardContent></Card>
             <Card className="bg-card border-border border-l-4 border-l-yellow-500 cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setDrillStatus('Vencida')}><CardContent className="p-4">
               <div className="flex items-center gap-1.5">
@@ -784,13 +821,6 @@ export default function PosicoesPage() {
                 <p className="text-[11px] text-muted-foreground uppercase">Sem Análise</p>
               </div>
               <p className="text-xl font-bold text-muted-foreground mt-1">{biMetrics.semAnalise}</p>
-            </CardContent></Card>
-            <Card className="bg-card border-border border-l-4 border-l-blue-500"><CardContent className="p-4">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-blue-400" />
-                <p className="text-[11px] text-muted-foreground uppercase">% Cobertura</p>
-              </div>
-              <p className="text-xl font-bold text-blue-400 mt-1">{biMetrics.cobertura}%</p>
             </CardContent></Card>
           </div>
 
