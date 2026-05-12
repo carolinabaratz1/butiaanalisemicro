@@ -3,7 +3,26 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
+  fidcTipoFromClasse, FidcClasse,
 } from "./allocationUtils";
+
+export interface FidcClassRow {
+  isin: string;
+  classe: FidcClasse;
+}
+
+export function useFidcClasses() {
+  return useQuery({
+    queryKey: ["fidc_classes"],
+    queryFn: async (): Promise<FidcClassRow[]> => {
+      const { data, error } = await supabase
+        .from("fidc_classes" as any)
+        .select("isin,classe");
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+  });
+}
 
 export interface LimitRow {
   fundo: string;
@@ -200,12 +219,14 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
-      const [emissoesRes, empresasRes] = await Promise.all([
+      const [emissoesRes, empresasRes, fidcRes] = await Promise.all([
         isins.length ? supabase.from("emissoes").select("isin,cnpj_emissor,ticker").in("isin", isins) : Promise.resolve({ data: [] as any }),
         supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating"),
+        supabase.from("fidc_classes" as any).select("isin,classe"),
       ]);
       const emissoes = (emissoesRes.data ?? []) as any[];
       const empresas = (empresasRes.data ?? []) as any[];
+      const fidcRows = (fidcRes.data ?? []) as any[];
       const tickers = Array.from(new Set(emissoes.map(e => e.ticker).filter(Boolean))) as string[];
       const tradeAtivosRes = tickers.length
         ? await supabase.from("trade_ativos").select("ticker,sub_indexador").in("ticker", tickers)
@@ -215,6 +236,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const isinToEmissao = new Map(emissoes.map(e => [e.isin, e]));
       const tickerToSub = new Map(tradeAtivos.map(t => [t.ticker, t.sub_indexador]));
       const cnpjToEmpresa = new Map(empresas.map(e => [e.cnpj, e]));
+      const isinToFidcClasse = new Map<string, FidcClasse>(fidcRows.map(r => [r.isin, r.classe as FidcClasse]));
 
       const totalFundo = positions.reduce((s, p) => s + p.posicao_rs, 0);
 
@@ -232,7 +254,11 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       for (const p of positions) {
         const fin = p.posicao_rs;
-        const tipo = tipoAtivoFromProduct(p.product, p.product_class);
+        let tipo = tipoAtivoFromProduct(p.product, p.product_class);
+        // Cotas de Fundos CP -> classifica via fidc_classes pelo ISIN
+        if (tipo === "Cotas de Fundos CP" && p.isin) {
+          tipo = fidcTipoFromClasse(isinToFidcClasse.get(p.isin) ?? null);
+        }
         addTo(porTipo, tipo, fin);
         // Agregador "Crédito Privado"
         if (CREDITO_PRIVADO_TIPOS.has(tipo)) {

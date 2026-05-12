@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FundLimitsPanel } from "./FundLimitsPanel";
 import { IssuerExposurePanel } from "./IssuerExposurePanel";
 import { TargetsPanel } from "./TargetsPanel";
+import { FidcClassesPanel } from "./FidcClassesPanel";
 import { FUNDOS, FundoKey } from "./allocationUtils";
 import { useAllocationDates } from "./useAllocationData";
 
@@ -76,8 +77,9 @@ export function AlocacaoPage() {
           <TabsTrigger value="emissor">Enquadramento por Emissor</TabsTrigger>
           <TabsTrigger value="targets">Targets de Alocação</TabsTrigger>
         </TabsList>
-        <TabsContent value="fundo" className="mt-4">
+        <TabsContent value="fundo" className="mt-4 space-y-4">
           <FundLimitsPanel fundo={fundo} valDate={selectedDate} />
+          <FidcClassesPanel fundo={fundo} valDate={selectedDate} />
         </TabsContent>
         <TabsContent value="emissor" className="mt-4">
           <IssuerExposurePanel fundo={fundo} valDate={selectedDate} />
