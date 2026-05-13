@@ -91,13 +91,9 @@ export default function EmpresaDetailPage() {
   const { data: analistasUsuarios = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, nome, funcao')
-        .in('funcao', ['Analista', 'Coordenação/Especialista'])
-        .eq('status', 'Ativo');
+      const { data, error } = await (supabase as any).rpc('get_active_analysts');
       if (error) throw error;
-      return data || [];
+      return (data as Array<{ id: string; nome: string; funcao: string; status: string }>) || [];
     },
   });
   const isGestor = currentUser?.funcao === 'Gestor';
