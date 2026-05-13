@@ -537,7 +537,15 @@ export type Database = {
           tipo?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresas_setor_fkey"
+            columns: ["setor"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["nome"]
+          },
+        ]
       }
       fidc_classes: {
         Row: {
