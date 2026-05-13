@@ -26,7 +26,7 @@ interface TradeMonitorPageProps {
   initialTicker?: string;
 }
 
-type View = "dashboard" | "table";
+type View = "dashboard" | "sector" | "table";
 
 export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPageProps) {
   const [mode, setMode] = useState<TradeMode | null>(null);
