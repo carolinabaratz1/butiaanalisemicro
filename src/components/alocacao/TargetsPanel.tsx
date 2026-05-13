@@ -260,6 +260,18 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
     qc.invalidateQueries({ queryKey: ["allocation_targets"] });
   }
 
+  async function saveAll() {
+    if (!editable || !periodId) return;
+    let ok = 0, fail = 0;
+    for (const r of rows) {
+      try {
+        await saveRow(r.tipo_ativo, drafts[r.key] ?? "", limDrafts[r.key] ?? "");
+        ok++;
+      } catch { fail++; }
+    }
+    toast({ title: fail ? `Salvo com erros (${ok} ok, ${fail} falhas)` : `${ok} linhas salvas`, variant: fail ? "destructive" : "default" });
+  }
+
   if (!periodId) return <div className="text-sm text-muted-foreground p-4">Nenhum período disponível. Crie um novo período para começar.</div>;
 
   return (
@@ -270,6 +282,9 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
           <Input placeholder="Filtrar tipo de ativo..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
         </div>
         <span className="text-xs text-muted-foreground">{visible.length} {visible.length === 1 ? "linha" : "linhas"}</span>
+        {editable && (
+          <Button size="sm" onClick={saveAll} className="gap-1.5 ml-auto"><Save className="w-3.5 h-3.5" />Salvar tudo</Button>
+        )}
       </div>
       <div className="border rounded-lg overflow-x-auto">
       <Table>
