@@ -610,14 +610,15 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                         labelFormatter={(l: string) => fmtDate(l)}
                         formatter={(v: number, n: string) => [v?.toFixed(3) + "%", n]}
                       />
-                      <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+                      <Legend wrapperStyle={{ fontSize: 9 }} iconSize={14} />
                       {multiSectorSeries.setores.map((s) => (
                         <Line
                           key={s.nome}
                           type="monotone"
                           dataKey={s.nome}
                           stroke={s.color}
-                          strokeWidth={1.5}
+                          strokeWidth={1.75}
+                          strokeDasharray={s.dash === "0" ? undefined : s.dash}
                           dot={false}
                           isAnimationActive={false}
                           connectNulls
