@@ -472,7 +472,12 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
 
   const ntnbRows: Record<string, unknown>[] = [];
   if (sheetNTNB) {
-    const rawNTNB: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetNTNB, { defval: null });
+    // Mesma estrutura v2: coluna A com fórmula QTLINK e nome do ativo abaixo.
+    const rawNTNB: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetNTNB, {
+      defval: null,
+      range: 1,
+      header: ["Nome do Ativo", "Data", "Taxa Indicativa", "Quantidade Negociada", "PU Curva", "PU Indicativo", "Duration"],
+    });
     for (const r of rawNTNB) {
       const nome = String(r["Nome do Ativo"] ?? "").trim();
       const dataISO = excelDateToISO(r["Data"]);
