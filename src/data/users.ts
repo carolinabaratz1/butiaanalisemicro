@@ -57,7 +57,3 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
 };
-
-export function getUserNome(id: string): string {
-  return users.find(u => u.id === id)?.nome ?? 'N/A';
-}
