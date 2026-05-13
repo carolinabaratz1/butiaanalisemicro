@@ -155,7 +155,7 @@ export default function PipelineResearchPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, email, funcao')
+        .select('id, nome, funcao')
         .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .eq('status', 'Ativo');
       if (error) throw error;
@@ -169,7 +169,7 @@ export default function PipelineResearchPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, email, funcao');
+        .select('id, nome, funcao');
       if (error) throw error;
       return data || [];
     },

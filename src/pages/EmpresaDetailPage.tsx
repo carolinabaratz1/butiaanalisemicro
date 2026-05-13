@@ -93,7 +93,7 @@ export default function EmpresaDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, nome, email, funcao')
+        .select('id, nome, funcao')
         .in('funcao', ['Analista', 'Coordenação/Especialista'])
         .eq('status', 'Ativo');
       if (error) throw error;
