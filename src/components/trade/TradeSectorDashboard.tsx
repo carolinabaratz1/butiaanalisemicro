@@ -101,7 +101,8 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const setorAtivo = setor ?? setores[0]?.[0] ?? null;
 
   const [search, setSearch] = useState("");
-  const [window, setWindow] = useState<30 | 90 | 180 | 365>(90);
+  // Janela em dias úteis ("MAX" = sem corte)
+  const [window, setWindow] = useState<5 | 10 | 21 | 90 | "MAX">(21);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
 
   const noSetor = !setorAtivo;
@@ -149,9 +150,13 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   // Série temporal: mediana de spread por dia, com janela móvel de 10 negociações.
   function buildSeries(tickers: Set<string>) {
     if (!history || tickers.size === 0) return [] as { d: string; med: number | null; vol: number }[];
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - window);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    let cutoffStr = "0000-00-00";
+    if (window !== "MAX") {
+      const cutoff = new Date();
+      // Aprox. dias úteis → calendário (×7/5)
+      cutoff.setDate(cutoff.getDate() - Math.ceil(window * 1.4));
+      cutoffStr = cutoff.toISOString().slice(0, 10);
+    }
 
     const byDate = new Map<string, number[]>();
     const volByDate = new Map<string, number>();
@@ -242,7 +247,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             Janela histórica
           </span>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
-            {([30, 90, 180, 365] as const).map((w) => (
+            {([5, 10, 21, 90, "MAX"] as const).map((w) => (
               <button
                 key={w}
                 onClick={() => setWindow(w)}
@@ -250,7 +255,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                   window === w ? "bg-background shadow-sm font-bold" : "text-muted-foreground"
                 }`}
               >
-                {w === 365 ? "1a" : `${w}d`}
+                {w === "MAX" ? "Máx" : `${w}du`}
               </button>
             ))}
           </div>
@@ -378,7 +383,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="text-xs font-bold mb-1">Mediana de spread — {setorAtivo}</div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                Mediana móvel de 10 negociações · janela {window}d
+                Mediana móvel de 10 negociações · janela {window === "MAX" ? "máx" : `${window}du`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -423,7 +428,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                 )}
               </div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                {emissorTickers.size} ticker(s) · janela {window}d
+                {emissorTickers.size} ticker(s) · janela {window === "MAX" ? "máx" : `${window}du`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
