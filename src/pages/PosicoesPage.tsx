@@ -126,9 +126,20 @@ export default function PosicoesPage() {
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-all'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('empresas').select('cnpj, nome, rating, setor, tipo');
-      if (error) throw error;
-      return data as { cnpj: string; nome: string; rating: string | null; setor: string | null }[];
+      let all: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('cnpj, nome, rating, setor, tipo')
+          .range(from, from + 999);
+        if (error) throw error;
+        all = [...all, ...(data ?? [])];
+        hasMore = (data?.length ?? 0) === 1000;
+        from += 1000;
+      }
+      return all as { cnpj: string; nome: string; rating: string | null; setor: string | null; tipo: string | null }[];
     },
   });
 
