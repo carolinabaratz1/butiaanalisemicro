@@ -227,6 +227,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
                     : 0
                 }
               />
+            ) : view === "sector" ? (
+              <TradeSectorDashboard
+                data={filteredData}
+                history={history}
+                mode={mode}
+                modeColor={modeCfg.color}
+                onSelectTicker={setSelectedTicker}
+              />
             ) : (
               <TradeTable
                 data={filteredData}
