@@ -91,6 +91,35 @@ function dedupeRows(
   return Array.from(map.values());
 }
 
+function isTransientError(msg: string): boolean {
+  // Cloudflare 5xx HTML pages, gateway timeouts, connection resets
+  return /\b(520|521|522|523|524|502|503|504)\b/.test(msg)
+    || /Web server is returning an unknown error/i.test(msg)
+    || /cloudflare/i.test(msg)
+    || /fetch failed|network|timeout|ECONNRESET|terminated/i.test(msg);
+}
+
+async function upsertChunk(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  table: UploadTable,
+  chunk: Record<string, unknown>[],
+) {
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const { error } = await supabase.from(table).upsert(chunk, {
+      onConflict: tableConfig[table].onConflict,
+    });
+    if (!error) return;
+    lastErr = error.message ?? String(error);
+    if (!isTransientError(lastErr) || attempt === 4) {
+      throw new Error(`${table} upsert: ${lastErr.slice(0, 500)}`);
+    }
+    await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+  }
+  throw new Error(`${table} upsert: ${lastErr.slice(0, 500)}`);
+}
+
 async function batchUpsert(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -99,10 +128,11 @@ async function batchUpsert(
 ) {
   if (rows.length === 0) return 0;
   const deduped = dedupeRows(table, rows);
-  const { error } = await supabase.from(table).upsert(deduped, {
-    onConflict: tableConfig[table].onConflict,
-  });
-  if (error) throw new Error(`${table} upsert: ${error.message}`);
+  // Sub-chunk to keep payloads small and reduce 520 risk on large batches.
+  const SUB = 200;
+  for (let i = 0; i < deduped.length; i += SUB) {
+    await upsertChunk(supabase, table, deduped.slice(i, i + SUB));
+  }
   return deduped.length;
 }
 
