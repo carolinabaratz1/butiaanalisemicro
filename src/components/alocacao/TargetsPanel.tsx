@@ -323,7 +323,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
                     disabled={!editable}
                     className="h-8 text-right font-mono w-24 ml-auto"
                     onChange={(e) => setLimDrafts(d => ({ ...d, [r.key]: e.target.value }))}
-                    onBlur={(e) => saveRow(r.tipo_ativo, drafts[r.key] ?? "", e.target.value)}
+                    onBlur={(e) => { saveRow(r.tipo_ativo, drafts[r.key] ?? "", e.target.value).catch(() => {}); }}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                     placeholder={r.baseLimite == null ? "—" : String(r.baseLimite)}
                   />
