@@ -154,7 +154,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               className="h-7 px-3 text-xs gap-1.5"
               onClick={() => setView("dashboard")}
             >
-              <LayoutDashboard className="w-3.5 h-3.5" />Dashboard
+              <LayoutDashboard className="w-3.5 h-3.5" />Geral
+            </Button>
+            <Button
+              size="sm" variant={view === "sector" ? "secondary" : "ghost"}
+              className="h-7 px-3 text-xs gap-1.5"
+              onClick={() => setView("sector")}
+            >
+              <Layers className="w-3.5 h-3.5" />Setorial
             </Button>
             <Button
               size="sm" variant={view === "table" ? "secondary" : "ghost"}
