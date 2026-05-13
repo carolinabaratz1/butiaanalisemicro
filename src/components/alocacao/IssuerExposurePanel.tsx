@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAllocationLimits, useAllocationData } from "./useAllocationData";
+import { useAllocationLimits, useAllocationData, useAllocationTargetPeriods, useAllocationEmissorTargets } from "./useAllocationData";
 import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
