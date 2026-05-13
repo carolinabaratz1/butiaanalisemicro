@@ -962,6 +962,7 @@ export type Database = {
         Row: {
           created_at: string | null
           data: string
+          duration_du: number | null
           id: number
           pu_curva: number | null
           pu_indicativo: number | null
@@ -973,6 +974,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           data: string
+          duration_du?: number | null
           id?: number
           pu_curva?: number | null
           pu_indicativo?: number | null
@@ -984,6 +986,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           data?: string
+          duration_du?: number | null
           id?: number
           pu_curva?: number | null
           pu_indicativo?: number | null
