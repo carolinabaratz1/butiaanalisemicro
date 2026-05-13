@@ -1,0 +1,2 @@
+ALTER TABLE public.allocation_targets DROP CONSTRAINT IF EXISTS allocation_targets_fundo_tipo_ativo_key;
+ALTER TABLE public.allocation_targets ADD CONSTRAINT allocation_targets_period_fundo_tipo_key UNIQUE (period_id, fundo, tipo_ativo);
