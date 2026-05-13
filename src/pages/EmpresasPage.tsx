@@ -52,6 +52,19 @@ export default function EmpresasPage() {
     },
   });
 
+  const { data: setoresOficiais = [] } = useQuery({
+    queryKey: ['setores-oficiais'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('setores' as any)
+        .select('nome')
+        .eq('ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return (data ?? []).map((r: any) => r.nome as string);
+    },
+  });
+
   const { data: analisesCounts = {} } = useQuery({
     queryKey: ['analises-ativas-count'],
     queryFn: async () => {
