@@ -1146,6 +1146,15 @@ export type Database = {
         Args: { p_indexador: string; p_taxa_emissao: string }
         Returns: string
       }
+      get_active_analysts: {
+        Args: never
+        Returns: {
+          funcao: string
+          id: string
+          nome: string
+          status: string
+        }[]
+      }
       get_ipca_history:
         | {
             Args: { p_cutoff?: string; p_ticker?: string }
@@ -1177,6 +1186,15 @@ export type Database = {
         Returns: {
           val_date_parsed: string
           val_date_text: string
+        }[]
+      }
+      get_profile_names: {
+        Args: never
+        Returns: {
+          funcao: string
+          id: string
+          nome: string
+          status: string
         }[]
       }
       get_trade_summary: {

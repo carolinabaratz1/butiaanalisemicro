@@ -127,6 +127,17 @@ serve(async (req) => {
     return jsonResponse({ success: false, error: "Sessão inválida. Faça login novamente." }, 401);
   }
 
+  // Role check: only Gestor / Coordenação/Especialista / Analista can upload trade data
+  const { data: roleRow } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .in("role", ["Gestor", "Coordenação/Especialista", "Analista"])
+    .maybeSingle();
+  if (!roleRow) {
+    return jsonResponse({ success: false, error: "Sem permissão para fazer upload." }, 403);
+  }
+
   let body: Record<string, unknown> | null = null;
 
   try {

@@ -153,13 +153,9 @@ export default function PipelineResearchPage() {
   const { data: analistasAtivos = [] } = useQuery({
     queryKey: ['profiles-analistas-ativos'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, nome, email, funcao')
-        .in('funcao', ['Analista', 'Coordenação/Especialista'])
-        .eq('status', 'Ativo');
+      const { data, error } = await (supabase as any).rpc('get_active_analysts');
       if (error) throw error;
-      return data || [];
+      return (data as Array<{ id: string; nome: string; funcao: string; status: string }>) || [];
     },
   });
 
@@ -167,11 +163,9 @@ export default function PipelineResearchPage() {
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-all'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, nome, email, funcao');
+      const { data, error } = await (supabase as any).rpc('get_profile_names');
       if (error) throw error;
-      return data || [];
+      return (data as Array<{ id: string; nome: string; funcao: string }>) || [];
     },
   });
 

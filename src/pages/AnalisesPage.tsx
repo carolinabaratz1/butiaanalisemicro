@@ -73,11 +73,9 @@ export default function AnalisesPage() {
   const { data: allProfiles = [] } = useQuery({
     queryKey: ['profiles-lookup-analises'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, nome, funcao, status');
+      const { data, error } = await (supabase as any).rpc('get_profile_names');
       if (error) throw error;
-      return data || [];
+      return (data as Array<{ id: string; nome: string; funcao: string; status: string }>) || [];
     },
   });
 
