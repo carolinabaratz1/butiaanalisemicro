@@ -383,7 +383,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             <div className="bg-card border border-border rounded-xl p-4">
               <div className="text-xs font-bold mb-1">Mediana de spread — {setorAtivo}</div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                Mediana móvel de 10 negociações · janela {window}d
+                Mediana móvel de 10 negociações · janela {window === "MAX" ? "máx" : `${window}du`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -428,7 +428,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                 )}
               </div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                {emissorTickers.size} ticker(s) · janela {window}d
+                {emissorTickers.size} ticker(s) · janela {window === "MAX" ? "máx" : `${window}du`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
