@@ -537,7 +537,15 @@ export type Database = {
           tipo?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "empresas_setor_fkey"
+            columns: ["setor"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["nome"]
+          },
+        ]
       }
       fidc_classes: {
         Row: {
@@ -689,6 +697,27 @@ export type Database = {
           must_change_password?: boolean
           nome?: string
           status?: string
+        }
+        Relationships: []
+      }
+      setores: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          nome?: string
+          updated_at?: string
         }
         Relationships: []
       }
