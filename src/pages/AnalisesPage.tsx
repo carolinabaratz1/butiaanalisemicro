@@ -75,7 +75,7 @@ export default function AnalisesPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any).rpc('get_profile_names');
       if (error) throw error;
-      return (data as Array<{ id: string; nome: string; funcao: string }>) || [];
+      return (data as Array<{ id: string; nome: string; funcao: string; status: string }>) || [];
     },
   });
 
