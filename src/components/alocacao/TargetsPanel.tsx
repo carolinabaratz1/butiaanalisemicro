@@ -241,7 +241,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
     for (const v of [tgt, lim]) {
       if (v != null && (isNaN(v) || v < 0 || v > 999)) {
         toast({ title: "Valor inválido", variant: "destructive" });
-        return;
+        throw new Error("invalid");
       }
     }
     const payload = { period_id: periodId, fundo, tipo_ativo, target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id };
@@ -249,13 +249,8 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
       .from("allocation_targets" as any)
       .upsert(payload, { onConflict: "period_id,fundo,tipo_ativo" } as any);
     if (error) {
-      const { data: ex } = await supabase.from("allocation_targets" as any)
-        .select("id").eq("period_id", periodId).eq("fundo", fundo).eq("tipo_ativo", tipo_ativo).maybeSingle();
-      if ((ex as any)?.id) {
-        await supabase.from("allocation_targets" as any).update({ target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id }).eq("id", (ex as any).id);
-      } else {
-        await supabase.from("allocation_targets" as any).insert(payload);
-      }
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+      throw error;
     }
     qc.invalidateQueries({ queryKey: ["allocation_targets"] });
   }
