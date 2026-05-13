@@ -10,13 +10,14 @@ import { useTradeData, TradeMode } from "@/hooks/useTradeData";
 import { useTradeIntegration } from "@/hooks/useTradeIntegration";
 import { TradeTable } from "./TradeTable";
 import { TradeDashboard } from "./TradeDashboard";
+import { TradeSectorDashboard } from "./TradeSectorDashboard";
 import { TradeDetail } from "./TradeDetail";
 import { TradeLanding } from "./TradeLanding";
 import { AlocacaoPage } from "@/components/alocacao/AlocacaoPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X } from "lucide-react";
+import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X, Layers } from "lucide-react";
 
 interface TradeMonitorPageProps {
   /** Se passado, abre o monitor já filtrado por este CNPJ (vindo do módulo de emissores) */
@@ -25,7 +26,7 @@ interface TradeMonitorPageProps {
   initialTicker?: string;
 }
 
-type View = "dashboard" | "table";
+type View = "dashboard" | "sector" | "table";
 
 export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPageProps) {
   const [mode, setMode] = useState<TradeMode | null>(null);
@@ -153,7 +154,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
               className="h-7 px-3 text-xs gap-1.5"
               onClick={() => setView("dashboard")}
             >
-              <LayoutDashboard className="w-3.5 h-3.5" />Dashboard
+              <LayoutDashboard className="w-3.5 h-3.5" />Geral
+            </Button>
+            <Button
+              size="sm" variant={view === "sector" ? "secondary" : "ghost"}
+              className="h-7 px-3 text-xs gap-1.5"
+              onClick={() => setView("sector")}
+            >
+              <Layers className="w-3.5 h-3.5" />Setorial
             </Button>
             <Button
               size="sm" variant={view === "table" ? "secondary" : "ghost"}
@@ -218,6 +226,14 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
                       )
                     : 0
                 }
+              />
+            ) : view === "sector" ? (
+              <TradeSectorDashboard
+                data={filteredData}
+                history={history}
+                mode={mode}
+                modeColor={modeCfg.color}
+                onSelectTicker={setSelectedTicker}
               />
             ) : (
               <TradeTable

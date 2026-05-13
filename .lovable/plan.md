@@ -1,106 +1,100 @@
-## Escopo
+## Novo Dashboard Setorial no Monitor de Trade
 
-Ajustes na função **Alocação** (Trade Monitor → Alocação), aplicados às 3 abas: Visão por Fundo, Enquadramento por Emissor e Targets de Alocação.
+Adicionar uma **segunda visão de Dashboard** dentro do Monitor de Trade (DI+, %CDI e IPCA+), focada em **análise por setor / emissor**, no estilo da página de mercado secundário do relatório ABC Brasil.
 
----
+### 1. Onde fica
 
-### 1. Visão por Fundo
+No header já existente do Monitor (`TradeMonitorPage.tsx`), o toggle hoje tem dois botões:
+`Dashboard | Emissões`. Vira **três botões**:
 
-**1.1 Limites por Tipo de Ativo**
-- Criar a categoria **"Crédito Privado"** como agregador (soma de Crédito Corporativo + Crédito Financeiro + FIDC Cota Sênior + FIDC Subordinado + FIDC NP). Limite atual da linha continua 100%.
-- As subcategorias continuam aparecendo individualmente abaixo, mas a primeira linha mostra o total agregado.
-
-**1.2 Limites por Indexador** — reclassificar:
-- **Termo** → tratado como **Pré** (taxa fixada na entrada).
-- **LFT / Overnight / Compromissadas** → **%Selic**.
-- **FIDC** → **CDI+**.
-- **Debêntures** → usar `sub_indexador` registrado em `trade_ativos` (já existe — manter).
-- **Ativos financeiros/bancários (CDB, LF, LCI, LCA)** sem `sub_indexador` → fallback parseando a descrição do produto (procura "CDI+", "%CDI", "IPCA+", "PRE") antes de cair em "Outros".
-
-**1.3 Limites por Faixa de Rating**
-- **Termo** → forçar bucket **AAA** (risco principal é B3).
-
-**Exclusão geral do PL**: Posições cujo `product`/`product_class` contenham **DAP** ou **Futuro** são removidas do `totalFundo` e de todas as agregações (não contam como posição).
-
----
-
-### 2. Enquadramento por Emissor
-
-- Adicionar **headers clicáveis** com sort em todas as colunas (Grupo, Emissores, Rating, Limite, % do PL, Headroom, Status) e um campo de **busca** (filtra por nome de grupo/emissor).
-- **Tesouro Nacional** → tratado como categoria **Soberano** com limite 100% (independente do rating). Adicionar registro em `allocation_limits` (categoria = `emissor`, subcategoria = `Soberano`, 100%).
-- **Termo** → não listar como emissor; agregar em uma linha-resumo final **"Termo (B3)"** com somatório do %, complementando o 100% do fundo.
-- Mesma exclusão de **DAP/Futuros** do PL aplicada aqui.
-
----
-
-### 3. Targets de Alocação — versionamento + por emissor
-
-**3.1 Histórico de políticas (período de vigência ~12 meses)**
-- Nova tabela `allocation_target_periods` (id, fundo, nome, data_inicio, data_fim, ativo, created_by, timestamps). Apenas **um período ativo por fundo**.
-- Alterar `allocation_targets`: adicionar `period_id` (FK) e mudar unique para `(period_id, tipo_ativo)`. Migrar registros existentes para um período inicial "Política vigente".
-- UI:
-    - Seletor de **Período** no topo da aba (com botão "Novo período" — cria período novo e copia targets do anterior).
-    - Edição só no período ativo; períodos antigos são read-only (visualização histórica).
-
-**3.2 Targets por Emissor**
-- Nova tabela `allocation_targets_emissor` (period_id, fundo, cnpj_emissor, target_pct, updated_by, timestamps), unique `(period_id, fundo, cnpj_emissor)`.
-- Nova sub-aba dentro de "Targets de Alocação": **"Por Emissor"** — lista emissores cadastrados em `empresas` (pesquisa + filtro por fundo) e permite definir target % por emissor no período ativo. Será consumido futuramente pelo módulo Trade.
-
----
-
-### Detalhes técnicos
-
-**Migrações SQL (uma migration consolidada):**
-```sql
--- 1. Períodos de target
-CREATE TABLE public.allocation_target_periods (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  fundo text NOT NULL,
-  nome text NOT NULL,
-  data_inicio date NOT NULL,
-  data_fim date,
-  ativo boolean NOT NULL DEFAULT true,
-  created_by uuid,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-CREATE UNIQUE INDEX uq_target_period_active
-  ON allocation_target_periods(fundo) WHERE ativo;
-
--- 2. Liga targets ao período
-ALTER TABLE allocation_targets ADD COLUMN period_id uuid REFERENCES allocation_target_periods(id);
--- popular um período "Política inicial" por fundo e backfill
--- depois: tornar period_id NOT NULL e trocar unique para (period_id, tipo_ativo)
-
--- 3. Targets por emissor
-CREATE TABLE public.allocation_targets_emissor (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  period_id uuid NOT NULL REFERENCES allocation_target_periods(id),
-  fundo text NOT NULL,
-  cnpj_emissor text NOT NULL,
-  target_pct numeric,
-  updated_by uuid,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE (period_id, fundo, cnpj_emissor)
-);
-
--- 4. Soberano com limite 100% no allocation_limits para todos os fundos
-INSERT INTO allocation_limits (fundo, categoria, subcategoria, limite_pct)
-SELECT DISTINCT fundo, 'emissor', 'Soberano', 100 FROM allocation_limits
-ON CONFLICT DO NOTHING;
-
--- RLS: leitura para autenticados, escrita para Gestor/Coordenação
+```
+Dashboard Geral  |  Setorial  |  Emissões
 ```
 
-**Arquivos front-end:**
-- `allocationUtils.ts`: novas helpers `isExcludedFromPL` (DAP/Futuro), `tipoAtivoFromProduct` ajustado (Termo→pré não muda aqui pois é categoria de indexador), `indexadorFromProductFallback` (CDB/LF parsing), `forceAAAForTermo` no rating.
-- `useAllocationData.ts`: filtrar posições excluídas; somar bucket "Crédito Privado"; aplicar reclassificações de indexador/rating; tratar Tesouro Nacional como grupo "Soberano"; agregar Termo num grupo único "Termo (B3)".
-- `IssuerExposurePanel.tsx`: ordenação por coluna + busca.
-- `TargetsPanel.tsx`: seletor de período + botão "Novo período"; nova sub-aba "Por Emissor".
-- `useAllocationData.ts`: novos hooks `useTargetPeriods`, `useEmissorTargets`.
+O "Dashboard Geral" é o atual (KPIs, distribuição por rating, vencimento, spread mediano). "Setorial" é o novo. "Emissões" continua sendo a tabela.
 
-**Confirmação necessária do usuário (assumido como sim para seguir):**
-1. **Tesouro Nacional**: identificado por CNPJ específico ou pelo nome em `empresas`? Vou usar o CNPJ `00.394.460/0001-41` (Tesouro Nacional) como filtro.
-2. **Período inicial**: criar 1 por fundo com nome "Política vigente" e `data_inicio = hoje`, sem `data_fim`.
-3. **Termo (B3)**: somar todas as posições cujo `product` contenha "termo" como uma única linha, sem rating/limite específico (status "Sem limite").
+### 2. Layout do Dashboard Setorial (referência: imagem ABC)
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ Setor: [Saneamento ▼]   Rating: [Todos ▼]   Janela: [30d 90d 1a]    │
+├──────────────────────────────────┬──────────────────────────────────┤
+│                                  │  Mediana de spread — Setor       │
+│   Scatter: Spread × Duration     │  (linha histórica + barras vol)  │
+│   (cores = rating)               ├──────────────────────────────────┤
+│   Labels nos tickers do setor    │  Mediana de spread — Emissor     │
+│   selecionado                    │  selecionado (linha + barras)    │
+│                                  │                                  │
+└──────────────────────────────────┴──────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tabela de tickers do setor: Ticker · Emissor · Rating · Duration ·  │
+│ Spread atual · Δ 21d · Z-score · Vol 90d · Última negociação        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Componentes:**
+
+- **Filtros no topo**
+  - `Setor` — lista distinta vinda de `empresas.setor` (apenas setores que possuem ticker no universo atual). Default = primeiro setor com mais emissões.
+  - `Rating` — multiselect (AAA, AA+, AA, A+, A, BBB, N/R). Default = todos.
+  - `Janela` da série temporal: 30d / 90d / 1a (default 90d).
+
+- **Scatter "Spread × Duration"** (a peça principal — copia o gráfico esquerdo da imagem ABC)
+  - Eixo X: `anos_venc` (duration aproximada).
+  - Eixo Y: `last_val` (spread em bps para DI+/IPCA+; %CDI no modo CDI_PCT).
+  - Cor do ponto = rating normalizado (mesma paleta `RATING_COLORS` já usada).
+  - Tickers do **setor selecionado** ficam destacados (label visível + halo amarelo, igual marcação amarela da imagem).
+  - Tickers de outros setores continuam plotados em cinza claro como pano de fundo (opcional via toggle "Comparar com universo").
+  - Clique em um ponto → seta o ticker selecionado (abre o `TradeDetail` lateral, mesmo padrão atual).
+  - Legenda de rating embaixo, igual ao relatório.
+
+- **Mediana de Spread — Setor** (gráfico topo direito da imagem)
+  - Linha = mediana móvel 10 negociações do spread do setor.
+  - Barras cinzas = volume financeiro diário agregado do setor.
+  - Pontos verdes = mediana diária por data.
+
+- **Mediana de Spread — Emissor selecionado** (gráfico inferior direito da imagem)
+  - Mesmo formato, restrito ao emissor do ticker selecionado (ou ao maior emissor do setor se nada selecionado).
+
+- **Tabela de tickers do setor** abaixo dos gráficos
+  - Sortable / filtrável (mesma `SortableHeader` já usada nos painéis de Alocação).
+  - Clique na linha = seleciona ticker.
+
+### 3. Dados — sem novas tabelas
+
+Tudo já existe:
+
+- `trade_monitor_view` (já carregado por `useTradeData`) traz `emissor_cnpj`, `rating`, `anos_venc`, `last_val`, `total_vol_fin`, `z_score`, `avg_21d`.
+- `empresas.setor` é o setor — fazer **join client-side** carregando uma vez `empresas (cnpj, setor, nome, grupo_economico)` num novo hook leve `useEmpresasSetor()`.
+- Para a série histórica do setor / emissor, reaproveitar:
+  - IPCA: `trade_spread_historico` (já paginado em `useTradeData`).
+  - DI / %CDI: `history` por ticker (já no estado).
+  - Agregar mediana por dia no client (mesma técnica do `spreadSeries` atual em `TradeDashboard`).
+
+Sem migração necessária nesta etapa.
+
+### 4. Arquivos a criar / editar
+
+**Criar:**
+- `src/components/trade/TradeSectorDashboard.tsx` — o novo dashboard (filtros + scatter + 2 gráficos de mediana + tabela).
+- `src/hooks/useEmpresasSetor.ts` — fetch único de `cnpj → { setor, nome, grupo }`, cacheado.
+
+**Editar:**
+- `src/components/trade/TradeMonitorPage.tsx` — adicionar terceira opção no toggle `view` (`"sector"`) e renderizar `TradeSectorDashboard` quando ativa, passando `filteredData`, `history`, `mode`, `modeColor`, `onSelectTicker`.
+- (opcional) extrair `RATING_COLORS` / `normRating` de `TradeDashboard.tsx` para `src/components/trade/tradeColors.ts` para reuso.
+
+### 5. Detalhes técnicos
+
+- Scatter implementado com `recharts` `<ScatterChart>` + `<Scatter>` por rating (uma série por rating → cores automáticas via `Cell`). Labels só nos pontos do setor selecionado (custom `<LabelList>` com `content` que omite outros).
+- Mediana móvel de 10 negociações = janela móvel sobre as observações ordenadas por data, não por dia calendário.
+- Tooltip do scatter mostra: ticker, emissor, rating, duration (anos), spread, volume 90d.
+- Performance: dataset típico ~500 tickers — sem problema no client. Joins com `empresas` em memória.
+- Tema: cores via `useChartTheme()` (já existe), nada hardcoded fora do mapa de rating.
+- Modo `%CDI`: o eixo Y vira "% do CDI" (sem multiplicar por 100), mantém a mesma estrutura.
+- Acessibilidade: `aria-label` no scatter, navegação por teclado entre pontos via `tabIndex` opcional.
+
+### 6. Fora de escopo nesta etapa
+
+- Exportar PNG/PDF do gráfico (pode vir depois).
+- Drill-down por emissor abrindo nova página (já existe via `onViewEmissor` na `TradeDetail`).
+- Persistir filtro de setor selecionado por usuário.
