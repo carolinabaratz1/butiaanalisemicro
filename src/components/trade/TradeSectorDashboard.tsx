@@ -241,13 +241,16 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
 
   // Quando "Todos os setores": uma série por setor (respeitando filtro de rating)
   const multiSectorSeries = useMemo(() => {
-    if (!isAllSectors) return { rows: [], setores: [] as { nome: string; color: string }[] };
-    const setoresList = setores.map(([s], i) => ({ nome: s, color: SECTOR_PALETTE[i % SECTOR_PALETTE.length] }));
+    if (!isAllSectors) return { rows: [], setores: [] as { nome: string; color: string; dash: string }[] };
+    const setoresList = setores.map(([s], i) => {
+      const st = sectorStyle(i);
+      return { nome: s, color: st.color, dash: st.dash };
+    });
     const seriesPorSetor = setoresList.map((s) => {
       const tks = new Set(
         applyRating(enriched.filter((t) => t.setor === s.nome)).map((t) => t.ticker),
       );
-      return { setor: s.nome, color: s.color, serie: buildSeries(tks) };
+      return { setor: s.nome, color: s.color, dash: s.dash, serie: buildSeries(tks) };
     });
     // Pivot por data
     const datas = new Set<string>();
@@ -263,6 +266,14 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
     });
     return { rows, setores: setoresList };
   }, [isAllSectors, setores, enriched, ratingFilter, history, window]);
+
+  // Quando "Todos os setores", o segundo gráfico mostra a mediana do universo inteiro.
+  const allTickers = useMemo(() => new Set(inSector.map((t) => t.ticker)), [inSector]);
+  const allSeries = useMemo(
+    () => (isAllSectors ? buildSeries(allTickers) : []),
+    [isAllSectors, allTickers, history, window],
+  );
+
 
   // Emissor selecionado: o do ticker clicado, ou o emissor com mais tickers no setor.
   const selectedTickerData = inSector.find((t) => t.ticker === selectedTicker);
