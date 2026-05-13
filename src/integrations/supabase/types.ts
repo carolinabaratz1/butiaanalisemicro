@@ -692,6 +692,27 @@ export type Database = {
         }
         Relationships: []
       }
+      setores: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trade_ativos: {
         Row: {
           anos_venc: number | null
