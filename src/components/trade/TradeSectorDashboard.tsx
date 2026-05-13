@@ -101,7 +101,8 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const setorAtivo = setor ?? setores[0]?.[0] ?? null;
 
   const [search, setSearch] = useState("");
-  const [window, setWindow] = useState<30 | 90 | 180 | 365>(90);
+  // Janela em dias úteis ("MAX" = sem corte)
+  const [window, setWindow] = useState<5 | 10 | 21 | 90 | "MAX">(21);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
 
   const noSetor = !setorAtivo;
