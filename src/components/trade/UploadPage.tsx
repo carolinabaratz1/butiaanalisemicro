@@ -380,15 +380,22 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
 
   if (!sheetTaxas) throw new Error("Aba 'Taxas dos Titulos' não encontrada.");
 
-  const rawTaxas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetTaxas, { defval: null });
+  // V2 da planilha: a coluna A da aba "Taxas dos Titulos" tem como cabeçalho uma
+  // fórmula QTLINK e contém o "Nome do Ativo" completo (ex.: "AALM12 - AURA ...").
+  // Lemos por posição (skip da 1ª linha) e derivamos o ticker do nome.
+  const rawTaxas: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetTaxas, {
+    defval: null,
+    range: 1,
+    header: ["Nome do Ativo", "Data", "Taxa Indicativa", "Quantidade Negociada", "PU Curva", "PU Indicativo", "Duration"],
+  });
   const taxasRows: Record<string, unknown>[] = [];
   const ativosMap = new Map<string, Record<string, unknown>>();
   let dataInicio: string | null = null;
   let dataFim: string | null = null;
 
   for (const r of rawTaxas) {
-    const ticker = String(r["Ticker"] ?? "").trim();
     const nomeCompleto = String(r["Nome do Ativo"] ?? "").trim();
+    const ticker = (String(r["Ticker"] ?? "").trim()) || nomeCompleto.split(" - ")[0]?.trim() || "";
     const dataISO = excelDateToISO(r["Data"]);
     if (!ticker || !dataISO) continue;
 
