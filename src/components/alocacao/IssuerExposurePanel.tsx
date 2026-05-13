@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAllocationLimits, useAllocationData } from "./useAllocationData";
+import { useAllocationLimits, useAllocationData, useAllocationTargetPeriods, useAllocationEmissorTargets } from "./useAllocationData";
 import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
@@ -18,6 +18,9 @@ type SortDir = "asc" | "desc";
 export function IssuerExposurePanel({ fundo, valDate }: Props) {
   const { data: limits = [] } = useAllocationLimits();
   const { data: agg, isLoading } = useAllocationData(fundo, valDate ?? null);
+  const { data: periods = [] } = useAllocationTargetPeriods(fundo);
+  const activePeriod = periods.find(p => p.ativo) ?? null;
+  const { data: emissorTargets = [] } = useAllocationEmissorTargets(activePeriod?.id ?? null, fundo);
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
@@ -32,20 +35,31 @@ export function IssuerExposurePanel({ fundo, valDate }: Props) {
     return m;
   }, [limits, fundo]);
 
+  // Target por CNPJ do emissor (período ativo)
+  const targetByCnpj = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of emissorTargets) {
+      if (t.target_pct != null) m.set(t.cnpj_emissor, t.target_pct);
+    }
+    return m;
+  }, [emissorTargets]);
+
   const enriched = useMemo(() => {
     if (!agg) return [];
     return agg.porGrupo.map(g => {
-      // Soberano: limite "Soberano" (100%) ; Termo summary: sem limite
-      const lim = g.isTermoSummary
+      // Se algum emissor do grupo tem target definido, usa o maior target como limite
+      const targets = g.emissores.map(e => targetByCnpj.get(e.cnpj)).filter((v): v is number => v != null);
+      const baseLim = g.isTermoSummary
         ? null
         : g.isSoberano
           ? (limitByRating.get("Soberano") ?? 100)
           : (limitByRating.get(g.ratingBucket) ?? null);
+      const lim = targets.length > 0 ? Math.max(...targets) : baseLim;
       const headroom = lim != null ? lim - g.pct : null;
       const st = g.isTermoSummary ? "SEM_LIMITE" as const : computeStatus(g.pct, lim, true);
       return { ...g, lim, headroom, st };
     });
-  }, [agg, limitByRating]);
+  }, [agg, limitByRating, targetByCnpj]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

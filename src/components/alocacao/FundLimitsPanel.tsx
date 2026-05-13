@@ -25,10 +25,16 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
   const activePeriod = periods.find(p => p.ativo) ?? null;
   const { data: periodTargets = [] } = useAllocationTargets(activePeriod?.id ?? null);
 
+  // Para cada tipo_ativo do fundo no período ativo:
+  //  - se houver target_pct definido, ele vira o limite efetivo
+  //  - senão, se houver limite_pct (override gerencial), usa esse
+  //  - senão, usa o limite preestabelecido em allocation_limits
   const overrideByTipo = useMemo(() => {
     const m = new Map<string, number | null>();
     for (const t of periodTargets) {
-      if (t.fundo === fundo && t.limite_pct != null) m.set(t.tipo_ativo, t.limite_pct);
+      if (t.fundo !== fundo) continue;
+      if (t.target_pct != null) m.set(t.tipo_ativo, t.target_pct);
+      else if (t.limite_pct != null && !m.has(t.tipo_ativo)) m.set(t.tipo_ativo, t.limite_pct);
     }
     return m;
   }, [periodTargets, fundo]);
