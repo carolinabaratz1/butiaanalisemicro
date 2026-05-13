@@ -117,10 +117,10 @@ function NewPeriodButton({ fundo, currentPeriodId }: { fundo: FundoKey; currentP
       // 3. Copia targets do período anterior
       if (currentPeriodId) {
         const { data: prev } = await supabase.from("allocation_targets" as any)
-          .select("fundo,tipo_ativo,target_pct").eq("period_id", currentPeriodId);
+          .select("fundo,tipo_ativo,target_pct,limite_pct").eq("period_id", currentPeriodId);
         if (prev && (prev as any[]).length) {
           const payload = (prev as any[]).map(r => ({
-            fundo: r.fundo, tipo_ativo: r.tipo_ativo, target_pct: r.target_pct,
+            fundo: r.fundo, tipo_ativo: r.tipo_ativo, target_pct: r.target_pct, limite_pct: r.limite_pct,
             period_id: newId, updated_by: currentUser?.id,
           }));
           await supabase.from("allocation_targets" as any).insert(payload);
