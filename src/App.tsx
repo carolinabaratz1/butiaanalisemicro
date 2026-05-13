@@ -64,20 +64,28 @@ function ProtectedRoutes() {
     <AppLayout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/posicoes" element={<PosicoesPage />} />
-        <Route path="/empresas" element={<EmpresasPage />} />
-        <Route path="/empresas/:cnpj" element={<EmpresaDetailPage />} />
-        <Route path="/analises" element={<AnalisesPage />} />
-        <Route path="/pipeline-de-research" element={<PipelineResearchPage />} />
-        <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-        <Route path="/assembleias" element={<AssembleiasPage />} />
-        <Route path="/desempenho" element={<DesempenhoPage />} />
-        <Route path="/trade" element={<TradeMonitorPage />} />
-        <Route path="/trade/upload" element={<TradeUploadPage />} />
+        <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
+        <Route path="/empresas" element={<RouteGuard path="/empresas"><EmpresasPage /></RouteGuard>} />
+        <Route path="/empresas/:cnpj" element={<RouteGuard path="/empresas"><EmpresaDetailPage /></RouteGuard>} />
+        <Route path="/analises" element={<RouteGuard path="/analises"><AnalisesPage /></RouteGuard>} />
+        <Route path="/pipeline-de-research" element={<RouteGuard path="/pipeline-de-research"><PipelineResearchPage /></RouteGuard>} />
+        <Route path="/configuracoes" element={<RouteGuard path="/configuracoes"><ConfiguracoesPage /></RouteGuard>} />
+        <Route path="/assembleias" element={<RouteGuard path="/assembleias"><AssembleiasPage /></RouteGuard>} />
+        <Route path="/desempenho" element={<RouteGuard path="/desempenho"><DesempenhoPage /></RouteGuard>} />
+        <Route path="/trade" element={<RouteGuard path="/trade"><TradeMonitorPage /></RouteGuard>} />
+        <Route path="/trade/upload" element={<RouteGuard path="/trade/upload"><TradeUploadPage /></RouteGuard>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
   );
+}
+
+function RouteGuard({ path, children }: { path: string; children: React.ReactNode }) {
+  const { hasAccess } = useAuth();
+  if (!hasAccess(path)) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
 }
 
 function AppRoutes() {
