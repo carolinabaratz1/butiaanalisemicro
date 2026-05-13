@@ -247,7 +247,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             Janela histórica
           </span>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
-            {([30, 90, 180, 365] as const).map((w) => (
+            {([5, 10, 21, 90, "MAX"] as const).map((w) => (
               <button
                 key={w}
                 onClick={() => setWindow(w)}
@@ -255,7 +255,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                   window === w ? "bg-background shadow-sm font-bold" : "text-muted-foreground"
                 }`}
               >
-                {w === 365 ? "1a" : `${w}d`}
+                {w === "MAX" ? "Máx" : `${w}du`}
               </button>
             ))}
           </div>
