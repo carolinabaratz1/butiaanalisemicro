@@ -250,8 +250,8 @@ export default function PosicoesPage() {
     });
   }, [enriched, biFundFilter, biClassFilter]);
 
-  const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source))], [posicoes]);
-  const allProductClasses = useMemo(() => [...new Set(posicoes.map(p => p.product_class))], [posicoes]);
+  const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source).filter((v): v is string => !!v))], [posicoes]);
+  const allProductClasses = useMemo(() => [...new Set(posicoes.map(p => p.product_class).filter((v): v is string => !!v))], [posicoes]);
 
   const filtered = useMemo(() => {
     return posicoes.filter(p => {
