@@ -68,6 +68,12 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
           rows={limitsByCat[key] ?? []}
           getPct={(sub) => {
             const map = key === "tipo_ativo" ? agg?.porTipo : key === "indexador" ? agg?.porIndexador : agg?.porRating;
+            // Caixa Mínimo exibe a soma de Título Público (Caixa Mínimo) + Compromissadas (Overnight)
+            if (key === "tipo_ativo" && sub === "Caixa Mínimo") {
+              const a = agg?.porTipo?.get("Caixa Mínimo")?.pct ?? 0;
+              const b = agg?.porTipo?.get("Compromissadas (Overnight)")?.pct ?? 0;
+              return a + b;
+            }
             return map?.get(sub)?.pct ?? 0;
           }}
           hasData={hasData}
