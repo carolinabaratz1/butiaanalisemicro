@@ -395,6 +395,7 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
     if (!dataInicio || dataISO < dataInicio) dataInicio = dataISO;
     if (!dataFim || dataISO > dataFim) dataFim = dataISO;
 
+    const durationDu = num(r["Duration"]);
     taxasRows.push({
       ticker,
       data: dataISO,
@@ -402,12 +403,37 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
       qtd_negociada: num(r["Quantidade Negociada"]),
       pu_curva: num(r["PU Curva"]),
       pu_indicativo: num(r["PU Indicativo"]),
+      duration_du: durationDu,
     });
 
     if (!ativosMap.has(ticker) && nomeCompleto) {
       const parsed = parseNomeAtivo(nomeCompleto);
       ativosMap.set(ticker, { ticker, nome_completo: nomeCompleto, ...parsed });
     }
+
+    // Track latest available duration per ticker to override anos_venc
+    if (durationDu !== null && durationDu > 0) {
+      const existing = ativosMap.get(ticker) ?? { ticker };
+      const prevDate = existing.__duration_date as string | undefined;
+      if (!prevDate || dataISO >= prevDate) {
+        ativosMap.set(ticker, {
+          ...existing,
+          __duration_date: dataISO,
+          __duration_anos: durationDu / 252,
+        });
+      }
+    }
+  }
+
+  // Apply duration-based anos_venc override (fallback to date-based when missing)
+  for (const [ticker, ativo] of ativosMap) {
+    const dAnos = ativo.__duration_anos as number | undefined;
+    if (dAnos !== undefined && dAnos !== null) {
+      ativo.anos_venc = Number(dAnos.toFixed(4));
+    }
+    delete ativo.__duration_anos;
+    delete ativo.__duration_date;
+    ativosMap.set(ticker, ativo);
   }
 
   if (sheetEmissao) {
