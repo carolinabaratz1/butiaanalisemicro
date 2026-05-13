@@ -43,13 +43,27 @@ const RATING_COLORS: Record<string, string> = {
   "N/R": "#94a3b8",
 };
 
-// Paleta para múltiplos setores no gráfico de medianas
-const SECTOR_PALETTE = [
-  "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
-  "#06b6d4", "#a855f7", "#eab308", "#22c55e", "#f43f5e",
-  "#0891b2", "#d946ef", "#65a30d",
+// Paleta de cores bem separadas no espectro para múltiplos setores.
+// Combinamos com padrões de traço (sólido / tracejado / pontilhado) para
+// garantir distinção visual mesmo quando há muitos setores.
+const SECTOR_BASE_COLORS = [
+  "#1f77b4", // azul
+  "#d62728", // vermelho
+  "#2ca02c", // verde
+  "#ff7f0e", // laranja
+  "#9467bd", // roxo
+  "#17becf", // ciano
+  "#e377c2", // rosa
+  "#8c564b", // marrom
+  "#bcbd22", // oliva
+  "#7f7f7f", // cinza
 ];
+const SECTOR_DASH_PATTERNS = ["0", "6 3", "2 3", "8 3 2 3"]; // sólido, tracejado, pontilhado, traço-ponto
+function sectorStyle(i: number) {
+  const color = SECTOR_BASE_COLORS[i % SECTOR_BASE_COLORS.length];
+  const dash = SECTOR_DASH_PATTERNS[Math.floor(i / SECTOR_BASE_COLORS.length) % SECTOR_DASH_PATTERNS.length];
+  return { color, dash };
+}
 
 function normRating(r: string | null): string {
   if (!r) return "N/R";
@@ -227,13 +241,16 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
 
   // Quando "Todos os setores": uma série por setor (respeitando filtro de rating)
   const multiSectorSeries = useMemo(() => {
-    if (!isAllSectors) return { rows: [], setores: [] as { nome: string; color: string }[] };
-    const setoresList = setores.map(([s], i) => ({ nome: s, color: SECTOR_PALETTE[i % SECTOR_PALETTE.length] }));
+    if (!isAllSectors) return { rows: [], setores: [] as { nome: string; color: string; dash: string }[] };
+    const setoresList = setores.map(([s], i) => {
+      const st = sectorStyle(i);
+      return { nome: s, color: st.color, dash: st.dash };
+    });
     const seriesPorSetor = setoresList.map((s) => {
       const tks = new Set(
         applyRating(enriched.filter((t) => t.setor === s.nome)).map((t) => t.ticker),
       );
-      return { setor: s.nome, color: s.color, serie: buildSeries(tks) };
+      return { setor: s.nome, color: s.color, dash: s.dash, serie: buildSeries(tks) };
     });
     // Pivot por data
     const datas = new Set<string>();
@@ -249,6 +266,14 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
     });
     return { rows, setores: setoresList };
   }, [isAllSectors, setores, enriched, ratingFilter, history, window]);
+
+  // Quando "Todos os setores", o segundo gráfico mostra a mediana do universo inteiro.
+  const allTickers = useMemo(() => new Set(inSector.map((t) => t.ticker)), [inSector]);
+  const allSeries = useMemo(
+    () => (isAllSectors ? buildSeries(allTickers) : []),
+    [isAllSectors, allTickers, history, window],
+  );
+
 
   // Emissor selecionado: o do ticker clicado, ou o emissor com mais tickers no setor.
   const selectedTickerData = inSector.find((t) => t.ticker === selectedTicker);
@@ -585,14 +610,15 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                         labelFormatter={(l: string) => fmtDate(l)}
                         formatter={(v: number, n: string) => [v?.toFixed(3) + "%", n]}
                       />
-                      <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+                      <Legend wrapperStyle={{ fontSize: 9 }} iconSize={14} />
                       {multiSectorSeries.setores.map((s) => (
                         <Line
                           key={s.nome}
                           type="monotone"
                           dataKey={s.nome}
                           stroke={s.color}
-                          strokeWidth={1.5}
+                          strokeWidth={1.75}
+                          strokeDasharray={s.dash === "0" ? undefined : s.dash}
                           dot={false}
                           isAnimationActive={false}
                           connectNulls
@@ -622,10 +648,12 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             <div ref={emissorChartRef} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-baseline justify-between mb-1 gap-2">
                 <div className="text-xs font-bold">
-                  Mediana de spread — {focusEmissor?.nome ?? "Emissor"}
+                  {isAllSectors
+                    ? "Mediana de spread — todos os ativos"
+                    : `Mediana de spread — ${focusEmissor?.nome ?? "Emissor"}`}
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedTicker && (
+                  {!isAllSectors && selectedTicker && (
                     <button
                       onClick={() => setSelectedTicker(null)}
                       className="text-[10px] text-muted-foreground hover:text-foreground"
@@ -633,17 +661,19 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                       limpar seleção
                     </button>
                   )}
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(emissorChartRef.current, "mediana-emissor")}>
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(emissorChartRef.current, isAllSectors ? "mediana-todos" : "mediana-emissor")}>
                     <ImageIcon className="w-3.5 h-3.5" /> PNG
                   </Button>
                 </div>
               </div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                {emissorTickers.size} ticker(s) · janela {window === "MAX" ? "máx" : `${window}du`}
+                {isAllSectors
+                  ? `${allTickers.size} ticker(s) · janela ${window === "MAX" ? "máx" : `${window}du`}`
+                  : `${emissorTickers.size} ticker(s) · janela ${window === "MAX" ? "máx" : `${window}du`}`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={emissorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                  <ComposedChart data={isAllSectors ? allSeries : emissorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
                     <XAxis dataKey="d" tick={{ fontSize: 9, fill: chartTheme.tickFill }} tickFormatter={fmtDate} minTickGap={32} />
                     <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }} tickFormatter={(v) => v.toFixed(2) + "%"} />
