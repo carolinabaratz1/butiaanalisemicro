@@ -1,18 +1,22 @@
 // src/components/trade/TradeSectorDashboard.tsx
 // Dashboard setorial — scatter Spread × Duration por rating, com filtro por setor,
 // mediana histórica do setor e do emissor selecionado, e tabela de tickers.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, CartesianGrid,
-  ResponsiveContainer, Cell, ComposedChart, Bar, Line, Legend, LabelList,
+  ResponsiveContainer, Cell, ComposedChart, Line, Legend, LabelList,
 } from "recharts";
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import { toPng } from "html-to-image";
 import { TradeAtivo, TradeMode, HistoryPoint } from "@/hooks/useTradeData";
 import { useEmpresasSetor } from "@/hooks/useEmpresasSetor";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, Download, Image as ImageIcon, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 
 interface Props {
   data: TradeAtivo[];
@@ -21,6 +25,8 @@ interface Props {
   modeColor: string;
   onSelectTicker: (t: string) => void;
 }
+
+const ALL_SECTORS = "__ALL__";
 
 const RATING_ORDER = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-", "BBB+", "BBB", "BBB-", "N/R"] as const;
 const RATING_COLORS: Record<string, string> = {
@@ -36,6 +42,14 @@ const RATING_COLORS: Record<string, string> = {
   "BBB-": "#ef4444",
   "N/R": "#94a3b8",
 };
+
+// Paleta para múltiplos setores no gráfico de medianas
+const SECTOR_PALETTE = [
+  "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
+  "#06b6d4", "#a855f7", "#eab308", "#22c55e", "#f43f5e",
+  "#0891b2", "#d946ef", "#65a30d",
+];
 
 function normRating(r: string | null): string {
   if (!r) return "N/R";
@@ -71,9 +85,17 @@ function fv(v: number) {
   return v.toFixed(0);
 }
 
+type SortKey = "ticker" | "emissor" | "rating" | "duration" | "valor" | "delta5" | "delta21" | "z" | "vol";
+type SortDir = "asc" | "desc";
+
 export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectTicker }: Props) {
   const { byCnpj, loading: loadingEmpresas } = useEmpresasSetor();
   const chartTheme = useChartTheme();
+
+  // Refs para exportação como imagem
+  const scatterRef = useRef<HTMLDivElement>(null);
+  const sectorChartRef = useRef<HTMLDivElement>(null);
+  const emissorChartRef = useRef<HTMLDivElement>(null);
 
   // Enriquecer cada ativo com setor / nome de emissor a partir do CNPJ.
   const enriched = useMemo(() => {
@@ -97,24 +119,41 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
     return Array.from(cnt.entries()).sort((a, b) => b[1] - a[1]);
   }, [enriched]);
 
+  // Ratings disponíveis (ordenados na ordem padrão)
+  const ratingsDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    enriched.forEach((t) => set.add(t.rating_norm));
+    return RATING_ORDER.filter((r) => set.has(r));
+  }, [enriched]);
+
   const [setor, setSetor] = useState<string | null>(null);
   const setorAtivo = setor ?? setores[0]?.[0] ?? null;
+  const isAllSectors = setorAtivo === ALL_SECTORS;
 
   const [search, setSearch] = useState("");
   // Janela em dias úteis ("MAX" = sem corte)
   const [window, setWindow] = useState<5 | 10 | 21 | 90 | "MAX">(21);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
+  const [ratingFilter, setRatingFilter] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("z");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const noSetor = !setorAtivo;
 
+  // Aplica filtro de rating em qualquer subconjunto
+  const applyRating = (arr: typeof enriched) => {
+    if (ratingFilter.size === 0) return arr;
+    return arr.filter((t) => ratingFilter.has(t.rating_norm));
+  };
+
   // Pontos do scatter: setor selecionado em destaque, restante como background.
   const inSector = useMemo(
-    () => enriched.filter((t) => t.setor === setorAtivo),
-    [enriched, setorAtivo],
+    () => applyRating(isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
+    [enriched, setorAtivo, isAllSectors, ratingFilter],
   );
   const outSector = useMemo(
-    () => enriched.filter((t) => t.setor !== setorAtivo),
-    [enriched, setorAtivo],
+    () => (isAllSectors ? [] : enriched.filter((t) => t.setor !== setorAtivo)),
+    [enriched, setorAtivo, isAllSectors],
   );
 
   // Agrupa pontos do setor por rating (uma <Scatter/> por série → cor por rating).
@@ -153,7 +192,6 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
     let cutoffStr = "0000-00-00";
     if (window !== "MAX") {
       const cutoff = new Date();
-      // Aprox. dias úteis → calendário (×7/5)
       cutoff.setDate(cutoff.getDate() - Math.ceil(window * 1.4));
       cutoffStr = cutoff.toISOString().slice(0, 10);
     }
@@ -169,7 +207,6 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
         const arr = byDate.get(p.d) ?? [];
         arr.push(p.r);
         byDate.set(p.d, arr);
-        // volume não está no HistoryPoint — deixamos zero (barra suprimida)
         volByDate.set(p.d, volByDate.get(p.d) ?? 0);
       }
     }
@@ -181,8 +218,37 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
     return rollingMedian(dailyMed, 10);
   }
 
+  // Série única do setor atual (quando setor específico está selecionado)
   const sectorTickers = useMemo(() => new Set(inSector.map((t) => t.ticker)), [inSector]);
-  const sectorSeries = useMemo(() => buildSeries(sectorTickers), [sectorTickers, history, window]);
+  const sectorSeries = useMemo(
+    () => (isAllSectors ? [] : buildSeries(sectorTickers)),
+    [sectorTickers, history, window, isAllSectors],
+  );
+
+  // Quando "Todos os setores": uma série por setor (respeitando filtro de rating)
+  const multiSectorSeries = useMemo(() => {
+    if (!isAllSectors) return { rows: [], setores: [] as { nome: string; color: string }[] };
+    const setoresList = setores.map(([s], i) => ({ nome: s, color: SECTOR_PALETTE[i % SECTOR_PALETTE.length] }));
+    const seriesPorSetor = setoresList.map((s) => {
+      const tks = new Set(
+        applyRating(enriched.filter((t) => t.setor === s.nome)).map((t) => t.ticker),
+      );
+      return { setor: s.nome, color: s.color, serie: buildSeries(tks) };
+    });
+    // Pivot por data
+    const datas = new Set<string>();
+    seriesPorSetor.forEach((ss) => ss.serie.forEach((p) => datas.add(p.d)));
+    const ordered = Array.from(datas).sort();
+    const rows = ordered.map((d) => {
+      const row: Record<string, number | string | null> = { d };
+      seriesPorSetor.forEach((ss) => {
+        const pt = ss.serie.find((p) => p.d === d);
+        row[ss.setor] = pt?.med ?? null;
+      });
+      return row;
+    });
+    return { rows, setores: setoresList };
+  }, [isAllSectors, setores, enriched, ratingFilter, history, window]);
 
   // Emissor selecionado: o do ticker clicado, ou o emissor com mais tickers no setor.
   const selectedTickerData = inSector.find((t) => t.ticker === selectedTicker);
@@ -205,20 +271,94 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   }, [inSector, focusEmissorCnpj]);
   const emissorSeries = useMemo(() => buildSeries(emissorTickers), [emissorTickers, history, window]);
 
-  // Tabela
+  // Tabela com ordenação
   const tableRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return inSector
-      .filter(
-        (t) =>
-          !q ||
-          t.ticker.toLowerCase().includes(q) ||
-          t.emissor_label.toLowerCase().includes(q),
-      )
-      .sort((a, b) => (b.z_score ?? 0) - (a.z_score ?? 0));
-  }, [inSector, search]);
+    const filtered = inSector.filter(
+      (t) =>
+        !q ||
+        t.ticker.toLowerCase().includes(q) ||
+        t.emissor_label.toLowerCase().includes(q),
+    );
+    const ratingIdx = (r: string) => {
+      const i = RATING_ORDER.indexOf(r as typeof RATING_ORDER[number]);
+      return i === -1 ? 99 : i;
+    };
+    const get = (t: typeof inSector[number]) => {
+      switch (sortKey) {
+        case "ticker": return t.ticker;
+        case "emissor": return t.emissor_label;
+        case "rating": return ratingIdx(t.rating_norm);
+        case "duration": return t.anos_venc ?? 0;
+        case "valor": return t.last_val ?? 0;
+        case "delta5": return ((t.last_val ?? 0) - (t.avg_5d ?? t.last_val ?? 0));
+        case "delta21": return ((t.last_val ?? 0) - (t.avg_21d ?? t.last_val ?? 0));
+        case "z": return t.z_score ?? 0;
+        case "vol": return t.total_vol_fin ?? 0;
+      }
+    };
+    const dir = sortDir === "asc" ? 1 : -1;
+    return filtered.sort((a, b) => {
+      const va = get(a); const vb = get(b);
+      if (typeof va === "string" && typeof vb === "string") return va.localeCompare(vb) * dir;
+      return ((va as number) - (vb as number)) * dir;
+    });
+  }, [inSector, search, sortKey, sortDir]);
 
   const yLabel = mode === "CDI_PCT" ? "% CDI" : mode === "IPCA" ? "Spread (% a.a.)" : "Taxa (% a.a.)";
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir(k === "ticker" || k === "emissor" || k === "rating" ? "asc" : "desc"); }
+  }
+  const sortIcon = (k: SortKey) =>
+    sortKey !== k ? <ArrowUpDown className="inline w-3 h-3 opacity-40" /> :
+    sortDir === "asc" ? <ArrowUp className="inline w-3 h-3" /> : <ArrowDown className="inline w-3 h-3" />;
+
+  // ── Exportações ─────────────────────────────────────────────
+  function exportTableXlsx() {
+    const rows = tableRows.map((t) => ({
+      Ticker: t.ticker,
+      Emissor: t.emissor_label,
+      Setor: t.setor,
+      Rating: t.rating_norm,
+      Duration: t.anos_venc,
+      [yLabel]: t.last_val,
+      "Δ vs 5D (bps)": t.last_val != null && t.avg_5d != null ? Math.round((t.last_val - t.avg_5d) * 100) : null,
+      "Δ vs 21D (bps)": t.last_val != null && t.avg_21d != null ? Math.round((t.last_val - t.avg_21d) * 100) : null,
+      Z: t.z_score,
+      "Vol 90D": t.total_vol_fin,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Tickers");
+
+    if (isAllSectors && multiSectorSeries.rows.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(multiSectorSeries.rows), "Mediana por setor");
+    } else if (sectorSeries.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sectorSeries), "Mediana setor");
+    }
+    if (emissorSeries.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(emissorSeries), "Mediana emissor");
+    }
+    const tag = isAllSectors ? "todos-setores" : (setorAtivo ?? "setor").replace(/\s+/g, "-").toLowerCase();
+    XLSX.writeFile(wb, `trade-${tag}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  async function exportElementPng(el: HTMLDivElement | null, name: string) {
+    if (!el) return;
+    try {
+      const bg = getComputedStyle(document.documentElement).getPropertyValue("--card").trim();
+      const dataUrl = await toPng(el, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: bg ? `hsl(${bg})` : "#ffffff",
+      });
+      const blob = await (await fetch(dataUrl)).blob();
+      saveAs(blob, `${name}-${new Date().toISOString().slice(0, 10)}.png`);
+    } catch (err) {
+      console.error("Falha ao exportar imagem", err);
+    }
+  }
 
   return (
     <div className="p-6 space-y-4">
@@ -228,11 +368,14 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Setor
           </span>
-          <Select value={setorAtivo ?? ""} onValueChange={(v) => setSetor(v)}>
+          <Select value={setorAtivo ?? ""} onValueChange={(v) => { setSetor(v); setSelectedTicker(null); }}>
             <SelectTrigger className="h-8 w-[260px] text-xs">
               <SelectValue placeholder={loadingEmpresas ? "Carregando…" : "Selecionar setor"} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={ALL_SECTORS} className="text-xs font-semibold">
+                Todos os setores <span className="text-muted-foreground font-mono ml-1">({enriched.length})</span>
+              </SelectItem>
               {setores.map(([s, n]) => (
                 <SelectItem key={s} value={s} className="text-xs">
                   {s} <span className="text-muted-foreground font-mono ml-1">({n})</span>
@@ -261,12 +404,51 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           </div>
         </div>
 
-        <div className="flex-1 min-w-[180px]" />
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Rating
+          </span>
+          <div className="flex flex-wrap gap-1 bg-muted p-1 rounded-lg max-w-[420px]">
+            <button
+              onClick={() => setRatingFilter(new Set())}
+              className={`px-2 h-6 text-[11px] font-mono rounded ${
+                ratingFilter.size === 0 ? "bg-background shadow-sm font-bold" : "text-muted-foreground"
+              }`}
+            >
+              Todos
+            </button>
+            {ratingsDisponiveis.map((r) => {
+              const on = ratingFilter.has(r);
+              return (
+                <button
+                  key={r}
+                  onClick={() => {
+                    const next = new Set(ratingFilter);
+                    if (on) next.delete(r); else next.add(r);
+                    setRatingFilter(next);
+                  }}
+                  className={`px-2 h-6 text-[11px] font-mono rounded ${
+                    on ? "shadow-sm font-bold" : "text-muted-foreground"
+                  }`}
+                  style={on ? { background: (RATING_COLORS[r] ?? "#94a3b8") + "33", color: RATING_COLORS[r] } : undefined}
+                >
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-[40px]" />
 
         <Badge variant="outline" className="font-mono text-xs gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: modeColor }} />
-          {inSector.length} emissões no setor
+          {inSector.length} emissões
         </Badge>
+
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={exportTableXlsx}>
+          <Download className="w-3.5 h-3.5" /> Excel
+        </Button>
       </div>
 
       {noSetor ? (
@@ -277,16 +459,19 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Scatter */}
-            <div className="bg-card border border-border rounded-xl p-4 lg:row-span-2">
-              <div className="flex items-baseline justify-between mb-2">
+            <div ref={scatterRef} className="bg-card border border-border rounded-xl p-4 lg:row-span-2">
+              <div className="flex items-baseline justify-between mb-2 gap-2">
                 <div>
                   <div className="text-xs font-bold">
-                    Mercado secundário · {setorAtivo} · {mode === "DI_SPREAD" ? "DI+" : mode === "IPCA" ? "IPCA+" : "%CDI"}
+                    Mercado secundário · {isAllSectors ? "Todos os setores" : setorAtivo} · {mode === "DI_SPREAD" ? "DI+" : mode === "IPCA" ? "IPCA+" : "%CDI"}
                   </div>
                   <div className="text-[10px] text-muted-foreground">
-                    Spread × Duration · cores = rating · cinza = universo fora do setor
+                    Spread × Duration · cores = rating{!isAllSectors && " · cinza = universo fora do setor"}
                   </div>
                 </div>
+                <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(scatterRef.current, "scatter")}>
+                  <ImageIcon className="w-3.5 h-3.5" /> PNG
+                </Button>
               </div>
               <div style={{ height: 460 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -314,11 +499,6 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                       contentStyle={chartTheme.tooltip}
                       labelStyle={chartTheme.tooltipLabel}
                       itemStyle={chartTheme.tooltipItem}
-                      formatter={(value: number, name: string) => {
-                        if (name === "Duration") return [value.toFixed(2) + " a", name];
-                        if (name === yLabel) return [value.toFixed(3) + "%", name];
-                        return [value, name];
-                      }}
                       content={({ active, payload }) => {
                         if (!active || !payload || !payload.length) return null;
                         const p = payload[0].payload as {
@@ -341,12 +521,10 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                       }}
                     />
 
-                    {/* Background: universo fora do setor */}
                     {bgPoints.length > 0 && (
                       <Scatter data={bgPoints} fill={chartTheme.muted} fillOpacity={0.25} shape="circle" />
                     )}
 
-                    {/* Setor: uma série por rating, com label */}
                     {sectorByRating.map((s) => (
                       <Scatter
                         key={s.rating}
@@ -379,53 +557,86 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
               </div>
             </div>
 
-            {/* Mediana setor */}
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="text-xs font-bold mb-1">Mediana de spread — {setorAtivo}</div>
+            {/* Mediana setor (single ou multi) */}
+            <div ref={sectorChartRef} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-baseline justify-between mb-1 gap-2">
+                <div className="text-xs font-bold">
+                  Mediana de spread — {isAllSectors ? "por setor" : setorAtivo}
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(sectorChartRef.current, "mediana-setor")}>
+                  <ImageIcon className="w-3.5 h-3.5" /> PNG
+                </Button>
+              </div>
               <div className="text-[10px] text-muted-foreground mb-2">
                 Mediana móvel de 10 negociações · janela {window === "MAX" ? "máx" : `${window}du`}
+                {ratingFilter.size > 0 && ` · rating ${Array.from(ratingFilter).join(", ")}`}
               </div>
-              <div style={{ height: 200 }}>
+              <div style={{ height: isAllSectors ? 320 : 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={sectorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
-                    <XAxis
-                      dataKey="d"
-                      tick={{ fontSize: 9, fill: chartTheme.tickFill }}
-                      tickFormatter={fmtDate}
-                      minTickGap={32}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }}
-                      tickFormatter={(v) => v.toFixed(2) + "%"}
-                    />
-                    <Tooltip
-                      contentStyle={chartTheme.tooltip}
-                      labelStyle={chartTheme.tooltipLabel}
-                      itemStyle={chartTheme.tooltipItem}
-                      labelFormatter={(l: string) => fmtDate(l)}
-                      formatter={(v: number) => [v?.toFixed(3) + "%", "Mediana"]}
-                    />
-                    <Line type="monotone" dataKey="med" stroke={modeColor} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
-                  </ComposedChart>
+                  {isAllSectors ? (
+                    <ComposedChart data={multiSectorSeries.rows} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
+                      <XAxis dataKey="d" tick={{ fontSize: 9, fill: chartTheme.tickFill }} tickFormatter={fmtDate} minTickGap={32} />
+                      <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }} tickFormatter={(v) => v.toFixed(2) + "%"} />
+                      <Tooltip
+                        contentStyle={chartTheme.tooltip}
+                        labelStyle={chartTheme.tooltipLabel}
+                        itemStyle={chartTheme.tooltipItem}
+                        labelFormatter={(l: string) => fmtDate(l)}
+                        formatter={(v: number, n: string) => [v?.toFixed(3) + "%", n]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+                      {multiSectorSeries.setores.map((s) => (
+                        <Line
+                          key={s.nome}
+                          type="monotone"
+                          dataKey={s.nome}
+                          stroke={s.color}
+                          strokeWidth={1.5}
+                          dot={false}
+                          isAnimationActive={false}
+                          connectNulls
+                        />
+                      ))}
+                    </ComposedChart>
+                  ) : (
+                    <ComposedChart data={sectorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
+                      <XAxis dataKey="d" tick={{ fontSize: 9, fill: chartTheme.tickFill }} tickFormatter={fmtDate} minTickGap={32} />
+                      <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }} tickFormatter={(v) => v.toFixed(2) + "%"} />
+                      <Tooltip
+                        contentStyle={chartTheme.tooltip}
+                        labelStyle={chartTheme.tooltipLabel}
+                        itemStyle={chartTheme.tooltipItem}
+                        labelFormatter={(l: string) => fmtDate(l)}
+                        formatter={(v: number) => [v?.toFixed(3) + "%", "Mediana"]}
+                      />
+                      <Line type="monotone" dataKey="med" stroke={modeColor} strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} />
+                    </ComposedChart>
+                  )}
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Mediana emissor */}
-            <div className="bg-card border border-border rounded-xl p-4">
-              <div className="flex items-baseline justify-between mb-1">
+            <div ref={emissorChartRef} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-baseline justify-between mb-1 gap-2">
                 <div className="text-xs font-bold">
                   Mediana de spread — {focusEmissor?.nome ?? "Emissor"}
                 </div>
-                {selectedTicker && (
-                  <button
-                    onClick={() => setSelectedTicker(null)}
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
-                  >
-                    limpar seleção
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedTicker && (
+                    <button
+                      onClick={() => setSelectedTicker(null)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      limpar seleção
+                    </button>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(emissorChartRef.current, "mediana-emissor")}>
+                    <ImageIcon className="w-3.5 h-3.5" /> PNG
+                  </Button>
+                </div>
               </div>
               <div className="text-[10px] text-muted-foreground mb-2">
                 {emissorTickers.size} ticker(s) · janela {window === "MAX" ? "máx" : `${window}du`}
@@ -434,16 +645,8 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={emissorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
-                    <XAxis
-                      dataKey="d"
-                      tick={{ fontSize: 9, fill: chartTheme.tickFill }}
-                      tickFormatter={fmtDate}
-                      minTickGap={32}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }}
-                      tickFormatter={(v) => v.toFixed(2) + "%"}
-                    />
+                    <XAxis dataKey="d" tick={{ fontSize: 9, fill: chartTheme.tickFill }} tickFormatter={fmtDate} minTickGap={32} />
+                    <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }} tickFormatter={(v) => v.toFixed(2) + "%"} />
                     <Tooltip
                       contentStyle={chartTheme.tooltip}
                       labelStyle={chartTheme.tooltipLabel}
@@ -462,38 +665,48 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-3 gap-3">
               <div>
-                <div className="text-xs font-bold">Tickers do setor — {setorAtivo}</div>
+                <div className="text-xs font-bold">
+                  Tickers — {isAllSectors ? "Todos os setores" : setorAtivo}
+                </div>
                 <div className="text-[10px] text-muted-foreground">
-                  Clique para selecionar e atualizar o gráfico do emissor.
+                  Clique para selecionar e atualizar o gráfico do emissor. Clique no cabeçalho para ordenar.
                 </div>
               </div>
-              <div className="relative w-[260px]">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar ticker ou emissor…"
-                  className="h-8 pl-7 text-xs"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative w-[260px]">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar ticker ou emissor…"
+                    className="h-8 pl-7 text-xs"
+                  />
+                </div>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={exportTableXlsx}>
+                  <Download className="w-3.5 h-3.5" /> Excel
+                </Button>
               </div>
             </div>
-            <div className="overflow-auto max-h-[360px]">
+            <div className="overflow-auto max-h-[420px]">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-card">
-                  <tr className="text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border">
-                    <th className="text-left py-2 px-2">Ticker</th>
-                    <th className="text-left py-2 px-2">Emissor</th>
-                    <th className="text-left py-2 px-2">Rating</th>
-                    <th className="text-right py-2 px-2">Duration</th>
-                    <th className="text-right py-2 px-2">{yLabel}</th>
-                    <th className="text-right py-2 px-2">Δ vs 21d</th>
-                    <th className="text-right py-2 px-2">Z</th>
-                    <th className="text-right py-2 px-2">Vol 90d</th>
+                <thead className="sticky top-0 bg-card z-10">
+                  <tr className="text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border select-none">
+                    <th className="text-left py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("ticker")}>Ticker {sortIcon("ticker")}</th>
+                    <th className="text-left py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("emissor")}>Emissor {sortIcon("emissor")}</th>
+                    {isAllSectors && <th className="text-left py-2 px-2">Setor</th>}
+                    <th className="text-left py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("rating")}>Rating {sortIcon("rating")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("duration")}>Duration {sortIcon("duration")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("valor")}>{yLabel} {sortIcon("valor")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("delta5")}>Δ vs 5D {sortIcon("delta5")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("delta21")}>Δ vs 21D {sortIcon("delta21")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("z")}>Z {sortIcon("z")}</th>
+                    <th className="text-right py-2 px-2 cursor-pointer hover:text-foreground" onClick={() => toggleSort("vol")}>Vol 90D {sortIcon("vol")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tableRows.map((t) => {
-                    const delta = ((t.last_val ?? 0) - (t.avg_21d ?? t.last_val ?? 0)) * 100;
+                    const d5 = ((t.last_val ?? 0) - (t.avg_5d ?? t.last_val ?? 0)) * 100;
+                    const d21 = ((t.last_val ?? 0) - (t.avg_21d ?? t.last_val ?? 0)) * 100;
                     const sel = selectedTicker === t.ticker;
                     return (
                       <tr
@@ -508,6 +721,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                       >
                         <td className="py-1.5 px-2 font-mono font-medium" style={{ color: modeColor }}>{t.ticker}</td>
                         <td className="py-1.5 px-2 truncate max-w-[220px]">{t.emissor_label}</td>
+                        {isAllSectors && <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[140px]">{t.setor}</td>}
                         <td className="py-1.5 px-2">
                           <span
                             className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
@@ -520,10 +734,15 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                         <td className="py-1.5 px-2 text-right font-mono">{(t.last_val ?? 0).toFixed(3)}%</td>
                         <td
                           className="py-1.5 px-2 text-right font-mono"
-                          style={{ color: delta > 0 ? "#ef4444" : delta < 0 ? "#10b981" : undefined }}
+                          style={{ color: d5 > 0 ? "#ef4444" : d5 < 0 ? "#10b981" : undefined }}
                         >
-                          {delta > 0 ? "+" : ""}
-                          {delta.toFixed(0)} bps
+                          {d5 > 0 ? "+" : ""}{d5.toFixed(0)} bps
+                        </td>
+                        <td
+                          className="py-1.5 px-2 text-right font-mono"
+                          style={{ color: d21 > 0 ? "#ef4444" : d21 < 0 ? "#10b981" : undefined }}
+                        >
+                          {d21 > 0 ? "+" : ""}{d21.toFixed(0)} bps
                         </td>
                         <td className="py-1.5 px-2 text-right font-mono">{(t.z_score ?? 0).toFixed(2)}</td>
                         <td className="py-1.5 px-2 text-right font-mono text-muted-foreground">{fv(t.total_vol_fin ?? 0)}</td>
@@ -532,7 +751,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                   })}
                   {tableRows.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-6 text-center text-muted-foreground">
+                      <td colSpan={isAllSectors ? 10 : 9} className="py-6 text-center text-muted-foreground">
                         Nenhum ticker encontrado.
                       </td>
                     </tr>
