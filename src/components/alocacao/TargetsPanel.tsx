@@ -54,20 +54,24 @@ export function TargetsPanel() {
           </SelectContent>
         </Select>
         <Select value={periodId ?? ""} onValueChange={setPeriodId} disabled={periods.length === 0}>
-          <SelectTrigger className="w-[280px] h-9 text-sm"><SelectValue placeholder="Período" /></SelectTrigger>
+          <SelectTrigger className="w-[300px] h-9 text-sm"><SelectValue placeholder="Período" /></SelectTrigger>
           <SelectContent>
             {periods.map(p => (
               <SelectItem key={p.id} value={p.id}>
-                {p.nome} ({fmtDate(p.data_inicio)} → {p.data_fim ? fmtDate(p.data_fim) : "vigente"}){p.ativo ? " ★" : ""}
+                {p.ativo ? "★ VIGENTE · " : ""}{p.nome} ({fmtDate(p.data_inicio)} → {p.data_fim ? fmtDate(p.data_fim) : "—"})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {currentPeriod && (
+          isActivePeriod ? (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-600 text-white">Vigente</span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-amber-500 text-white">Histórico (somente leitura)</span>
+          )
+        )}
         {canEdit && (
           <NewPeriodButton fundo={fundo} currentPeriodId={periodId} />
-        )}
-        {!isActivePeriod && currentPeriod && (
-          <span className="text-xs text-amber-600 font-medium">Período histórico (somente leitura)</span>
         )}
       </div>
 
