@@ -648,10 +648,12 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             <div ref={emissorChartRef} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-baseline justify-between mb-1 gap-2">
                 <div className="text-xs font-bold">
-                  Mediana de spread — {focusEmissor?.nome ?? "Emissor"}
+                  {isAllSectors
+                    ? "Mediana de spread — todos os ativos"
+                    : `Mediana de spread — ${focusEmissor?.nome ?? "Emissor"}`}
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedTicker && (
+                  {!isAllSectors && selectedTicker && (
                     <button
                       onClick={() => setSelectedTicker(null)}
                       className="text-[10px] text-muted-foreground hover:text-foreground"
@@ -659,17 +661,19 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                       limpar seleção
                     </button>
                   )}
-                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(emissorChartRef.current, "mediana-emissor")}>
+                  <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1" onClick={() => exportElementPng(emissorChartRef.current, isAllSectors ? "mediana-todos" : "mediana-emissor")}>
                     <ImageIcon className="w-3.5 h-3.5" /> PNG
                   </Button>
                 </div>
               </div>
               <div className="text-[10px] text-muted-foreground mb-2">
-                {emissorTickers.size} ticker(s) · janela {window === "MAX" ? "máx" : `${window}du`}
+                {isAllSectors
+                  ? `${allTickers.size} ticker(s) · janela ${window === "MAX" ? "máx" : `${window}du`}`
+                  : `${emissorTickers.size} ticker(s) · janela ${window === "MAX" ? "máx" : `${window}du`}`}
               </div>
               <div style={{ height: 200 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={emissorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                  <ComposedChart data={isAllSectors ? allSeries : emissorSeries} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.border} />
                     <XAxis dataKey="d" tick={{ fontSize: 9, fill: chartTheme.tickFill }} tickFormatter={fmtDate} minTickGap={32} />
                     <YAxis tick={{ fontSize: 9, fill: chartTheme.tickFill, fontFamily: "DM Mono, monospace" }} tickFormatter={(v) => v.toFixed(2) + "%"} />
