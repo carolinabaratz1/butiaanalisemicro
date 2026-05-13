@@ -85,6 +85,7 @@ export type Database = {
           created_at: string
           fundo: string
           id: string
+          limite_pct: number | null
           period_id: string | null
           target_pct: number | null
           tipo_ativo: string
@@ -95,6 +96,7 @@ export type Database = {
           created_at?: string
           fundo: string
           id?: string
+          limite_pct?: number | null
           period_id?: string | null
           target_pct?: number | null
           tipo_ativo: string
@@ -105,6 +107,7 @@ export type Database = {
           created_at?: string
           fundo?: string
           id?: string
+          limite_pct?: number | null
           period_id?: string | null
           target_pct?: number | null
           tipo_ativo?: string
