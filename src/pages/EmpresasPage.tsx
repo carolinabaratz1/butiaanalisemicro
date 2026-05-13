@@ -52,6 +52,19 @@ export default function EmpresasPage() {
     },
   });
 
+  const { data: setoresOficiais = [] } = useQuery({
+    queryKey: ['setores-oficiais'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('setores' as any)
+        .select('nome')
+        .eq('ativo', true)
+        .order('nome');
+      if (error) throw error;
+      return (data ?? []).map((r: any) => r.nome as string);
+    },
+  });
+
   const { data: analisesCounts = {} } = useQuery({
     queryKey: ['analises-ativas-count'],
     queryFn: async () => {
@@ -190,7 +203,13 @@ export default function EmpresasPage() {
                 </div>
                 <div>
                   <Label className="text-xs">Setor</Label>
-                  <Input value={formSetor} onChange={e => setFormSetor(e.target.value)} className="h-8 text-sm bg-background" />
+                  <Select value={formSetor || 'none'} onValueChange={v => setFormSetor(v === 'none' ? '' : v)}>
+                    <SelectTrigger className="h-8 text-sm bg-background"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
+                    <SelectContent className="bg-card border-border max-h-64">
+                      <SelectItem value="none">— Sem setor —</SelectItem>
+                      {setoresOficiais.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className="text-xs">Rating</Label>
