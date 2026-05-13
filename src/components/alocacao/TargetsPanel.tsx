@@ -117,10 +117,10 @@ function NewPeriodButton({ fundo, currentPeriodId }: { fundo: FundoKey; currentP
       // 3. Copia targets do período anterior
       if (currentPeriodId) {
         const { data: prev } = await supabase.from("allocation_targets" as any)
-          .select("fundo,tipo_ativo,target_pct").eq("period_id", currentPeriodId);
+          .select("fundo,tipo_ativo,target_pct,limite_pct").eq("period_id", currentPeriodId);
         if (prev && (prev as any[]).length) {
           const payload = (prev as any[]).map(r => ({
-            fundo: r.fundo, tipo_ativo: r.tipo_ativo, target_pct: r.target_pct,
+            fundo: r.fundo, tipo_ativo: r.tipo_ativo, target_pct: r.target_pct, limite_pct: r.limite_pct,
             period_id: newId, updated_by: currentUser?.id,
           }));
           await supabase.from("allocation_targets" as any).insert(payload);
@@ -160,6 +160,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
   const qc = useQueryClient();
 
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [limDrafts, setLimDrafts] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<"tipo" | "target" | "limite" | "headroom" | "status">("tipo");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -167,9 +168,12 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
   const rows = useMemo(() => {
     const tipos = Array.from(new Set(limits.filter(l => l.categoria === "tipo_ativo" && l.fundo === fundo).map(l => l.subcategoria)));
     return tipos.map(t => {
-      const lim = limits.find(l => l.fundo === fundo && l.categoria === "tipo_ativo" && l.subcategoria === t)?.limite_pct ?? null;
-      const tgt = targets.find(x => x.fundo === fundo && x.tipo_ativo === t)?.target_pct ?? null;
-      return { fundo, tipo_ativo: t, limite: lim, target: tgt, key: `${fundo}::${t}` };
+      const baseLim = limits.find(l => l.fundo === fundo && l.categoria === "tipo_ativo" && l.subcategoria === t)?.limite_pct ?? null;
+      const tRow = targets.find(x => x.fundo === fundo && x.tipo_ativo === t);
+      const tgt = tRow?.target_pct ?? null;
+      const overrideLim = tRow?.limite_pct ?? null;
+      const lim = overrideLim ?? baseLim;
+      return { fundo, tipo_ativo: t, baseLimite: baseLim, overrideLimite: overrideLim, limite: lim, target: tgt, key: `${fundo}::${t}` };
     });
   }, [limits, targets, fundo]);
 
@@ -182,22 +186,30 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
     return sortDir === "asc" ? <ArrowUp className="w-3 h-3 inline ml-1" /> : <ArrowDown className="w-3 h-3 inline ml-1" />;
   };
 
+  const parseNum = (s: string | undefined): number | null => {
+    if (s == null || s.trim() === "") return null;
+    const v = Number(s.replace(",", "."));
+    return isNaN(v) ? null : v;
+  };
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = q ? rows.filter(r => r.tipo_ativo.toLowerCase().includes(q)) : rows;
     const arr = [...list];
     arr.sort((a, b) => {
-      const tgtA = drafts[a.key]?.trim() === "" || drafts[a.key] == null ? a.target : Number((drafts[a.key] ?? "").replace(",", "."));
-      const tgtB = drafts[b.key]?.trim() === "" || drafts[b.key] == null ? b.target : Number((drafts[b.key] ?? "").replace(",", "."));
-      const headA = a.limite != null && tgtA != null ? a.limite - (tgtA as number) : null;
-      const headB = b.limite != null && tgtB != null ? b.limite - (tgtB as number) : null;
-      const stA = tgtA == null || a.limite == null ? 0 : (tgtA as number) > a.limite ? 2 : 1;
-      const stB = tgtB == null || b.limite == null ? 0 : (tgtB as number) > b.limite ? 2 : 1;
+      const tgtA = parseNum(drafts[a.key]) ?? a.target;
+      const tgtB = parseNum(drafts[b.key]) ?? b.target;
+      const limA = parseNum(limDrafts[a.key]) ?? a.limite;
+      const limB = parseNum(limDrafts[b.key]) ?? b.limite;
+      const headA = limA != null && tgtA != null ? limA - tgtA : null;
+      const headB = limB != null && tgtB != null ? limB - tgtB : null;
+      const stA = tgtA == null || limA == null ? 0 : tgtA > limA ? 2 : 1;
+      const stB = tgtB == null || limB == null ? 0 : tgtB > limB ? 2 : 1;
       let av: any, bv: any;
       switch (sortKey) {
         case "tipo": av = a.tipo_ativo; bv = b.tipo_ativo; break;
-        case "target": av = (tgtA as number) ?? -Infinity; bv = (tgtB as number) ?? -Infinity; break;
-        case "limite": av = a.limite ?? -Infinity; bv = b.limite ?? -Infinity; break;
+        case "target": av = tgtA ?? -Infinity; bv = tgtB ?? -Infinity; break;
+        case "limite": av = limA ?? -Infinity; bv = limB ?? -Infinity; break;
         case "headroom": av = headA ?? -Infinity; bv = headB ?? -Infinity; break;
         case "status": av = stA; bv = stB; break;
       }
@@ -205,35 +217,40 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
       return sortDir === "asc" ? (av - bv) : (bv - av);
     });
     return arr;
-  }, [rows, search, sortKey, sortDir, drafts]);
+  }, [rows, search, sortKey, sortDir, drafts, limDrafts]);
 
   useEffect(() => {
     const initial: Record<string, string> = {};
-    for (const r of rows) initial[r.key] = r.target == null ? "" : String(r.target);
+    const initLim: Record<string, string> = {};
+    for (const r of rows) {
+      initial[r.key] = r.target == null ? "" : String(r.target);
+      initLim[r.key] = r.overrideLimite == null ? "" : String(r.overrideLimite);
+    }
     setDrafts(initial);
+    setLimDrafts(initLim);
   }, [rows.length, periodId]);
 
-  async function saveOne(tipo_ativo: string, raw: string) {
+  async function saveRow(tipo_ativo: string, targetRaw: string, limiteRaw: string) {
     if (!editable || !periodId) return;
-    const value = raw.trim() === "" ? null : Number(raw.replace(",", "."));
-    if (value != null && (isNaN(value) || value < 0 || value > 999)) {
-      toast({ title: "Valor inválido", variant: "destructive" });
-      return;
+    const tgt = parseNum(targetRaw);
+    const lim = parseNum(limiteRaw);
+    for (const v of [tgt, lim]) {
+      if (v != null && (isNaN(v) || v < 0 || v > 999)) {
+        toast({ title: "Valor inválido", variant: "destructive" });
+        return;
+      }
     }
+    const payload = { period_id: periodId, fundo, tipo_ativo, target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id };
     const { error } = await supabase
       .from("allocation_targets" as any)
-      .upsert(
-        { period_id: periodId, fundo, tipo_ativo, target_pct: value, updated_by: currentUser?.id },
-        { onConflict: "period_id,fundo,tipo_ativo" } as any
-      );
+      .upsert(payload, { onConflict: "period_id,fundo,tipo_ativo" } as any);
     if (error) {
-      // fallback: manual upsert
       const { data: ex } = await supabase.from("allocation_targets" as any)
         .select("id").eq("period_id", periodId).eq("fundo", fundo).eq("tipo_ativo", tipo_ativo).maybeSingle();
       if ((ex as any)?.id) {
-        await supabase.from("allocation_targets" as any).update({ target_pct: value, updated_by: currentUser?.id }).eq("id", (ex as any).id);
+        await supabase.from("allocation_targets" as any).update({ target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id }).eq("id", (ex as any).id);
       } else {
-        await supabase.from("allocation_targets" as any).insert({ period_id: periodId, fundo, tipo_ativo, target_pct: value, updated_by: currentUser?.id });
+        await supabase.from("allocation_targets" as any).insert(payload);
       }
     }
     qc.invalidateQueries({ queryKey: ["allocation_targets"] });
@@ -256,36 +273,50 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
           <TableRow>
             <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("tipo")}>Tipo de Ativo<SortIcon k="tipo" /></TableHead>
             <TableHead className="text-right w-[140px] cursor-pointer select-none" onClick={() => toggleSort("target")}>Target<SortIcon k="target" /></TableHead>
-            <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("limite")}>Limite Gerencial<SortIcon k="limite" /></TableHead>
+            <TableHead className="text-right w-[160px] cursor-pointer select-none" onClick={() => toggleSort("limite")}>Limite Gerencial<SortIcon k="limite" /></TableHead>
             <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("headroom")}>Headroom vs. Target<SortIcon k="headroom" /></TableHead>
             <TableHead className="text-center cursor-pointer select-none" onClick={() => toggleSort("status")}>Status<SortIcon k="status" /></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {visible.map(r => {
-            const raw = drafts[r.key] ?? "";
-            const target = raw.trim() === "" ? null : Number(raw.replace(",", "."));
-            const headroom = r.limite != null && target != null ? r.limite - target : null;
-            const acima = target != null && r.limite != null && target > r.limite;
+            const rawT = drafts[r.key] ?? "";
+            const rawL = limDrafts[r.key] ?? "";
+            const target = parseNum(rawT);
+            const limOverride = parseNum(rawL);
+            const limEff = limOverride ?? r.baseLimite;
+            const headroom = limEff != null && target != null ? limEff - target : null;
+            const acima = target != null && limEff != null && target > limEff;
             return (
               <TableRow key={r.key}>
                 <TableCell>{r.tipo_ativo}</TableCell>
                 <TableCell className="text-right">
                   <Input
                     type="text"
-                    value={raw}
+                    value={rawT}
                     disabled={!editable}
                     className="h-8 text-right font-mono w-24 ml-auto"
                     onChange={(e) => setDrafts(d => ({ ...d, [r.key]: e.target.value }))}
-                    onBlur={(e) => saveOne(r.tipo_ativo, e.target.value)}
+                    onBlur={(e) => saveRow(r.tipo_ativo, e.target.value, limDrafts[r.key] ?? "")}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                     placeholder="—"
                   />
                 </TableCell>
-                <TableCell className="text-right font-mono">{fmtPct(r.limite)}</TableCell>
+                <TableCell className="text-right">
+                  <Input
+                    type="text"
+                    value={rawL}
+                    disabled={!editable}
+                    className="h-8 text-right font-mono w-24 ml-auto"
+                    onChange={(e) => setLimDrafts(d => ({ ...d, [r.key]: e.target.value }))}
+                    onBlur={(e) => saveRow(r.tipo_ativo, drafts[r.key] ?? "", e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    placeholder={r.baseLimite == null ? "—" : String(r.baseLimite)}
+                  />
+                </TableCell>
                 <TableCell className="text-right font-mono">{fmtPct(headroom)}</TableCell>
                 <TableCell className="text-center">
-                  {target == null || r.limite == null ? (
+                  {target == null || limEff == null ? (
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : acima ? (
                     <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-destructive text-destructive-foreground">Acima</span>

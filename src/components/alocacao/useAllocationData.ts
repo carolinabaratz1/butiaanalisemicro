@@ -76,6 +76,7 @@ export interface TargetRow {
   fundo: string;
   tipo_ativo: string;
   target_pct: number | null;
+  limite_pct: number | null;
   updated_at: string;
 }
 
@@ -85,7 +86,7 @@ export function useAllocationTargets(periodId?: string | null) {
     queryFn: async (): Promise<TargetRow[]> => {
       let q: any = supabase
         .from("allocation_targets" as any)
-        .select("id,period_id,fundo,tipo_ativo,target_pct,updated_at");
+        .select("id,period_id,fundo,tipo_ativo,target_pct,limite_pct,updated_at");
       if (periodId) q = q.eq("period_id", periodId);
       const { data, error } = await q;
       if (error) throw error;
