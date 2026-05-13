@@ -81,7 +81,8 @@ export function tipoAtivoFromProduct(product: string, productClass: string): str
   if (p.includes("cdb") || p.includes("letra financeira") || p.includes("lf ") || p.includes(" lf") || p.includes("lci") || p.includes("lca")) return "Crédito Financeiro";
   if (p.includes("funds")) return "Cotas de Fundos CP";
   if (p.includes("termo")) return "Termo ≤ 60 dias";
-  if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss") || p.includes("ntn") || p.includes("ltn")) {
+  if (p.includes("overnight") || p.includes("compromiss")) return "Compromissadas (Overnight)";
+  if (p.includes("lft") || p.includes("ntn") || p.includes("ltn")) {
     return "Caixa Mínimo";
   }
   if (p.includes("equity") || p.includes("bdr")) return "Outros";
