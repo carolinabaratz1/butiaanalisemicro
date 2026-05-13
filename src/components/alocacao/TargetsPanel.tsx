@@ -54,20 +54,24 @@ export function TargetsPanel() {
           </SelectContent>
         </Select>
         <Select value={periodId ?? ""} onValueChange={setPeriodId} disabled={periods.length === 0}>
-          <SelectTrigger className="w-[280px] h-9 text-sm"><SelectValue placeholder="Período" /></SelectTrigger>
+          <SelectTrigger className="w-[300px] h-9 text-sm"><SelectValue placeholder="Período" /></SelectTrigger>
           <SelectContent>
             {periods.map(p => (
               <SelectItem key={p.id} value={p.id}>
-                {p.nome} ({fmtDate(p.data_inicio)} → {p.data_fim ? fmtDate(p.data_fim) : "vigente"}){p.ativo ? " ★" : ""}
+                {p.ativo ? "★ VIGENTE · " : ""}{p.nome} ({fmtDate(p.data_inicio)} → {p.data_fim ? fmtDate(p.data_fim) : "—"})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {currentPeriod && (
+          isActivePeriod ? (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-emerald-600 text-white">Vigente</span>
+          ) : (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide bg-amber-500 text-white">Histórico (somente leitura)</span>
+          )
+        )}
         {canEdit && (
           <NewPeriodButton fundo={fundo} currentPeriodId={periodId} />
-        )}
-        {!isActivePeriod && currentPeriod && (
-          <span className="text-xs text-amber-600 font-medium">Período histórico (somente leitura)</span>
         )}
       </div>
 
@@ -237,7 +241,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
     for (const v of [tgt, lim]) {
       if (v != null && (isNaN(v) || v < 0 || v > 999)) {
         toast({ title: "Valor inválido", variant: "destructive" });
-        return;
+        throw new Error("invalid");
       }
     }
     const payload = { period_id: periodId, fundo, tipo_ativo, target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id };
@@ -245,15 +249,22 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
       .from("allocation_targets" as any)
       .upsert(payload, { onConflict: "period_id,fundo,tipo_ativo" } as any);
     if (error) {
-      const { data: ex } = await supabase.from("allocation_targets" as any)
-        .select("id").eq("period_id", periodId).eq("fundo", fundo).eq("tipo_ativo", tipo_ativo).maybeSingle();
-      if ((ex as any)?.id) {
-        await supabase.from("allocation_targets" as any).update({ target_pct: tgt, limite_pct: lim, updated_by: currentUser?.id }).eq("id", (ex as any).id);
-      } else {
-        await supabase.from("allocation_targets" as any).insert(payload);
-      }
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+      throw error;
     }
     qc.invalidateQueries({ queryKey: ["allocation_targets"] });
+  }
+
+  async function saveAll() {
+    if (!editable || !periodId) return;
+    let ok = 0, fail = 0;
+    for (const r of rows) {
+      try {
+        await saveRow(r.tipo_ativo, drafts[r.key] ?? "", limDrafts[r.key] ?? "");
+        ok++;
+      } catch { fail++; }
+    }
+    toast({ title: fail ? `Salvo com erros (${ok} ok, ${fail} falhas)` : `${ok} linhas salvas`, variant: fail ? "destructive" : "default" });
   }
 
   if (!periodId) return <div className="text-sm text-muted-foreground p-4">Nenhum período disponível. Crie um novo período para começar.</div>;
@@ -266,6 +277,9 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
           <Input placeholder="Filtrar tipo de ativo..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
         </div>
         <span className="text-xs text-muted-foreground">{visible.length} {visible.length === 1 ? "linha" : "linhas"}</span>
+        {editable && (
+          <Button size="sm" onClick={saveAll} className="gap-1.5 ml-auto"><Save className="w-3.5 h-3.5" />Salvar tudo</Button>
+        )}
       </div>
       <div className="border rounded-lg overflow-x-auto">
       <Table>
@@ -297,7 +311,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
                     disabled={!editable}
                     className="h-8 text-right font-mono w-24 ml-auto"
                     onChange={(e) => setDrafts(d => ({ ...d, [r.key]: e.target.value }))}
-                    onBlur={(e) => saveRow(r.tipo_ativo, e.target.value, limDrafts[r.key] ?? "")}
+                    onBlur={(e) => { saveRow(r.tipo_ativo, e.target.value, limDrafts[r.key] ?? "").catch(() => {}); }}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                     placeholder="—"
                   />
@@ -309,7 +323,7 @@ function TipoAtivoTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId
                     disabled={!editable}
                     className="h-8 text-right font-mono w-24 ml-auto"
                     onChange={(e) => setLimDrafts(d => ({ ...d, [r.key]: e.target.value }))}
-                    onBlur={(e) => saveRow(r.tipo_ativo, drafts[r.key] ?? "", e.target.value)}
+                    onBlur={(e) => { saveRow(r.tipo_ativo, drafts[r.key] ?? "", e.target.value).catch(() => {}); }}
                     onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                     placeholder={r.baseLimite == null ? "—" : String(r.baseLimite)}
                   />

@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ChevronDown, ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAllocationLimits, useAllocationData } from "./useAllocationData";
+import { useAllocationLimits, useAllocationData, useAllocationTargetPeriods, useAllocationTargets } from "./useAllocationData";
 import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
@@ -21,12 +21,26 @@ const CATEGORIAS: { key: "tipo_ativo" | "indexador" | "rating"; titulo: string }
 export function FundLimitsPanel({ fundo, valDate }: Props) {
   const { data: limits = [], isLoading: lLoading } = useAllocationLimits();
   const { data: agg, isLoading: aLoading } = useAllocationData(fundo, valDate ?? null);
+  const { data: periods = [] } = useAllocationTargetPeriods(fundo);
+  const activePeriod = periods.find(p => p.ativo) ?? null;
+  const { data: periodTargets = [] } = useAllocationTargets(activePeriod?.id ?? null);
+
+  const overrideByTipo = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const t of periodTargets) {
+      if (t.fundo === fundo && t.limite_pct != null) m.set(t.tipo_ativo, t.limite_pct);
+    }
+    return m;
+  }, [periodTargets, fundo]);
 
   const limitsByCat = useMemo(() => {
     const m: Record<string, { sub: string; lim: number | null }[]> = {};
     for (const l of limits) {
       if (l.fundo !== fundo) continue;
-      (m[l.categoria] ??= []).push({ sub: l.subcategoria, lim: l.limite_pct });
+      const lim = l.categoria === "tipo_ativo" && overrideByTipo.has(l.subcategoria)
+        ? overrideByTipo.get(l.subcategoria) ?? l.limite_pct
+        : l.limite_pct;
+      (m[l.categoria] ??= []).push({ sub: l.subcategoria, lim });
     }
     if (m["tipo_ativo"]) {
       m["tipo_ativo"].sort((a, b) => {
@@ -36,7 +50,7 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
       });
     }
     return m;
-  }, [limits, fundo]);
+  }, [limits, fundo, overrideByTipo]);
 
   if (lLoading) return <Skeleton className="h-40 w-full" />;
 
