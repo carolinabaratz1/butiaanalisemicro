@@ -150,9 +150,13 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   // Série temporal: mediana de spread por dia, com janela móvel de 10 negociações.
   function buildSeries(tickers: Set<string>) {
     if (!history || tickers.size === 0) return [] as { d: string; med: number | null; vol: number }[];
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - window);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    let cutoffStr = "0000-00-00";
+    if (window !== "MAX") {
+      const cutoff = new Date();
+      // Aprox. dias úteis → calendário (×7/5)
+      cutoff.setDate(cutoff.getDate() - Math.ceil(window * 1.4));
+      cutoffStr = cutoff.toISOString().slice(0, 10);
+    }
 
     const byDate = new Map<string, number[]>();
     const volByDate = new Map<string, number>();
