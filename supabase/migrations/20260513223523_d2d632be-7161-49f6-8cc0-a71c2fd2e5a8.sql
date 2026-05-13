@@ -1,0 +1,1 @@
+ALTER TABLE public.trade_taxas ADD COLUMN IF NOT EXISTS duration_du numeric;
