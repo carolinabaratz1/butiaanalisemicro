@@ -43,13 +43,27 @@ const RATING_COLORS: Record<string, string> = {
   "N/R": "#94a3b8",
 };
 
-// Paleta para múltiplos setores no gráfico de medianas
-const SECTOR_PALETTE = [
-  "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16",
-  "#06b6d4", "#a855f7", "#eab308", "#22c55e", "#f43f5e",
-  "#0891b2", "#d946ef", "#65a30d",
+// Paleta de cores bem separadas no espectro para múltiplos setores.
+// Combinamos com padrões de traço (sólido / tracejado / pontilhado) para
+// garantir distinção visual mesmo quando há muitos setores.
+const SECTOR_BASE_COLORS = [
+  "#1f77b4", // azul
+  "#d62728", // vermelho
+  "#2ca02c", // verde
+  "#ff7f0e", // laranja
+  "#9467bd", // roxo
+  "#17becf", // ciano
+  "#e377c2", // rosa
+  "#8c564b", // marrom
+  "#bcbd22", // oliva
+  "#7f7f7f", // cinza
 ];
+const SECTOR_DASH_PATTERNS = ["0", "6 3", "2 3", "8 3 2 3"]; // sólido, tracejado, pontilhado, traço-ponto
+function sectorStyle(i: number) {
+  const color = SECTOR_BASE_COLORS[i % SECTOR_BASE_COLORS.length];
+  const dash = SECTOR_DASH_PATTERNS[Math.floor(i / SECTOR_BASE_COLORS.length) % SECTOR_DASH_PATTERNS.length];
+  return { color, dash };
+}
 
 function normRating(r: string | null): string {
   if (!r) return "N/R";
