@@ -1194,6 +1194,7 @@ export type Database = {
           funcao: string
           id: string
           nome: string
+          status: string
         }[]
       }
       get_trade_summary: {
