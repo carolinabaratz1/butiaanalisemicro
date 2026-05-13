@@ -220,11 +220,14 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       const isins = Array.from(new Set(positions.map(p => p.isin).filter(Boolean))) as string[];
 
-      const [emissoesRes, empresasRes] = await Promise.all([
-        isins.length ? supabase.from("emissoes").select("isin,cnpj_emissor,ticker,fidc_classe,fidc_tipo" as any).in("isin", isins) : Promise.resolve({ data: [] as any }),
-        supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating"),
-      ]);
+      const emissoesRes = isins.length
+        ? await supabase.from("emissoes").select("isin,cnpj_emissor,ticker,fidc_classe,fidc_tipo" as any).in("isin", isins)
+        : { data: [] as any };
       const emissoes = (emissoesRes.data ?? []) as any[];
+      const cnpjsNeeded = Array.from(new Set(emissoes.map(e => e.cnpj_emissor).filter(Boolean))) as string[];
+      const empresasRes = cnpjsNeeded.length
+        ? await supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating").in("cnpj", cnpjsNeeded)
+        : { data: [] as any };
       const empresas = (empresasRes.data ?? []) as any[];
       const tickers = Array.from(new Set(emissoes.map(e => e.ticker).filter(Boolean))) as string[];
       const tradeAtivosRes = tickers.length
