@@ -169,19 +169,29 @@ export default function PipelineResearchPage() {
     },
   });
 
-  // ── Fetch empresas from DB for name resolution ──
+  // ── Fetch empresas from DB for name resolution (paginated to load all rows) ──
   const { data: empresasDB = [] } = useQuery({
     queryKey: ['empresas-all'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('empresas')
-        .select('id, nome, cnpj, tipo, setor, rating, grupo_economico');
-      if (error) throw error;
-      return data || [];
+      const all: any[] = [];
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('id, nome, cnpj, tipo, setor, rating, grupo_economico')
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
     },
   });
 
   const empresasMap = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.nome])), [empresasDB]);
+  const empresaGrupoPorCnpj = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.grupo_economico])), [empresasDB]);
   const empresaTipoPorCnpj = useMemo(() => new Map(empresasDB.map(e => [e.cnpj, e.tipo])), [empresasDB]);
   const tipoEmissorDe = useCallback((cnpj: string) => empresaTipoPorCnpj.get(cnpj) ?? null, [empresaTipoPorCnpj]);
 
