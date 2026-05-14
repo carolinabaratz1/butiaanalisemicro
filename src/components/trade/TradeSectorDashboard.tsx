@@ -170,7 +170,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   // Pontos do scatter: setor selecionado em destaque, restante como background.
   const inSector = useMemo(
     () => applyRating(isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
-    [enriched, setorAtivo, isAllSectors, ratingFilter],
+    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition],
   );
   const outSector = useMemo(
     () => (isAllSectors ? [] : enriched.filter((t) => t.setor !== setorAtivo)),
