@@ -412,9 +412,9 @@ export default function DashboardPage() {
                   className={`h-4 w-4 shrink-0 ${alerta.severity === "danger" ? "text-status-danger" : "text-status-warning"}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{alerta.tipo}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{alerta.empresa}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {alerta.empresa} · {alerta.data}
+                    {alerta.tipo} · Analista: {alerta.analista} · {alerta.data}
                   </p>
                 </div>
               </div>
