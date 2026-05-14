@@ -151,15 +151,20 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const [window, setWindow] = useState<5 | 10 | 21 | 90 | "MAX">(21);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [ratingFilter, setRatingFilter] = useState<Set<string>>(new Set());
+  const [posFilter, setPosFilter] = useState<"all" | "with" | "without">("all");
   const [sortKey, setSortKey] = useState<SortKey>("z");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const noSetor = !setorAtivo;
 
-  // Aplica filtro de rating em qualquer subconjunto
+  // Aplica filtro de rating + posição em qualquer subconjunto
   const applyRating = (arr: typeof enriched) => {
-    if (ratingFilter.size === 0) return arr;
-    return arr.filter((t) => ratingFilter.has(t.rating_norm));
+    let out = arr;
+    if (ratingFilter.size > 0) out = out.filter((t) => ratingFilter.has(t.rating_norm));
+    if (posFilter !== "all" && hasPosition) {
+      out = out.filter((t) => (posFilter === "with" ? hasPosition(t.ticker) : !hasPosition(t.ticker)));
+    }
+    return out;
   };
 
   // Pontos do scatter: setor selecionado em destaque, restante como background.
