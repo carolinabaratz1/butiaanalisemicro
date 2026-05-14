@@ -471,6 +471,31 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           </div>
         </div>
 
+        {hasPosition && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              Posição
+            </span>
+            <div className="flex gap-1 bg-muted p-1 rounded-lg">
+              {([
+                ["all", "Todas"],
+                ["with", "Com posição"],
+                ["without", "Sem posição"],
+              ] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setPosFilter(v)}
+                  className={`px-2 h-6 text-[11px] font-mono rounded ${
+                    posFilter === v ? "bg-background shadow-sm font-bold" : "text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex-1 min-w-[40px]" />
 
         <Badge variant="outline" className="font-mono text-xs gap-1.5">
