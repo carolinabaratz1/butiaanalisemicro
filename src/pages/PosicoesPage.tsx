@@ -569,6 +569,11 @@ export default function PosicoesPage() {
         return;
       }
 
+      // Agora sim: limpa val_date anterior e insere o lote validado.
+      if (valDateStr) {
+        await supabase.from('posicoes').delete().eq('val_date', valDateStr);
+      }
+
       const batchSize = 500;
       for (let i = 0; i < insertRows.length; i += batchSize) {
         const batch = insertRows.slice(i, i + batchSize);
