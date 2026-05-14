@@ -234,6 +234,7 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
                 mode={mode}
                 modeColor={modeCfg.color}
                 onSelectTicker={setSelectedTicker}
+                hasPosition={integration.hasPosition}
               />
             ) : (
               <TradeTable
