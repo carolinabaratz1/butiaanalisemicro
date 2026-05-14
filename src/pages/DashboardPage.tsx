@@ -347,7 +347,7 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{getEmpresaNome(item.empresa_id)}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {item.analista_responsavel} · {item.data_inicio}
+                    {(item.analista_responsavel ? (analistaNomeById.get(item.analista_responsavel) || "—") : "—")} · {item.data_inicio}
                   </p>
                 </div>
                 {statusBadge(item.computedStatus)}
