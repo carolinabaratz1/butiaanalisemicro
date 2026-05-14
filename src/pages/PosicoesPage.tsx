@@ -521,9 +521,8 @@ export default function PosicoesPage() {
         }
       }
 
-      if (valDateStr) {
-        await supabase.from('posicoes').delete().eq('val_date', valDateStr);
-      }
+      // DELETE só ocorre depois da validação de ISIN abaixo, para nunca
+      // apagar dados sem ter um lote válido para inserir no lugar.
 
       const toNum = (v: any): number | null => {
         if (v === null || v === undefined || v === '') return null;
