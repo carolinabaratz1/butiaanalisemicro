@@ -633,11 +633,18 @@ export default function PipelineResearchPage() {
                         onClick={() => setDrawerAnalise(item)}
                       >
                         <CardContent className="p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">{getEmissorNome(item.empresa_id, empresasMap)}</p>
-                              {(item.versao || 1) > 1 && (
-                                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30 shrink-0">v{item.versao}</Badge>
+                          <div className="flex items-start justify-between gap-1">
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate" title={getEmissorNome(item.empresa_id, empresasMap)}>{getEmissorNome(item.empresa_id, empresasMap)}</p>
+                                {(item.versao || 1) > 1 && (
+                                  <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/30 shrink-0">v{item.versao}</Badge>
+                                )}
+                              </div>
+                              {empresaGrupoPorCnpj.get(item.empresa_id) && (
+                                <span className="text-[10px] text-muted-foreground truncate" title={empresaGrupoPorCnpj.get(item.empresa_id) as string}>
+                                  {empresaGrupoPorCnpj.get(item.empresa_id)}
+                                </span>
                               )}
                             </div>
                             {isGestor && (
