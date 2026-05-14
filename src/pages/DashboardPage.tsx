@@ -77,11 +77,32 @@ export default function DashboardPage() {
     },
   });
 
-  // ========== Empresas ==========
+  // ========== Empresas (paginated — pode haver >1000) ==========
   const { data: empresasData } = useQuery({
     queryKey: ["dashboard-empresas"],
     queryFn: async () => {
-      const { data } = await supabase.from("empresas").select("id, nome, cnpj, tipo");
+      const all: Array<{ id: string; nome: string; cnpj: string; tipo: string | null }> = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj, tipo")
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all.push(...((data as any) ?? []));
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    },
+  });
+
+  // ========== Analistas (profiles) ==========
+  const { data: analistasData } = useQuery({
+    queryKey: ["dashboard-analistas"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, nome");
       return data ?? [];
     },
   });
@@ -224,12 +245,14 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   // Alertas dinâmicos: vencidas com alocação (mais urgentes)
+  const analistaNomeById = new Map((analistasData ?? []).map((p: any) => [p.id, p.nome]));
   const alertasDinamicos = vencidasComAlocacao
     .sort((a, b) => (a.data_conclusao ?? "").localeCompare(b.data_conclusao ?? ""))
     .slice(0, 5)
     .map((a) => ({
       tipo: "Análise vencida c/ alocação",
       empresa: getEmpresaNome(a.empresa_id),
+      analista: a.analista_responsavel ? (analistaNomeById.get(a.analista_responsavel) || "—") : "—",
       data: a.data_conclusao ? new Date(a.data_conclusao.split("T")[0]).toLocaleDateString("pt-BR") : "-",
       severity: "danger" as const,
     }));
@@ -389,9 +412,9 @@ export default function DashboardPage() {
                   className={`h-4 w-4 shrink-0 ${alerta.severity === "danger" ? "text-status-danger" : "text-status-warning"}`}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">{alerta.tipo}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{alerta.empresa}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {alerta.empresa} · {alerta.data}
+                    {alerta.tipo} · Analista: {alerta.analista} · {alerta.data}
                   </p>
                 </div>
               </div>
