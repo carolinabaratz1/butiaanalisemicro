@@ -540,19 +540,35 @@ export default function PosicoesPage() {
         return String(v);
       };
 
-      const insertRows = rows.map(r => ({
-        trading_desk_share_source: String(r[colMap.trading_desk_share_source] || ''),
-        val_date: toDateStr(r[colMap.val_date]),
-        product_class: String(r[colMap.product_class] || ''),
-        product: String(r[colMap.product] || ''),
-        amount: toNum(r[colMap.amount]) ?? 0,
-        isin: colMap.isin ? String(r[colMap.isin] || '') || null : null,
-        financial_price: colMap.financial_price ? toNum(r[colMap.financial_price]) : null,
-        duration_du: colMap.duration_du ? toNum(r[colMap.duration_du]) : null,
-        yield: colMap.yield ? toNum(r[colMap.yield]) : null,
-        implied_spread: colMap.implied_spread ? toNum(r[colMap.implied_spread]) : null,
-        dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
-      }));
+      const insertRows = rows.map(r => {
+        const isinRaw = String(r[colMap.isin] ?? '').trim().toUpperCase();
+        return {
+          trading_desk_share_source: String(r[colMap.trading_desk_share_source] || ''),
+          val_date: toDateStr(r[colMap.val_date]),
+          product_class: String(r[colMap.product_class] || ''),
+          product: String(r[colMap.product] || ''),
+          amount: toNum(r[colMap.amount]) ?? 0,
+          isin: isinRaw || null,
+          financial_price: colMap.financial_price ? toNum(r[colMap.financial_price]) : null,
+          duration_du: colMap.duration_du ? toNum(r[colMap.duration_du]) : null,
+          yield: colMap.yield ? toNum(r[colMap.yield]) : null,
+          implied_spread: colMap.implied_spread ? toNum(r[colMap.implied_spread]) : null,
+          dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
+        };
+      });
+
+      // Sanity check — se nenhuma linha tem ISIN, o arquivo está inconsistente.
+      // Aborta antes de qualquer DELETE para preservar dados existentes.
+      const comIsin = insertRows.filter(r => r.isin).length;
+      if (comIsin === 0) {
+        toast({
+          title: 'Arquivo sem ISIN',
+          description: `Coluna "${colMap.isin}" detectada mas nenhuma linha possui ISIN. Importação cancelada para preservar dados atuais.`,
+          variant: 'destructive',
+        });
+        setImporting(false);
+        return;
+      }
 
       const batchSize = 500;
       for (let i = 0; i < insertRows.length; i += batchSize) {
