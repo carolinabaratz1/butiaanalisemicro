@@ -77,11 +77,32 @@ export default function DashboardPage() {
     },
   });
 
-  // ========== Empresas ==========
+  // ========== Empresas (paginated — pode haver >1000) ==========
   const { data: empresasData } = useQuery({
     queryKey: ["dashboard-empresas"],
     queryFn: async () => {
-      const { data } = await supabase.from("empresas").select("id, nome, cnpj, tipo");
+      const all: Array<{ id: string; nome: string; cnpj: string; tipo: string | null }> = [];
+      let from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from("empresas")
+          .select("id, nome, cnpj, tipo")
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all.push(...((data as any) ?? []));
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    },
+  });
+
+  // ========== Analistas (profiles) ==========
+  const { data: analistasData } = useQuery({
+    queryKey: ["dashboard-analistas"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, nome");
       return data ?? [];
     },
   });
