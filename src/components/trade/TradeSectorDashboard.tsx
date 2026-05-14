@@ -104,7 +104,7 @@ function fv(v: number) {
 type SortKey = "ticker" | "emissor" | "rating" | "duration" | "valor" | "delta5" | "delta21" | "z" | "vol";
 type SortDir = "asc" | "desc";
 
-export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectTicker }: Props) {
+export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectTicker, hasPosition }: Props) {
   const { byCnpj, loading: loadingEmpresas } = useEmpresasSetor();
   const chartTheme = useChartTheme();
 
