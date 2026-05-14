@@ -24,6 +24,8 @@ interface Props {
   mode: TradeMode;
   modeColor: string;
   onSelectTicker: (t: string) => void;
+  /** Returns true if ticker has any active position. Used by position filter. */
+  hasPosition?: (ticker: string) => boolean;
 }
 
 const ALL_SECTORS = "__ALL__";
