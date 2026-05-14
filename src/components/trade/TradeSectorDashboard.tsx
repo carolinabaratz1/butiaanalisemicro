@@ -24,6 +24,8 @@ interface Props {
   mode: TradeMode;
   modeColor: string;
   onSelectTicker: (t: string) => void;
+  /** Returns true if ticker has any active position. Used by position filter. */
+  hasPosition?: (ticker: string) => boolean;
 }
 
 const ALL_SECTORS = "__ALL__";
@@ -102,7 +104,7 @@ function fv(v: number) {
 type SortKey = "ticker" | "emissor" | "rating" | "duration" | "valor" | "delta5" | "delta21" | "z" | "vol";
 type SortDir = "asc" | "desc";
 
-export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectTicker }: Props) {
+export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectTicker, hasPosition }: Props) {
   const { byCnpj, loading: loadingEmpresas } = useEmpresasSetor();
   const chartTheme = useChartTheme();
 
@@ -149,21 +151,26 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const [window, setWindow] = useState<5 | 10 | 21 | 90 | "MAX">(21);
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [ratingFilter, setRatingFilter] = useState<Set<string>>(new Set());
+  const [posFilter, setPosFilter] = useState<"all" | "with" | "without">("all");
   const [sortKey, setSortKey] = useState<SortKey>("z");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const noSetor = !setorAtivo;
 
-  // Aplica filtro de rating em qualquer subconjunto
+  // Aplica filtro de rating + posição em qualquer subconjunto
   const applyRating = (arr: typeof enriched) => {
-    if (ratingFilter.size === 0) return arr;
-    return arr.filter((t) => ratingFilter.has(t.rating_norm));
+    let out = arr;
+    if (ratingFilter.size > 0) out = out.filter((t) => ratingFilter.has(t.rating_norm));
+    if (posFilter !== "all" && hasPosition) {
+      out = out.filter((t) => (posFilter === "with" ? hasPosition(t.ticker) : !hasPosition(t.ticker)));
+    }
+    return out;
   };
 
   // Pontos do scatter: setor selecionado em destaque, restante como background.
   const inSector = useMemo(
     () => applyRating(isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
-    [enriched, setorAtivo, isAllSectors, ratingFilter],
+    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition],
   );
   const outSector = useMemo(
     () => (isAllSectors ? [] : enriched.filter((t) => t.setor !== setorAtivo)),
@@ -463,6 +470,31 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
             })}
           </div>
         </div>
+
+        {hasPosition && (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              Posição
+            </span>
+            <div className="flex gap-1 bg-muted p-1 rounded-lg">
+              {([
+                ["all", "Todas"],
+                ["with", "Com posição"],
+                ["without", "Sem posição"],
+              ] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setPosFilter(v)}
+                  className={`px-2 h-6 text-[11px] font-mono rounded ${
+                    posFilter === v ? "bg-background shadow-sm font-bold" : "text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 min-w-[40px]" />
 

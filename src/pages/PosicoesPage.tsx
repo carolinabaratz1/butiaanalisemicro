@@ -477,19 +477,38 @@ export default function PosicoesPage() {
       const colMap: Record<string, string> = {};
       const firstRow = rows[0];
       const keys = Object.keys(firstRow);
-      const find = (candidates: string[]) => keys.find(k => candidates.some(c => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(c)));
+      // Estrito: NÃO faz fallback posicional para evitar gravar arquivo com layout
+      // diferente sem ISIN (já causou perda de referência de posições no Trade).
+      const find = (candidates: string[]) =>
+        keys.find(k => candidates.some(c => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(c))) || '';
 
-      colMap.trading_desk_share_source = find(['tradingdesk', 'sharesource', 'fundo', 'fund']) || keys[0];
-      colMap.val_date = find(['valdate', 'data', 'date']) || keys[1];
-      colMap.product_class = find(['productclass', 'class', 'tipo', 'classe']) || keys[2];
-      colMap.product = find(['product', 'produto', 'ativo']) || keys[3];
-      colMap.amount = find(['amount', 'quantidade', 'qtd']) || keys[4];
-      colMap.isin = find(['isin']) || '';
-      colMap.financial_price = find(['financialprice', 'price', 'preco', 'pu']) || '';
-      colMap.duration_du = find(['duration', 'duracao']) || '';
-      colMap.yield = find(['yield', 'taxa']) || '';
-      colMap.implied_spread = find(['spread', 'impliedspread']) || '';
-      colMap.dv01 = find(['dv01']) || '';
+      colMap.trading_desk_share_source = find(['tradingdesk', 'sharesource', 'fundo', 'fund', 'carteira', 'portfolio']);
+      colMap.val_date = find(['valdate', 'dataref', 'datapos', 'data', 'date']);
+      colMap.product_class = find(['productclass', 'classe', 'class', 'tipo']);
+      colMap.product = find(['product', 'produto', 'ativo', 'papel', 'descricao']);
+      colMap.amount = find(['amount', 'quantidade', 'qtd', 'qtde']);
+      colMap.isin = find(['isin', 'codigoisin']);
+      colMap.financial_price = find(['financialprice', 'finprice', 'pufinanceiro', 'financeiro', 'price', 'preco', 'pu']);
+      colMap.duration_du = find(['duration', 'duracao']);
+      colMap.yield = find(['yield', 'taxa']);
+      colMap.implied_spread = find(['spread', 'impliedspread']);
+      colMap.dv01 = find(['dv01']);
+
+      // Validação de colunas obrigatórias — aborta antes de deletar nada.
+      const missing: string[] = [];
+      if (!colMap.trading_desk_share_source) missing.push('Fundo / Trading Desk');
+      if (!colMap.val_date) missing.push('Val Date / Data');
+      if (!colMap.isin) missing.push('ISIN');
+      if (!colMap.amount) missing.push('Amount / Quantidade');
+      if (missing.length) {
+        toast({
+          title: 'Layout do arquivo inválido',
+          description: `Colunas obrigatórias não encontradas: ${missing.join(', ')}. Verifique os cabeçalhos. Colunas detectadas: ${keys.join(', ')}.`,
+          variant: 'destructive',
+        });
+        setImporting(false);
+        return;
+      }
 
       const firstValDate = rows[0][colMap.val_date];
       let valDateStr = '';
@@ -502,9 +521,8 @@ export default function PosicoesPage() {
         }
       }
 
-      if (valDateStr) {
-        await supabase.from('posicoes').delete().eq('val_date', valDateStr);
-      }
+      // DELETE só ocorre depois da validação de ISIN abaixo, para nunca
+      // apagar dados sem ter um lote válido para inserir no lugar.
 
       const toNum = (v: any): number | null => {
         if (v === null || v === undefined || v === '') return null;
@@ -521,19 +539,40 @@ export default function PosicoesPage() {
         return String(v);
       };
 
-      const insertRows = rows.map(r => ({
-        trading_desk_share_source: String(r[colMap.trading_desk_share_source] || ''),
-        val_date: toDateStr(r[colMap.val_date]),
-        product_class: String(r[colMap.product_class] || ''),
-        product: String(r[colMap.product] || ''),
-        amount: toNum(r[colMap.amount]) ?? 0,
-        isin: colMap.isin ? String(r[colMap.isin] || '') || null : null,
-        financial_price: colMap.financial_price ? toNum(r[colMap.financial_price]) : null,
-        duration_du: colMap.duration_du ? toNum(r[colMap.duration_du]) : null,
-        yield: colMap.yield ? toNum(r[colMap.yield]) : null,
-        implied_spread: colMap.implied_spread ? toNum(r[colMap.implied_spread]) : null,
-        dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
-      }));
+      const insertRows = rows.map(r => {
+        const isinRaw = String(r[colMap.isin] ?? '').trim().toUpperCase();
+        return {
+          trading_desk_share_source: String(r[colMap.trading_desk_share_source] || ''),
+          val_date: toDateStr(r[colMap.val_date]),
+          product_class: String(r[colMap.product_class] || ''),
+          product: String(r[colMap.product] || ''),
+          amount: toNum(r[colMap.amount]) ?? 0,
+          isin: isinRaw || null,
+          financial_price: colMap.financial_price ? toNum(r[colMap.financial_price]) : null,
+          duration_du: colMap.duration_du ? toNum(r[colMap.duration_du]) : null,
+          yield: colMap.yield ? toNum(r[colMap.yield]) : null,
+          implied_spread: colMap.implied_spread ? toNum(r[colMap.implied_spread]) : null,
+          dv01: colMap.dv01 ? toNum(r[colMap.dv01]) : null,
+        };
+      });
+
+      // Sanity check — se nenhuma linha tem ISIN, o arquivo está inconsistente.
+      // Aborta antes de qualquer DELETE para preservar dados existentes.
+      const comIsin = insertRows.filter(r => r.isin).length;
+      if (comIsin === 0) {
+        toast({
+          title: 'Arquivo sem ISIN',
+          description: `Coluna "${colMap.isin}" detectada mas nenhuma linha possui ISIN. Importação cancelada para preservar dados atuais.`,
+          variant: 'destructive',
+        });
+        setImporting(false);
+        return;
+      }
+
+      // Agora sim: limpa val_date anterior e insere o lote validado.
+      if (valDateStr) {
+        await supabase.from('posicoes').delete().eq('val_date', valDateStr);
+      }
 
       const batchSize = 500;
       for (let i = 0; i < insertRows.length; i += batchSize) {
