@@ -347,7 +347,7 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{getEmpresaNome(item.empresa_id)}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {item.analista_responsavel} · {item.data_inicio}
+                    {(item.analista_responsavel ? (analistaNomeById.get(item.analista_responsavel) || "—") : "—")} · {item.data_inicio}
                   </p>
                 </div>
                 {statusBadge(item.computedStatus)}
@@ -387,7 +387,7 @@ export default function DashboardPage() {
                         <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
                         <TableCell className="text-sm py-2">{a.tipo}</TableCell>
                         <TableCell className="text-sm py-2">{statusBadge(a.computedStatus)}</TableCell>
-                        <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel}</TableCell>
+                        <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel ? (analistaNomeById.get(a.analista_responsavel) || "—") : "—"}</TableCell>
                         <TableCell className="text-sm py-2">
                           {ref ? new Date(String(ref).split("T")[0]).toLocaleDateString("pt-BR") : "-"}
                         </TableCell>
