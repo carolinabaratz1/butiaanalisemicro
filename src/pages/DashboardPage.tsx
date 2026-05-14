@@ -245,12 +245,14 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   // Alertas dinâmicos: vencidas com alocação (mais urgentes)
+  const analistaNomeById = new Map((analistasData ?? []).map((p: any) => [p.id, p.nome]));
   const alertasDinamicos = vencidasComAlocacao
     .sort((a, b) => (a.data_conclusao ?? "").localeCompare(b.data_conclusao ?? ""))
     .slice(0, 5)
     .map((a) => ({
       tipo: "Análise vencida c/ alocação",
       empresa: getEmpresaNome(a.empresa_id),
+      analista: a.analista_responsavel ? (analistaNomeById.get(a.analista_responsavel) || "—") : "—",
       data: a.data_conclusao ? new Date(a.data_conclusao.split("T")[0]).toLocaleDateString("pt-BR") : "-",
       severity: "danger" as const,
     }));
