@@ -158,6 +158,16 @@ export default function EmpresasPage() {
     return matchSearch && matchTipo && matchSetor && matchGrupo;
   }), [empresas, search, tipoFilter, setorFilter, grupoFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage],
+  );
+  // reset page on filter change
+  useMemo(() => { setPage(1); }, [search, tipoFilter, setorFilter, grupoFilter]);
+
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -274,7 +284,7 @@ export default function EmpresasPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.slice(0, 100).map((e: any) => {
+                {pageItems.map((e: any) => {
                   const ativas = analisesCounts[e.cnpj] || 0;
                   return (
                     <TableRow key={e.id} className="border-border group">
@@ -341,7 +351,21 @@ export default function EmpresasPage() {
               </TableBody>
             </Table>
           )}
-          {filtered.length > 100 && <p className="text-xs text-muted-foreground text-center py-2">Mostrando 100 de {filtered.length} resultados. Refine a busca.</p>}
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-border">
+              <span className="text-xs text-muted-foreground">
+                Página {currentPage} de {totalPages} · mostrando {pageItems.length} de {filtered.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" className="h-7 px-2" disabled={currentPage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2" disabled={currentPage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
