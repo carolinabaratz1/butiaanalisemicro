@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -165,7 +165,7 @@ export default function EmpresasPage() {
     [filtered, currentPage],
   );
   // reset page on filter change
-  useMemo(() => { setPage(1); }, [search, tipoFilter, setorFilter, grupoFilter]);
+  useEffect(() => { setPage(1); }, [search, tipoFilter, setorFilter, grupoFilter]);
 
 
   return (
