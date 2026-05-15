@@ -8,11 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Search, ExternalLink, Plus, Pencil, Check, X } from 'lucide-react';
+import { Search, ExternalLink, Plus, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { fetchAllPaged } from '@/utils/analiseStatus';
 
 const TIPOS = ['FINANCEIRO', 'CORPORATIVO', 'FIDC', 'CRA', 'CDB', 'Fundo', 'Título Público'];
 
@@ -42,14 +43,10 @@ export default function EmpresasPage() {
 
   const { data: empresas = [], isLoading } = useQuery({
     queryKey: ['empresas'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('empresas')
-        .select('*')
-        .order('nome');
-      if (error) throw error;
-      return data;
-    },
+    queryFn: async () =>
+      fetchAllPaged<any>((from, to) =>
+        supabase.from('empresas').select('*').order('nome').range(from, to),
+      ),
   });
 
   const { data: setoresOficiais = [] } = useQuery({
@@ -68,10 +65,9 @@ export default function EmpresasPage() {
   const { data: analisesCounts = {} } = useQuery({
     queryKey: ['analises-ativas-count'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('analises')
-        .select('empresa_id, status, versao, data_conclusao');
-      if (error) throw error;
+      const data = await fetchAllPaged<any>((from, to) =>
+        supabase.from('analises').select('empresa_id, status, versao, data_conclusao').range(from, to),
+      );
 
       // Group by empresa_id, keep only max versao per empresa
       const grouped = new Map<string, typeof data>();
