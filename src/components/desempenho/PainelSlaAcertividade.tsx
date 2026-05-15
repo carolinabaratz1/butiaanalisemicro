@@ -33,8 +33,10 @@ export function PainelSlaAcertividade({ pendentes, todasParaAcertividade }: Prop
             {visiveis.map((p) => (
               <div key={p.id} className="flex items-center gap-3 py-1.5 border-b border-border/40 last:border-0">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{p.titulo}</div>
-                  <div className="text-[11px] text-muted-foreground">{p.tipo}</div>
+                  <div className="text-sm font-medium truncate" title={p.titulo}>{p.titulo}</div>
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {p.tipo}{p.grupoEconomico ? ` · ${p.grupoEconomico}` : ''}
+                  </div>
                 </div>
                 <div className={cn('text-xs', p.vencido ? 'text-destructive font-medium' : 'text-muted-foreground')}>
                   {p.vencido

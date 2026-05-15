@@ -12,6 +12,7 @@ export interface EtapaHistorico {
 export interface AnaliseEntry {
   id: string;
   titulo: string;
+  grupoEconomico?: string;
   tipo: AnaliseTipo;
   analistaId: string;
   analistaNome: string;

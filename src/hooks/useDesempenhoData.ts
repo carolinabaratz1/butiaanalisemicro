@@ -12,6 +12,7 @@ import {
   SLA_META_DIAS_UTEIS,
 } from '@/data/desempenhoMock';
 import { Periodo, inicioDoPeriodo } from '@/utils/desempenhoUtils';
+import { fetchAllPaged } from '@/utils/analiseStatus';
 
 const COLORS: AnalistaColor[] = ['blue', 'teal', 'amber', 'pink', 'purple'];
 
@@ -124,6 +125,7 @@ interface EmpresaRow {
   nome: string;
   tipo: string | null;
   setor: string | null;
+  grupo_economico: string | null;
 }
 
 interface ProfileRow {
@@ -147,8 +149,12 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
       .from('analises')
       .select('id,empresa_id,tipo,status,analista_responsavel,data_inicio,prazo,data_conclusao,versao')
       .or(`data_inicio.gte.${isoInicio},data_conclusao.gte.${isoInicio}`),
-    supabase.from('empresas').select('cnpj,nome,tipo,setor'),
-    supabase.from('profiles').select('id,nome'),
+    fetchAllPaged<EmpresaRow>((from, to) =>
+      supabase.from('empresas').select('cnpj,nome,tipo,setor,grupo_economico').range(from, to),
+    ).then((data) => ({ data, error: null as any })),
+    fetchAllPaged<ProfileRow>((from, to) =>
+      supabase.from('profiles').select('id,nome').range(from, to),
+    ).then((data) => ({ data, error: null as any })),
   ]);
 
   if (analisesRes.error) throw analisesRes.error;
@@ -188,6 +194,7 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
   return analises.map((a) => {
     const empresa = empresaByCnpj.get(a.empresa_id);
     const titulo = empresa?.nome ?? a.empresa_id;
+    const grupoEconomico = empresa?.grupo_economico ?? undefined;
     const tipo = deriveTipo(empresa?.tipo, empresa?.setor);
 
     let analistaId = a.analista_responsavel ?? 'sem-analista';
@@ -219,6 +226,7 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
     return {
       id: a.id,
       titulo,
+      grupoEconomico,
       tipo,
       analistaId,
       analistaNome,

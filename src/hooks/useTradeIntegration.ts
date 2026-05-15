@@ -11,6 +11,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getDisplayStatus } from "@/utils/analiseStatus";
 
 export type AnaliseStatus =
   | "Buy"
@@ -250,17 +251,19 @@ export function useTradeIntegration() {
     function getStatus(ticker: string, fallbackCnpj?: string | null): AnaliseStatus | null {
       const a = resolveAnalise(ticker, fallbackCnpj);
       if (!a) return null;
-      const raw = (a.status as AnaliseStatus) ?? null;
-      // Vencida: Buy/Hold há mais de 1 ano
-      if (raw === "Buy" || raw === "Hold") {
-        const ap = parseAprovacao(a.data_aprovacao || (a as any).data_comite);
-        if (ap) {
-          const expires = new Date(ap);
-          expires.setFullYear(expires.getFullYear() + 1);
-          if (expires < today) return "Vencida";
-        }
-      }
-      return raw;
+      // Centralized status mapping (Vencida by prazo OR by aprovação > 1 ano).
+      const display = getDisplayStatus(
+        {
+          status: a.status as string,
+          data_conclusao: (a as any).data_conclusao ?? null,
+          prazo: (a as any).prazo ?? null,
+          data_aprovacao: a.data_aprovacao ?? null,
+          data_comite: (a as any).data_comite ?? null,
+          recomendacao: (a as any).recomendacao ?? null,
+        },
+        null,
+      );
+      return (display as AnaliseStatus) ?? null;
     }
 
     function getAllocations(ticker: string): Allocation[] {
