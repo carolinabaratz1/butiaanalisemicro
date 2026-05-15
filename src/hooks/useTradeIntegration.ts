@@ -11,6 +11,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getDisplayStatus } from "@/utils/analiseStatus";
 
 export type AnaliseStatus =
   | "Buy"
@@ -251,8 +252,6 @@ export function useTradeIntegration() {
       const a = resolveAnalise(ticker, fallbackCnpj);
       if (!a) return null;
       // Centralized status mapping (Vencida by prazo OR by aprovação > 1 ano).
-      // Lazy require to avoid import cycle at module init.
-      const { getDisplayStatus } = require("@/utils/analiseStatus") as typeof import("@/utils/analiseStatus");
       const display = getDisplayStatus(
         {
           status: a.status as string,
