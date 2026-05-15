@@ -322,7 +322,10 @@ export default function AssembleiasPage() {
           <h1 className="text-xl font-semibold">Assembleias e Eventos Corporativos</h1>
           <p className="text-sm text-muted-foreground mt-0.5">AGO/AGE e fatos relevantes vinculados à empresa · Reuniões de debenturistas e assembleias de cotistas vinculadas ao ISIN</p>
         </div>
-        {canWrite && (<Button onClick={abrirCriar} size="sm" className="shrink-0 gap-1.5"><Plus className="h-4 w-4" /> Novo evento</Button>)}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button onClick={exportarExcel} size="sm" variant="outline" className="gap-1.5"><FileSpreadsheet className="h-4 w-4" /> Exportar Excel</Button>
+          {canWrite && (<Button onClick={abrirCriar} size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Novo evento</Button>)}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -408,6 +411,22 @@ export default function AssembleiasPage() {
           <SelectContent>
             <SelectItem value="Todos">Todos os status</SelectItem>
             {(['Agendado','Realizado','Cancelado','Adiado'] as EventoStatus[]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroMes} onValueChange={setFiltroMes}>
+          <SelectTrigger className="h-8 text-sm w-32"><SelectValue placeholder="Mês" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os meses</SelectItem>
+            {['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => (
+              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filtroAno} onValueChange={setFiltroAno}>
+          <SelectTrigger className="h-8 text-sm w-28"><SelectValue placeholder="Ano" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {(() => { const a = new Date().getFullYear(); return [a-3,a-2,a-1,a,a+1,a+2].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>); })()}
           </SelectContent>
         </Select>
       </div>
