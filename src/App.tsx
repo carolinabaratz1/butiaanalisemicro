@@ -49,6 +49,12 @@ function ProtectedRoutes() {
     return <Navigate to="/login" replace />;
   }
 
+  // Aguarda o profile carregar antes de aplicar RouteGuard,
+  // senão sections=[] redireciona qualquer rota para "/" durante a corrida.
+  if (!currentUser) {
+    return <LoadingScreen />;
+  }
+
   if (currentUser?.must_change_password) {
     return <Navigate to="/trocar-senha" replace />;
   }
