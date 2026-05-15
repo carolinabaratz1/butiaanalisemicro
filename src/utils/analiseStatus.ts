@@ -104,12 +104,11 @@ export function statusBadgeClass(s: string): string {
 
 /** Helper p/ paginar consultas Supabase além do cap default (1000). */
 export async function fetchAllPaged<T>(
-  fetcher: (from: number, to: number) => Promise<{ data: T[] | null; error: any }>,
+  fetcher: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>,
   pageSize = 1000,
 ): Promise<T[]> {
   const all: T[] = [];
   let from = 0;
-  // safety upper bound
   for (let i = 0; i < 200; i++) {
     const { data, error } = await fetcher(from, from + pageSize - 1);
     if (error) throw error;
