@@ -21,7 +21,8 @@ import { Separator } from '@/components/ui/separator';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink } from 'lucide-react';
+import { CalendarIcon, Plus, Search, MoreVertical, Pencil, Trash2, Eye, CheckCircle, Clock, AlertTriangle, CalendarDays, Loader2, FileText, Link2, Building2, ExternalLink, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { UploadPanel } from '@/components/assembleias/UploadPanel';
 import { ParticipacoesPanel } from '@/components/assembleias/ParticipacoesPanel';
 
@@ -116,6 +117,8 @@ export default function AssembleiasPage() {
   const [filtroTipo, setFiltroTipo] = useState('Todos');
   const [filtroTriagem, setFiltroTriagem] = useState('ocultar_sem_posicao');
   const [filtroOrigem, setFiltroOrigem] = useState('Todas');
+  const [filtroMes, setFiltroMes] = useState('all');
+  const [filtroAno, setFiltroAno] = useState('all');
   const [formOpen, setFormOpen] = useState(false);
   const [detalheEvento, setDetalhe] = useState(null as Assembleia | null);
   const [editando, setEditando] = useState(null as Assembleia | null);
@@ -181,12 +184,35 @@ export default function AssembleiasPage() {
       if (filtroTriagem !== 'Todas' && filtroTriagem !== 'ocultar_sem_posicao' && tri !== filtroTriagem) return false;
     }
     if (filtroOrigem !== 'Todas' && (ev.origem ?? 'manual') !== filtroOrigem) return false;
+    if (filtroMes !== 'all' || filtroAno !== 'all') {
+      const d = parseISO(ev.data_evento);
+      if (filtroMes !== 'all' && d.getMonth() + 1 !== Number(filtroMes)) return false;
+      if (filtroAno !== 'all' && d.getFullYear() !== Number(filtroAno)) return false;
+    }
     if (busca) {
       const b = busca.toLowerCase();
       if (!ev.titulo.toLowerCase().includes(b) && !vinculoLabel(ev).toLowerCase().includes(b) && !ev.tipo.toLowerCase().includes(b) && !(ev.ticker ?? '').toLowerCase().includes(b)) return false;
     }
     return true;
-  }), [eventos, filtroStatus, filtroTipo, filtroTriagem, filtroOrigem, busca, empresasMap, emissoes]);
+  }), [eventos, filtroStatus, filtroTipo, filtroTriagem, filtroOrigem, filtroMes, filtroAno, busca, empresasMap, emissoes]);
+
+  function exportarExcel() {
+    const rows = filtrados.map(ev => ({
+      Data: format(parseISO(ev.data_evento), 'dd/MM/yyyy'),
+      Tipo: ev.tipo,
+      Empresa: ev.cnpj_empresa ? (empresasMap.get(ev.cnpj_empresa) ?? ev.cnpj_empresa) : (ev.titulo || '—'),
+      Ticker: ev.ticker ?? '',
+      Triagem: TRIAGEM_CFG[ev.triagem ?? 'sem_posicao'].label,
+      'Voto Butiá': ev.voto_butia ?? '',
+      B3: ev.url_b3 ?? '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Assembleias');
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `assembleias_${today}.xlsx`);
+  }
+
 
   const alertas = useMemo(() =>
     eventos.filter(e => { const d = differenceInDays(parseISO(e.data_evento), new Date()); return e.status === 'Agendado' && d >= 0 && d <= 30 && (e.triagem === 'com_posicao' || e.triagem === 'pendente_vinculo' || e.origem === 'manual' || !e.origem); })
