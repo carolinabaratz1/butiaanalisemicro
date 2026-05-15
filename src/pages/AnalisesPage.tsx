@@ -1,23 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Eye, Loader2 } from 'lucide-react';
+import { Eye, Loader2, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-
-
-const statusClass: Record<string, string> = {
-  'Pendente': 'bg-status-warning/15 text-status-warning border-status-warning/30',
-  'Em Análise': 'bg-status-info/15 text-status-info border-status-info/30',
-  'Concluída': 'bg-muted/30 text-muted-foreground border-border',
-  'Aprovada': 'bg-status-success/15 text-status-success border-status-success/30',
-  'Reprovada': 'bg-status-danger/15 text-status-danger border-status-danger/30',
-  'Vencida': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-};
+import { getDisplayStatus, statusBadgeClass, fetchAllPaged } from '@/utils/analiseStatus';
 
 const recomendacaoColors: Record<string, string> = {
   'Buy': 'bg-status-success/15 text-status-success border-status-success/30',
@@ -33,21 +25,6 @@ function fmtDateBR(d: string | null | undefined): string {
   return clean;
 }
 
-function isVencida(status: string, dataConclusao: string | null, tipoEmissor?: string | null): boolean {
-  // FIDC analyses do not expire — they have continuous monitoring instead
-  if (tipoEmissor === 'FIDC') return false;
-  if (status !== 'Aprovada' || !dataConclusao) return false;
-  const conclusao = new Date(dataConclusao.split('T')[0]);
-  const umAnoAtras = new Date();
-  umAnoAtras.setFullYear(umAnoAtras.getFullYear() - 1);
-  return conclusao < umAnoAtras;
-}
-
-function getDisplayStatus(status: string, dataConclusao: string | null, tipoEmissor?: string | null): string {
-  if (isVencida(status, dataConclusao, tipoEmissor)) return 'Vencida';
-  return status;
-}
-
 function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = []): string {
   if (!id) return '—';
   const p = profiles.find(p => p.id === id || p.nome === id);
@@ -55,19 +32,26 @@ function getAnalistaNome(id: string, profiles: { id: string; nome: string }[] = 
   return id;
 }
 
+type SortKey =
+  | 'empresa' | 'tipo' | 'analista' | 'data_inicio' | 'data_conclusao'
+  | 'status' | 'recomendacao' | 'data_comite' | 'versao';
+type SortDir = 'asc' | 'desc';
+
 export default function AnalisesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [tipoFilter, setTipoFilter] = useState('all');
   const [analistaFilter, setAnalistaFilter] = useState('all');
+  const [busca, setBusca] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('data_inicio');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<any | null>(null);
 
   const { data: empresas = [] } = useQuery({
     queryKey: ['empresas-lookup'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('empresas').select('cnpj, nome, tipo');
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      fetchAllPaged<{ cnpj: string; nome: string; tipo: string | null }>((from, to) =>
+        supabase.from('empresas').select('cnpj, nome, tipo').range(from, to),
+      ),
   });
 
   const { data: allProfiles = [] } = useQuery({
@@ -79,41 +63,89 @@ export default function AnalisesPage() {
     },
   });
 
-  function getEmpresaNome(id: string): string {
-    const e = empresas.find(em => em.cnpj === id);
-    return e?.nome || id;
-  }
+  const empresaByCnpj = useMemo(() => new Map(empresas.map(e => [e.cnpj, e])), [empresas]);
 
+  function getEmpresaNome(id: string): string {
+    return empresaByCnpj.get(id)?.nome || id;
+  }
   function getTipoEmissor(cnpj: string): string | null {
-    const e = empresas.find(em => em.cnpj === cnpj);
-    return e?.tipo ?? null;
+    return empresaByCnpj.get(cnpj)?.tipo ?? null;
   }
 
   const { data: analises = [], isLoading } = useQuery({
     queryKey: ['analises'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('analises')
-        .select('*')
-        .order('data_inicio', { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      fetchAllPaged<any>((from, to) =>
+        supabase.from('analises').select('*').order('data_inicio', { ascending: false }).range(from, to),
+      ),
   });
-
-  const filtered = analises.filter(a => {
-    const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
-    return (statusFilter === 'all' || displayStatus === statusFilter)
-      && (tipoFilter === 'all' || a.tipo === tipoFilter)
-      && (analistaFilter === 'all' || a.analista_responsavel === analistaFilter);
-  });
-
-  const versions = selected
-    ? analises.filter(a => a.empresa_id === selected.empresa_id && a.tipo === selected.tipo)
-    : [];
 
   const analistasAtivos = allProfiles.filter(p =>
     p.status === 'Ativo' && (p.funcao === 'Analista' || p.funcao === 'Coordenação/Especialista')
+  );
+
+  const filteredSorted = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    const arr = analises.filter((a: any) => {
+      const displayStatus = getDisplayStatus(a, getTipoEmissor(a.empresa_id));
+      if (statusFilter !== 'all' && displayStatus !== statusFilter) return false;
+      if (tipoFilter !== 'all' && a.tipo !== tipoFilter) return false;
+      if (analistaFilter !== 'all' && a.analista_responsavel !== analistaFilter) return false;
+      if (q) {
+        const nome = getEmpresaNome(a.empresa_id).toLowerCase();
+        const cnpj = (a.empresa_id || '').toLowerCase();
+        const analista = getAnalistaNome(a.analista_responsavel, allProfiles).toLowerCase();
+        if (!nome.includes(q) && !cnpj.includes(q) && !analista.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const cmp = (av: any, bv: any) => {
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), 'pt-BR') * dir;
+    };
+
+    const keyOf = (a: any): any => {
+      switch (sortKey) {
+        case 'empresa': return getEmpresaNome(a.empresa_id);
+        case 'tipo': return a.tipo;
+        case 'analista': return getAnalistaNome(a.analista_responsavel, allProfiles);
+        case 'data_inicio': return a.data_inicio;
+        case 'data_conclusao': return a.data_conclusao;
+        case 'status': return getDisplayStatus(a, getTipoEmissor(a.empresa_id));
+        case 'recomendacao': return a.recomendacao;
+        case 'data_comite': return a.data_comite;
+        case 'versao': return a.versao ?? 0;
+      }
+    };
+    return [...arr].sort((a, b) => cmp(keyOf(a), keyOf(b)));
+  }, [analises, statusFilter, tipoFilter, analistaFilter, busca, sortKey, sortDir, empresaByCnpj, allProfiles]);
+
+  const versions = selected
+    ? analises.filter((a: any) => a.empresa_id === selected.empresa_id && a.tipo === selected.tipo)
+    : [];
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(k); setSortDir('asc'); }
+  }
+  function SortIcon({ k }: { k: SortKey }) {
+    if (sortKey !== k) return <ArrowUpDown className="inline h-3 w-3 ml-1 opacity-40" />;
+    return sortDir === 'asc'
+      ? <ArrowUp className="inline h-3 w-3 ml-1" />
+      : <ArrowDown className="inline h-3 w-3 ml-1" />;
+  }
+  const SortableHead = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
+    <TableHead
+      className={`text-[11px] h-9 cursor-pointer select-none hover:text-foreground ${className ?? ''}`}
+      onClick={() => toggleSort(k)}
+    >
+      {children}<SortIcon k={k} />
+    </TableHead>
   );
 
   if (isLoading) {
@@ -128,7 +160,16 @@ export default function AnalisesPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-foreground">Análises</h2>
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Buscar empresa, CNPJ ou analista..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            className="pl-8 h-8 text-sm bg-surface-1 border-border"
+          />
+        </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-36 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent className="bg-card border-border">
@@ -160,38 +201,41 @@ export default function AnalisesPage() {
 
       <Card className="bg-card border-border">
         <CardContent className="p-0 overflow-x-auto">
-          {filtered.length === 0 ? (
+          {filteredSorted.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <p className="text-sm">Nenhuma análise encontrada</p>
               <p className="text-xs mt-1">As análises aparecerão aqui quando forem cadastradas no sistema.</p>
             </div>
           ) : (
-            <Table className="min-w-[800px]">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow className="border-border">
-                  <TableHead className="text-[11px] h-9">Empresa</TableHead>
-                  <TableHead className="text-[11px] h-9">Tipo</TableHead>
-                  <TableHead className="text-[11px] h-9">Analista</TableHead>
-                  <TableHead className="text-[11px] h-9">Início</TableHead>
-                  <TableHead className="text-[11px] h-9">Conclusão</TableHead>
-                  <TableHead className="text-[11px] h-9">Status</TableHead>
-                  <TableHead className="text-[11px] h-9">Recomendação</TableHead>
-                  <TableHead className="text-[11px] h-9">Comitê</TableHead>
-                  <TableHead className="text-[11px] h-9">Versão</TableHead>
+                  <SortableHead k="empresa">Empresa</SortableHead>
+                  <SortableHead k="tipo">Tipo</SortableHead>
+                  <SortableHead k="analista">Analista</SortableHead>
+                  <SortableHead k="data_inicio">Início</SortableHead>
+                  <SortableHead k="data_conclusao">Conclusão</SortableHead>
+                  <SortableHead k="status">Status</SortableHead>
+                  <SortableHead k="recomendacao">Recomendação</SortableHead>
+                  <SortableHead k="data_comite">Comitê</SortableHead>
+                  <SortableHead k="versao">Versão</SortableHead>
                   <TableHead className="text-[11px] h-9 w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(a => {
-                  const displayStatus = getDisplayStatus(a.status, a.data_conclusao, getTipoEmissor(a.empresa_id));
+                {filteredSorted.map((a: any) => {
+                  const displayStatus = getDisplayStatus(a, getTipoEmissor(a.empresa_id));
                   return (
                     <TableRow key={a.id} className="border-border">
-                      <TableCell className="text-sm py-2 font-medium">{getEmpresaNome(a.empresa_id)}</TableCell>
+                      <TableCell className="text-sm py-2">
+                        <div className="font-medium">{getEmpresaNome(a.empresa_id)}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5" title={a.empresa_id}>{a.empresa_id}</div>
+                      </TableCell>
                       <TableCell className="text-sm py-2">{a.tipo}</TableCell>
                       <TableCell className="text-sm py-2">{getAnalistaNome(a.analista_responsavel, allProfiles)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_inicio)}</TableCell>
                       <TableCell className="text-sm py-2 text-muted-foreground">{fmtDateBR(a.data_conclusao)}</TableCell>
-                      <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></TableCell>
+                      <TableCell className="py-2"><Badge variant="outline" className={`text-[10px] ${statusBadgeClass(displayStatus)}`}>{displayStatus}</Badge></TableCell>
                       <TableCell className="py-2">
                         {a.recomendacao ? (
                           <Badge variant="outline" className={`text-[10px] ${recomendacaoColors[a.recomendacao] || ''}`}>{a.recomendacao}</Badge>
@@ -216,7 +260,7 @@ export default function AnalisesPage() {
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="max-w-2xl bg-card border-border max-h-[85vh] overflow-y-auto">
           {selected && (() => {
-            const displayStatus = getDisplayStatus(selected.status, selected.data_conclusao, getTipoEmissor(selected.empresa_id));
+            const displayStatus = getDisplayStatus(selected, getTipoEmissor(selected.empresa_id));
             return (
               <>
                 <DialogHeader>
@@ -225,7 +269,7 @@ export default function AnalisesPage() {
                 <div className="space-y-4 text-sm">
                   <div className="grid grid-cols-2 gap-3">
                     <div><span className="text-muted-foreground text-xs">Tipo:</span> <span>{selected.tipo}</span></div>
-                    <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusClass[displayStatus] || ''}`}>{displayStatus}</Badge></div>
+                    <div><span className="text-muted-foreground text-xs">Status:</span> <Badge variant="outline" className={`text-[10px] ml-1 ${statusBadgeClass(displayStatus)}`}>{displayStatus}</Badge></div>
                     <div><span className="text-muted-foreground text-xs">Analista Responsável:</span> <span>{getAnalistaNome(selected.analista_responsavel, allProfiles)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Analista Secundário:</span> <span>{getAnalistaNome(selected.analista_secundario || '', allProfiles)}</span></div>
                     <div><span className="text-muted-foreground text-xs">Início:</span> <span>{fmtDateBR(selected.data_inicio)}</span></div>
@@ -237,7 +281,6 @@ export default function AnalisesPage() {
                     {selected.data_aprovacao && <div><span className="text-muted-foreground text-xs">Data aprovação:</span> <span>{fmtDateBR(selected.data_aprovacao)}</span></div>}
                   </div>
 
-                  {/* Recomendação + Preços */}
                   {selected.recomendacao && (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
@@ -279,12 +322,12 @@ export default function AnalisesPage() {
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Histórico de versões:</p>
                       <div className="space-y-1">
-                        {versions.map(v => {
-                          const vStatus = getDisplayStatus(v.status, v.data_conclusao, getTipoEmissor(v.empresa_id));
+                        {versions.map((v: any) => {
+                          const vStatus = getDisplayStatus(v, getTipoEmissor(v.empresa_id));
                           return (
                             <div key={v.id} className="flex items-center gap-3 text-xs p-2 bg-surface-1 rounded">
                               <span className="font-medium">v{v.versao}</span>
-                              <Badge variant="outline" className={`text-[9px] ${statusClass[vStatus] || ''}`}>{vStatus}</Badge>
+                              <Badge variant="outline" className={`text-[9px] ${statusBadgeClass(vStatus)}`}>{vStatus}</Badge>
                               <span className="text-muted-foreground">{fmtDateBR(v.data_inicio)}</span>
                               {v.recomendacao && <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[v.recomendacao] || ''}`}>{v.recomendacao}</Badge>}
                             </div>

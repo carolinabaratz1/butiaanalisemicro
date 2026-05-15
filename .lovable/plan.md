@@ -1,100 +1,55 @@
-## Novo Dashboard Setorial no Monitor de Trade
+## Escopo: 5 correções cirúrgicas
 
-Adicionar uma **segunda visão de Dashboard** dentro do Monitor de Trade (DI+, %CDI e IPCA+), focada em **análise por setor / emissor**, no estilo da página de mercado secundário do relatório ABC Brasil.
+### 1. EmpresasPage — remover cap de 1.000 registros
+- Em `src/pages/EmpresasPage.tsx` (query `empresas`, linhas 43-53), substituir o `select('*').order('nome')` por loop paginado com `.range(from, to)` (1000 por página) até esgotar — mesmo padrão já usado em `PipelineResearchPage`.
+- Aplicar o mesmo loop na query `analisesCounts` (linhas 68-73), pois ela também é capada em 1000 e impacta a contagem por empresa.
+- Adicionar paginação client-side simples (50 por página) abaixo da `Table` usando `@/components/ui/pagination`, mantendo todos os filtros existentes.
+- Atualizar o contador "X empresa(s) encontrada(s)" para refletir o total filtrado real.
 
-### 1. Onde fica
+### 2. AnalisesPage — nome da empresa, ordenação e busca
+- Coluna "Empresa": já existe `getEmpresaNome`; adicionar segunda linha com CNPJ em `text-xs text-muted-foreground font-mono` abaixo do nome (manter `empresa_id` no tooltip).
+- Adicionar estado `sortKey`/`sortDir` e tornar cada `TableHead` (Empresa, Tipo, Analista, Início, Conclusão, Status, Recomendação, Comitê, Versão) clicável com ícone `ArrowUp`/`ArrowDown`/`ArrowUpDown` (lucide). Ordenação aplicada no `useMemo` antes da renderização. Para "Empresa" ordenar pelo nome resolvido; para "Analista" pelo nome resolvido via profiles.
+- Adicionar `<Input>` de busca (ícone `Search`) acima da tabela, ao lado dos selects existentes, filtrando por nome da empresa, CNPJ ou nome do analista (case-insensitive).
+- Garantir que a query `empresas` em `AnalisesPage` (linha 67) também seja paginada (mesmo loop), senão o nome volta a sumir quando passar de 1000.
 
-No header já existente do Monitor (`TradeMonitorPage.tsx`), o toggle hoje tem dois botões:
-`Dashboard | Emissões`. Vira **três botões**:
+### 3. AssembleiasPage — filtro mês/ano + export Excel
+- Adicionar dois `<Select>` (Mês: Todos + Jan-Dez; Ano: Todos + ano atual±2) na barra de filtros existente. Ambos default `'all'`. Aplicar no filtro client-side comparando com `data_evento`.
+- Botão **"Exportar Excel"** (ícone `FileSpreadsheet`/`Download`) ao lado do botão "+ Novo evento".
+- Usar `xlsx` (SheetJS) — já presente no projeto (usado em `PosicoesPage`). Gerar `.xlsx` apenas com a lista filtrada visível, colunas: Data, Tipo, Empresa (nome resolvido via `cnpj_empresa`/`cnpj_emissor`), Ticker, Triagem, Voto Butiá, B3 (`url_b3`).
+- Nome do arquivo: `assembleias_{YYYY-MM-DD}.xlsx`.
 
+### 4. Substituir CNPJ por nome da empresa em telas de análise
+- **AnalisesPage**: já coberto no item 2.
+- **DesempenhoPage** (componentes filhos):
+  - `useDesempenhoData.ts` já resolve `titulo = empresa?.nome ?? a.empresa_id` (linha 190). Adicionar também `grupoEconomico` ao retorno (`empresas.grupo_economico`) e expor `cnpj` para tooltip. Garantir loop paginado nas queries `analises` e `empresas` (linhas 148-150) para evitar cap de 1000.
+  - `TabelaAnalistas.tsx`: onde lista análises em andamento, mostrar `titulo` (nome) e, abaixo em cinza, `grupoEconomico` quando disponível.
+  - `CalendarioEntregas.tsx`: labels dos pontos passam a usar `titulo` (já é o caso) — confirmar que não há fallback para `empresa_id`. Tooltip pode mostrar CNPJ.
+  - `PainelSlaAcertividade.tsx`: na seção "SLA de entregas pendentes", exibir nome + grupo econômico em subtexto cinza, CNPJ removido da visualização principal (mantido em `title=`).
+
+### 5. Padronizar status "Vencida" / "Pendente"
+- Criar utilitário `src/utils/analiseStatus.ts` com função única `getDisplayStatus(analise, tipoEmissor?)` aplicando a tabela:
+  - `data_conclusao` + `status === 'Aprovada'` → `Concluída` (verde) — manter regra de validade 1 ano (FIDC isento, já existente).
+  - sem conclusão e `prazo < hoje` → `Vencida` (vermelho).
+  - sem conclusão e `prazo >= hoje` e status === 'Pendente' → `Pendente` (amarelo).
+  - status === 'Em Análise' → `Em Análise` (azul).
+  - demais (`Aprovada`/`Reprovada`/recomendações) → mantidos como hoje.
+- Migrar `AnalisesPage` (remover `isVencida`/`getDisplayStatus` locais e usar o util).
+- Aplicar o mesmo util em:
+  - `TradeMonitorPage` / filtro "Status Análise" (chip "Vencida" deve casar exatamente com `prazo < hoje` e sem `data_conclusao`).
+  - `PipelineResearchPage` (badges de status).
+  - `DesempenhoPage` componentes que mostram status de análise.
+- Mapa de cores único (`statusBadgeClass`) co-localizado no util para reuso.
+- Não alterar schema, RLS, navegação ou lógica de negócio fora do mapeamento.
+
+### Notas técnicas
+- Padrão de paginação Supabase (já usado em `PipelineResearchPage`):
+```ts
+let from = 0; const size = 1000; const all: T[] = []; let more = true;
+while (more) {
+  const { data, error } = await supabase.from('x').select('...').range(from, from+size-1);
+  if (error) throw error;
+  all.push(...(data ?? [])); more = (data?.length ?? 0) === size; from += size;
+}
 ```
-Dashboard Geral  |  Setorial  |  Emissões
-```
-
-O "Dashboard Geral" é o atual (KPIs, distribuição por rating, vencimento, spread mediano). "Setorial" é o novo. "Emissões" continua sendo a tabela.
-
-### 2. Layout do Dashboard Setorial (referência: imagem ABC)
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│ Setor: [Saneamento ▼]   Rating: [Todos ▼]   Janela: [30d 90d 1a]    │
-├──────────────────────────────────┬──────────────────────────────────┤
-│                                  │  Mediana de spread — Setor       │
-│   Scatter: Spread × Duration     │  (linha histórica + barras vol)  │
-│   (cores = rating)               ├──────────────────────────────────┤
-│   Labels nos tickers do setor    │  Mediana de spread — Emissor     │
-│   selecionado                    │  selecionado (linha + barras)    │
-│                                  │                                  │
-└──────────────────────────────────┴──────────────────────────────────┘
-┌─────────────────────────────────────────────────────────────────────┐
-│ Tabela de tickers do setor: Ticker · Emissor · Rating · Duration ·  │
-│ Spread atual · Δ 21d · Z-score · Vol 90d · Última negociação        │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-**Componentes:**
-
-- **Filtros no topo**
-  - `Setor` — lista distinta vinda de `empresas.setor` (apenas setores que possuem ticker no universo atual). Default = primeiro setor com mais emissões.
-  - `Rating` — multiselect (AAA, AA+, AA, A+, A, BBB, N/R). Default = todos.
-  - `Janela` da série temporal: 30d / 90d / 1a (default 90d).
-
-- **Scatter "Spread × Duration"** (a peça principal — copia o gráfico esquerdo da imagem ABC)
-  - Eixo X: `anos_venc` (duration aproximada).
-  - Eixo Y: `last_val` (spread em bps para DI+/IPCA+; %CDI no modo CDI_PCT).
-  - Cor do ponto = rating normalizado (mesma paleta `RATING_COLORS` já usada).
-  - Tickers do **setor selecionado** ficam destacados (label visível + halo amarelo, igual marcação amarela da imagem).
-  - Tickers de outros setores continuam plotados em cinza claro como pano de fundo (opcional via toggle "Comparar com universo").
-  - Clique em um ponto → seta o ticker selecionado (abre o `TradeDetail` lateral, mesmo padrão atual).
-  - Legenda de rating embaixo, igual ao relatório.
-
-- **Mediana de Spread — Setor** (gráfico topo direito da imagem)
-  - Linha = mediana móvel 10 negociações do spread do setor.
-  - Barras cinzas = volume financeiro diário agregado do setor.
-  - Pontos verdes = mediana diária por data.
-
-- **Mediana de Spread — Emissor selecionado** (gráfico inferior direito da imagem)
-  - Mesmo formato, restrito ao emissor do ticker selecionado (ou ao maior emissor do setor se nada selecionado).
-
-- **Tabela de tickers do setor** abaixo dos gráficos
-  - Sortable / filtrável (mesma `SortableHeader` já usada nos painéis de Alocação).
-  - Clique na linha = seleciona ticker.
-
-### 3. Dados — sem novas tabelas
-
-Tudo já existe:
-
-- `trade_monitor_view` (já carregado por `useTradeData`) traz `emissor_cnpj`, `rating`, `anos_venc`, `last_val`, `total_vol_fin`, `z_score`, `avg_21d`.
-- `empresas.setor` é o setor — fazer **join client-side** carregando uma vez `empresas (cnpj, setor, nome, grupo_economico)` num novo hook leve `useEmpresasSetor()`.
-- Para a série histórica do setor / emissor, reaproveitar:
-  - IPCA: `trade_spread_historico` (já paginado em `useTradeData`).
-  - DI / %CDI: `history` por ticker (já no estado).
-  - Agregar mediana por dia no client (mesma técnica do `spreadSeries` atual em `TradeDashboard`).
-
-Sem migração necessária nesta etapa.
-
-### 4. Arquivos a criar / editar
-
-**Criar:**
-- `src/components/trade/TradeSectorDashboard.tsx` — o novo dashboard (filtros + scatter + 2 gráficos de mediana + tabela).
-- `src/hooks/useEmpresasSetor.ts` — fetch único de `cnpj → { setor, nome, grupo }`, cacheado.
-
-**Editar:**
-- `src/components/trade/TradeMonitorPage.tsx` — adicionar terceira opção no toggle `view` (`"sector"`) e renderizar `TradeSectorDashboard` quando ativa, passando `filteredData`, `history`, `mode`, `modeColor`, `onSelectTicker`.
-- (opcional) extrair `RATING_COLORS` / `normRating` de `TradeDashboard.tsx` para `src/components/trade/tradeColors.ts` para reuso.
-
-### 5. Detalhes técnicos
-
-- Scatter implementado com `recharts` `<ScatterChart>` + `<Scatter>` por rating (uma série por rating → cores automáticas via `Cell`). Labels só nos pontos do setor selecionado (custom `<LabelList>` com `content` que omite outros).
-- Mediana móvel de 10 negociações = janela móvel sobre as observações ordenadas por data, não por dia calendário.
-- Tooltip do scatter mostra: ticker, emissor, rating, duration (anos), spread, volume 90d.
-- Performance: dataset típico ~500 tickers — sem problema no client. Joins com `empresas` em memória.
-- Tema: cores via `useChartTheme()` (já existe), nada hardcoded fora do mapa de rating.
-- Modo `%CDI`: o eixo Y vira "% do CDI" (sem multiplicar por 100), mantém a mesma estrutura.
-- Acessibilidade: `aria-label` no scatter, navegação por teclado entre pontos via `tabIndex` opcional.
-
-### 6. Fora de escopo nesta etapa
-
-- Exportar PNG/PDF do gráfico (pode vir depois).
-- Drill-down por emissor abrindo nova página (já existe via `onViewEmissor` na `TradeDetail`).
-- Persistir filtro de setor selecionado por usuário.
+- Nenhuma migration necessária. Sem mudança de auth/RLS.
+- Arquivos tocados (estimativa): `EmpresasPage.tsx`, `AnalisesPage.tsx`, `AssembleiasPage.tsx`, `useDesempenhoData.ts`, `TabelaAnalistas.tsx`, `CalendarioEntregas.tsx`, `PainelSlaAcertividade.tsx`, `TradeMonitorPage.tsx`, `PipelineResearchPage.tsx`, novo `src/utils/analiseStatus.ts`.
