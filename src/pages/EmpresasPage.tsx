@@ -22,6 +22,8 @@ export default function EmpresasPage() {
   const [tipoFilter, setTipoFilter] = useState('all');
   const [setorFilter, setSetorFilter] = useState('all');
   const [grupoFilter, setGrupoFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
