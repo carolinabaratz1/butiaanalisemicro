@@ -1,0 +1,2 @@
+ALTER TABLE public.analises ALTER COLUMN tipo DROP NOT NULL;
+ALTER TABLE public.analises ALTER COLUMN tipo SET DEFAULT 'Geral';

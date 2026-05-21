@@ -196,7 +196,7 @@ export type Database = {
           riscos: string | null
           solicitante_id: string | null
           status: string
-          tipo: string
+          tipo: string | null
           updated_at: string
           versao: number
         }
@@ -230,7 +230,7 @@ export type Database = {
           riscos?: string | null
           solicitante_id?: string | null
           status: string
-          tipo: string
+          tipo?: string | null
           updated_at?: string
           versao?: number
         }
@@ -264,7 +264,7 @@ export type Database = {
           riscos?: string | null
           solicitante_id?: string | null
           status?: string
-          tipo?: string
+          tipo?: string | null
           updated_at?: string
           versao?: number
         }
