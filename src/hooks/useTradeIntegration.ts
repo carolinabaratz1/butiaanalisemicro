@@ -55,6 +55,7 @@ interface AnaliseRow {
   isin: string | null;
   status: string;
   recomendacao: string | null;
+  recomendacao_rf: string | null;
   data_aprovacao: string | null;
   data_conclusao: string | null;
   prazo: string | null;
@@ -155,7 +156,7 @@ export function useTradeIntegration() {
         supabase
           .from("analises")
           .select(
-            "id, empresa_id, isin, status, recomendacao, data_aprovacao, data_comite, data_conclusao, prazo, versao, created_at",
+            "id, empresa_id, isin, status, recomendacao, recomendacao_rf, data_aprovacao, data_comite, data_conclusao, prazo, versao, created_at",
           )
           .order("versao", { ascending: false })
           .range(from, to) as unknown as PromiseLike<{ data: AnaliseRow[] | null; error: unknown }>,
@@ -259,7 +260,8 @@ export function useTradeIntegration() {
           prazo: (a as any).prazo ?? null,
           data_aprovacao: a.data_aprovacao ?? null,
           data_comite: (a as any).data_comite ?? null,
-          recomendacao: (a as any).recomendacao ?? null,
+          recomendacao: (a as any).recomendacao_rf ?? (a as any).recomendacao ?? null,
+          recomendacao_rf: (a as any).recomendacao_rf ?? null,
         },
         null,
       );

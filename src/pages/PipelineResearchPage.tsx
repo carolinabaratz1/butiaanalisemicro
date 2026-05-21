@@ -111,14 +111,15 @@ export default function PipelineResearchPage() {
   const [novoAnalista, setNovoAnalista] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  // Nova análise form
+  // Nova análise form (tipo é definido na entrega pelo analista)
   const [novoEmissor, setNovoEmissor] = useState('');
-  const [novoTipo, setNovoTipo] = useState('');
   const [novoAnalistaId, setNovoAnalistaId] = useState('');
   const [novoPrazo, setNovoPrazo] = useState<Date>();
   const [novoObs, setNovoObs] = useState('');
 
-  // Entrega (conclusão) extra fields
+  // Entrega (conclusão) — dual: Ações e/ou Crédito Privado
+  const [incluiAcoes, setIncluiAcoes] = useState(false);
+  const [incluiRf, setIncluiRf] = useState(false);
   const [recomendacao, setRecomendacao] = useState('');
   const [recomendacaoRf, setRecomendacaoRf] = useState('');
   const [linkAnalise, setLinkAnalise] = useState('');
@@ -298,10 +299,10 @@ export default function PipelineResearchPage() {
 
     // Group by empresa_id — keep only highest versao per empresa
     // Exception: if latest version is terminal (Reprovada), also show previous approved/vencida
-    // Group by empresa_id + tipo — different analysis types coexist independently
+    // Group by empresa_id — uma análise unificada por empresa
     const grouped = new Map<string, typeof withStatus>();
     withStatus.forEach(a => {
-      const key = `${a.empresa_id}::${a.tipo}`;
+      const key = a.empresa_id;
       const list = grouped.get(key) || [];
       list.push(a);
       grouped.set(key, list);
@@ -362,13 +363,12 @@ export default function PipelineResearchPage() {
 
   // ── Handlers ──
   const handleCriar = async () => {
-    if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
-    // Calculate next version for this empresa + tipo
+    if (!novoEmissor || !novoAnalistaId || !novoPrazo) return;
+    // Calcula próxima versão (MAX+1) por empresa (análise unificada)
     const { data: maxRows } = await supabase
       .from('analises')
       .select('versao')
       .eq('empresa_id', novoEmissor)
-      .eq('tipo', novoTipo)
       .order('versao', { ascending: false })
       .limit(1);
     const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
@@ -376,7 +376,7 @@ export default function PipelineResearchPage() {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
       solicitante_id: currentUser?.id || '',
-      tipo: novoTipo,
+      tipo: 'Geral',
       status: 'Pendente',
       data_inicio: format(new Date(), 'yyyy-MM-dd'),
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
@@ -386,7 +386,7 @@ export default function PipelineResearchPage() {
     };
     createAnalise.mutate(row);
     setNovaModal(false);
-    setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
+    setNovoEmissor(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
   };
 
   const entregarAnalise = useMemo(() => {
@@ -394,12 +394,13 @@ export default function PipelineResearchPage() {
     return analisesComStatus.find(a => a.id === entregarModal) || null;
   }, [entregarModal, analisesComStatus]);
 
-  const isAcoes = entregarAnalise?.tipo === 'Ações';
+  const isAcoes = incluiAcoes; // mantém alias semântico para o JSX existente
 
   const handleEntregar = () => {
     if (!entregarModal || !relatorio.trim() || !linkAnalise.trim()) return;
-    if (isAcoes && !recomendacao) return;
-    if (!isAcoes && !recomendacaoRf) return;
+    if (!incluiAcoes && !incluiRf) return;
+    if (incluiAcoes && !recomendacao) return;
+    if (incluiRf && !recomendacaoRf) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
@@ -407,16 +408,17 @@ export default function PipelineResearchPage() {
         relatorio,
         link_analise: linkAnalise.trim(),
         data_conclusao: new Date().toISOString().split('T')[0],
-        recomendacao: isAcoes ? recomendacao : null,
-        recomendacao_rf: !isAcoes ? recomendacaoRf : null,
-        preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
-        preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
-        preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
-        data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
+        recomendacao: incluiAcoes ? recomendacao : null,
+        recomendacao_rf: incluiRf ? recomendacaoRf : null,
+        preco_min: incluiAcoes && precoMin ? parseFloat(precoMin) : null,
+        preco_medio: incluiAcoes && precoMedio ? parseFloat(precoMedio) : null,
+        preco_maximo: incluiAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
+        data_alvo: incluiAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
     registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
+    setIncluiAcoes(false); setIncluiRf(false);
     setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
   };
@@ -665,14 +667,14 @@ export default function PipelineResearchPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {item.tipo && (
-                              <Badge variant="outline" className={`text-[9px] ${tipoAnaliseColors[item.tipo] || 'bg-muted/30 text-muted-foreground'}`}>
-                                {item.tipo}
+                            {(item as any).recomendacao_rf && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao_rf] || ''}`} title="Crédito Privado">
+                                CP: {(item as any).recomendacao_rf}
                               </Badge>
                             )}
-                            {((item as any).recomendacao || (item as any).recomendacao_rf) && (
-                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao || (item as any).recomendacao_rf] || ''}`}>
-                                {(item as any).recomendacao || (item as any).recomendacao_rf}
+                            {(item as any).recomendacao && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`} title="Ações">
+                                AÇ: {(item as any).recomendacao}
                               </Badge>
                             )}
                             {(item as any).link_analise ? (
@@ -1124,16 +1126,7 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div>
-              <Label className="text-xs">Tipo de Análise</Label>
-              <Select value={novoTipo} onValueChange={setNovoTipo}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar tipo" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
-                  <SelectItem value="Ações">Ações</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Tipo é definido pelo analista na entrega (Ações e/ou Crédito Privado) */}
             <div>
               <Label className="text-xs">Analista Responsável</Label>
               <Select value={novoAnalistaId} onValueChange={setNovoAnalistaId}>
@@ -1161,7 +1154,7 @@ export default function PipelineResearchPage() {
               <Label className="text-xs">Observações</Label>
               <Textarea value={novoObs} onChange={e => setNovoObs(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Opcional..." />
             </div>
-            <Button size="sm" className="w-full" onClick={handleCriar} disabled={!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo || createAnalise.isPending}>
+            <Button size="sm" className="w-full" onClick={handleCriar} disabled={!novoEmissor || !novoAnalistaId || !novoPrazo || createAnalise.isPending}>
               {createAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Criar Análise
             </Button>
@@ -1170,14 +1163,12 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Entregar Modal (Conclusão) */}
-      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
-        <DialogContent className="max-w-lg bg-card border-border">
+      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setIncluiAcoes(false); setIncluiRf(false); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
+        <DialogContent className="max-w-lg bg-card border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
-              {isAcoes
-                ? 'Preencha o relatório, link, recomendação e preços sugeridos para concluir.'
-                : 'Preencha o relatório, link e recomendação para concluir a análise.'}
+              Marque os tipos cobertos (Ações e/ou Crédito Privado) e preencha as recomendações correspondentes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1193,15 +1184,31 @@ export default function PipelineResearchPage() {
                 onChange={e => setLinkAnalise(e.target.value)}
                 className="mt-1 h-8 text-sm bg-surface-1 border-border"
                 placeholder="https://..."
-                title="Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)"
               />
               <p className="text-[10px] text-muted-foreground mt-1">Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)</p>
             </div>
-            {!isAcoes && (
-              <div>
-                <Label className="text-xs">Recomendação (obrigatório)</Label>
+
+            {/* Seletor de tipos cobertos */}
+            <div className="space-y-2 p-3 rounded-md bg-surface-1 border border-border">
+              <p className="text-xs font-semibold text-foreground">Tipos cobertos por esta análise (marque ao menos um)</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" checked={incluiRf} onChange={e => setIncluiRf(e.target.checked)} className="accent-primary" />
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/30">Crédito Privado</Badge>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" checked={incluiAcoes} onChange={e => setIncluiAcoes(e.target.checked)} className="accent-primary" />
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/30">Ações</Badge>
+                </label>
+              </div>
+            </div>
+
+            {/* Crédito Privado */}
+            {incluiRf && (
+              <div className="p-3 rounded-md border border-blue-500/30 bg-blue-500/5 space-y-2">
+                <p className="text-xs font-semibold text-blue-400">Recomendação — Crédito Privado</p>
                 <Select value={recomendacaoRf} onValueChange={setRecomendacaoRf}>
-                  <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar Buy / Hold / Sell" /></SelectTrigger>
                   <SelectContent className="bg-card border-border">
                     <SelectItem value="Buy">Buy</SelectItem>
                     <SelectItem value="Hold">Hold</SelectItem>
@@ -1210,19 +1217,19 @@ export default function PipelineResearchPage() {
                 </Select>
               </div>
             )}
-            {isAcoes && (
-              <>
-                <div>
-                  <Label className="text-xs">Recomendação (obrigatório)</Label>
-                  <Select value={recomendacao} onValueChange={setRecomendacao}>
-                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="Buy">Buy</SelectItem>
-                      <SelectItem value="Hold">Hold</SelectItem>
-                      <SelectItem value="Sell">Sell</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
+            {/* Ações */}
+            {incluiAcoes && (
+              <div className="p-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 space-y-2">
+                <p className="text-xs font-semibold text-emerald-400">Recomendação — Ações</p>
+                <Select value={recomendacao} onValueChange={setRecomendacao}>
+                  <SelectTrigger className="h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar Buy / Hold / Sell" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="Buy">Buy</SelectItem>
+                    <SelectItem value="Hold">Hold</SelectItem>
+                    <SelectItem value="Sell">Sell</SelectItem>
+                  </SelectContent>
+                </Select>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-xs">Preço Mín.</Label>
@@ -1251,9 +1258,10 @@ export default function PipelineResearchPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-              </>
+              </div>
             )}
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (isAcoes && !recomendacao) || (!isAcoes && !recomendacaoRf) || updateStatus.isPending}>
+
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (!incluiAcoes && !incluiRf) || (incluiAcoes && !recomendacao) || (incluiRf && !recomendacaoRf) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
             </Button>
