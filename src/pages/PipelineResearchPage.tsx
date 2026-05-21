@@ -1163,14 +1163,12 @@ export default function PipelineResearchPage() {
       </Dialog>
 
       {/* Entregar Modal (Conclusão) */}
-      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
-        <DialogContent className="max-w-lg bg-card border-border">
+      <Dialog open={!!entregarModal} onOpenChange={() => { setEntregarModal(null); setIncluiAcoes(false); setIncluiRf(false); setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined); }}>
+        <DialogContent className="max-w-lg bg-card border-border max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Entregar Análise {entregarAnalise ? `— ${getEmissorNome(entregarAnalise.empresa_id, empresasMap)}` : ''}</DialogTitle>
             <DialogDescription>
-              {isAcoes
-                ? 'Preencha o relatório, link, recomendação e preços sugeridos para concluir.'
-                : 'Preencha o relatório, link e recomendação para concluir a análise.'}
+              Marque os tipos cobertos (Ações e/ou Crédito Privado) e preencha as recomendações correspondentes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1186,15 +1184,31 @@ export default function PipelineResearchPage() {
                 onChange={e => setLinkAnalise(e.target.value)}
                 className="mt-1 h-8 text-sm bg-surface-1 border-border"
                 placeholder="https://..."
-                title="Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)"
               />
               <p className="text-[10px] text-muted-foreground mt-1">Cole o link onde o arquivo da análise está salvo (SharePoint, Drive, etc.)</p>
             </div>
-            {!isAcoes && (
-              <div>
-                <Label className="text-xs">Recomendação (obrigatório)</Label>
+
+            {/* Seletor de tipos cobertos */}
+            <div className="space-y-2 p-3 rounded-md bg-surface-1 border border-border">
+              <p className="text-xs font-semibold text-foreground">Tipos cobertos por esta análise (marque ao menos um)</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" checked={incluiRf} onChange={e => setIncluiRf(e.target.checked)} className="accent-primary" />
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/30">Crédito Privado</Badge>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" checked={incluiAcoes} onChange={e => setIncluiAcoes(e.target.checked)} className="accent-primary" />
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/30">Ações</Badge>
+                </label>
+              </div>
+            </div>
+
+            {/* Crédito Privado */}
+            {incluiRf && (
+              <div className="p-3 rounded-md border border-blue-500/30 bg-blue-500/5 space-y-2">
+                <p className="text-xs font-semibold text-blue-400">Recomendação — Crédito Privado</p>
                 <Select value={recomendacaoRf} onValueChange={setRecomendacaoRf}>
-                  <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar Buy / Hold / Sell" /></SelectTrigger>
                   <SelectContent className="bg-card border-border">
                     <SelectItem value="Buy">Buy</SelectItem>
                     <SelectItem value="Hold">Hold</SelectItem>
@@ -1203,19 +1217,19 @@ export default function PipelineResearchPage() {
                 </Select>
               </div>
             )}
-            {isAcoes && (
-              <>
-                <div>
-                  <Label className="text-xs">Recomendação (obrigatório)</Label>
-                  <Select value={recomendacao} onValueChange={setRecomendacao}>
-                    <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="Buy">Buy</SelectItem>
-                      <SelectItem value="Hold">Hold</SelectItem>
-                      <SelectItem value="Sell">Sell</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
+            {/* Ações */}
+            {incluiAcoes && (
+              <div className="p-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 space-y-2">
+                <p className="text-xs font-semibold text-emerald-400">Recomendação — Ações</p>
+                <Select value={recomendacao} onValueChange={setRecomendacao}>
+                  <SelectTrigger className="h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar Buy / Hold / Sell" /></SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="Buy">Buy</SelectItem>
+                    <SelectItem value="Hold">Hold</SelectItem>
+                    <SelectItem value="Sell">Sell</SelectItem>
+                  </SelectContent>
+                </Select>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-xs">Preço Mín.</Label>
@@ -1244,9 +1258,10 @@ export default function PipelineResearchPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-              </>
+              </div>
             )}
-            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (isAcoes && !recomendacao) || (!isAcoes && !recomendacaoRf) || updateStatus.isPending}>
+
+            <Button size="sm" className="w-full" onClick={handleEntregar} disabled={!relatorio.trim() || !linkAnalise.trim() || (!incluiAcoes && !incluiRf) || (incluiAcoes && !recomendacao) || (incluiRf && !recomendacaoRf) || updateStatus.isPending}>
               {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Entregar Análise
             </Button>
