@@ -260,7 +260,8 @@ export function useTradeIntegration() {
           prazo: (a as any).prazo ?? null,
           data_aprovacao: a.data_aprovacao ?? null,
           data_comite: (a as any).data_comite ?? null,
-          recomendacao: (a as any).recomendacao ?? null,
+          recomendacao: (a as any).recomendacao_rf ?? (a as any).recomendacao ?? null,
+          recomendacao_rf: (a as any).recomendacao_rf ?? null,
         },
         null,
       );
