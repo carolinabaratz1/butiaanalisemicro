@@ -394,12 +394,13 @@ export default function PipelineResearchPage() {
     return analisesComStatus.find(a => a.id === entregarModal) || null;
   }, [entregarModal, analisesComStatus]);
 
-  const isAcoes = entregarAnalise?.tipo === 'Ações';
+  const isAcoes = incluiAcoes; // mantém alias semântico para o JSX existente
 
   const handleEntregar = () => {
     if (!entregarModal || !relatorio.trim() || !linkAnalise.trim()) return;
-    if (isAcoes && !recomendacao) return;
-    if (!isAcoes && !recomendacaoRf) return;
+    if (!incluiAcoes && !incluiRf) return;
+    if (incluiAcoes && !recomendacao) return;
+    if (incluiRf && !recomendacaoRf) return;
     updateStatus.mutate({
       id: entregarModal,
       status: 'Concluída',
@@ -407,16 +408,17 @@ export default function PipelineResearchPage() {
         relatorio,
         link_analise: linkAnalise.trim(),
         data_conclusao: new Date().toISOString().split('T')[0],
-        recomendacao: isAcoes ? recomendacao : null,
-        recomendacao_rf: !isAcoes ? recomendacaoRf : null,
-        preco_min: isAcoes && precoMin ? parseFloat(precoMin) : null,
-        preco_medio: isAcoes && precoMedio ? parseFloat(precoMedio) : null,
-        preco_maximo: isAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
-        data_alvo: isAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
+        recomendacao: incluiAcoes ? recomendacao : null,
+        recomendacao_rf: incluiRf ? recomendacaoRf : null,
+        preco_min: incluiAcoes && precoMin ? parseFloat(precoMin) : null,
+        preco_medio: incluiAcoes && precoMedio ? parseFloat(precoMedio) : null,
+        preco_maximo: incluiAcoes && precoMaximo ? parseFloat(precoMaximo) : null,
+        data_alvo: incluiAcoes && dataAlvo ? format(dataAlvo, 'yyyy-MM-dd') : null,
       },
     });
     registrarEvento({ analise_id: entregarModal, acao: 'concluida', etapa_anterior: 'Em Análise', etapa_nova: 'Concluída' });
     setEntregarModal(null);
+    setIncluiAcoes(false); setIncluiRf(false);
     setRelatorio(''); setRecomendacao(''); setRecomendacaoRf(''); setLinkAnalise(''); setPrecoMin(''); setPrecoMedio(''); setPrecoMaximo(''); setDataAlvo(undefined);
     setDrawerAnalise(null);
   };
