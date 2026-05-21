@@ -1126,16 +1126,7 @@ export default function PipelineResearchPage() {
                 </PopoverContent>
               </Popover>
             </div>
-            <div>
-              <Label className="text-xs">Tipo de Análise</Label>
-              <Select value={novoTipo} onValueChange={setNovoTipo}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar tipo" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="Crédito Privado">Crédito Privado</SelectItem>
-                  <SelectItem value="Ações">Ações</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Tipo é definido pelo analista na entrega (Ações e/ou Crédito Privado) */}
             <div>
               <Label className="text-xs">Analista Responsável</Label>
               <Select value={novoAnalistaId} onValueChange={setNovoAnalistaId}>
