@@ -55,6 +55,7 @@ interface AnaliseRow {
   isin: string | null;
   status: string;
   recomendacao: string | null;
+  recomendacao_rf: string | null;
   data_aprovacao: string | null;
   data_conclusao: string | null;
   prazo: string | null;
