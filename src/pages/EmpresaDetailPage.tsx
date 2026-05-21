@@ -207,25 +207,19 @@ export default function EmpresaDetailPage() {
   const handleSolicitar = async () => {
     if (!solicitarModal || !analistaSel || !prazoDate) return;
 
-    // Deriva tipo da análise a partir do tipo da empresa
-    const tipoEmpresa = (emissor?.tipo || '').toUpperCase();
-    const tipoAnalise = tipoEmpresa.includes('AÇ') || tipoEmpresa.includes('AC') || tipoEmpresa === 'EQUITY'
-      ? 'Ações'
-      : 'Crédito Privado';
-
-    // Calcula próxima versão (MAX+1) por empresa+tipo
+    // Análise unificada por empresa (tipo Ações/Crédito é definido na conclusão pelo analista)
+    // Calcula próxima versão (MAX+1) por empresa
     const { data: maxRows } = await supabase
       .from('analises')
       .select('versao')
       .eq('empresa_id', decodedCnpj)
-      .eq('tipo', tipoAnalise)
       .order('versao', { ascending: false })
       .limit(1);
     const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
 
     const { data: inserted, error } = await supabase.from('analises').insert({
       empresa_id: decodedCnpj,
-      tipo: tipoAnalise,
+      tipo: 'Geral',
       isin: solicitarModal,
       analista_responsavel: analistaSel,
       solicitante_id: currentUser?.id || '',
