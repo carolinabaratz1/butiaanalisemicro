@@ -363,13 +363,12 @@ export default function PipelineResearchPage() {
 
   // ── Handlers ──
   const handleCriar = async () => {
-    if (!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo) return;
-    // Calculate next version for this empresa + tipo
+    if (!novoEmissor || !novoAnalistaId || !novoPrazo) return;
+    // Calcula próxima versão (MAX+1) por empresa (análise unificada)
     const { data: maxRows } = await supabase
       .from('analises')
       .select('versao')
       .eq('empresa_id', novoEmissor)
-      .eq('tipo', novoTipo)
       .order('versao', { ascending: false })
       .limit(1);
     const novaVersao = ((maxRows?.[0]?.versao) ?? 0) + 1;
@@ -377,7 +376,7 @@ export default function PipelineResearchPage() {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
       solicitante_id: currentUser?.id || '',
-      tipo: novoTipo,
+      tipo: 'Geral',
       status: 'Pendente',
       data_inicio: format(new Date(), 'yyyy-MM-dd'),
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
@@ -387,7 +386,7 @@ export default function PipelineResearchPage() {
     };
     createAnalise.mutate(row);
     setNovaModal(false);
-    setNovoEmissor(''); setNovoTipo(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
+    setNovoEmissor(''); setNovoAnalistaId(''); setNovoPrazo(undefined); setNovoObs('');
   };
 
   const entregarAnalise = useMemo(() => {
