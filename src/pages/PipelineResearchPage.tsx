@@ -1154,7 +1154,7 @@ export default function PipelineResearchPage() {
               <Label className="text-xs">Observações</Label>
               <Textarea value={novoObs} onChange={e => setNovoObs(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Opcional..." />
             </div>
-            <Button size="sm" className="w-full" onClick={handleCriar} disabled={!novoEmissor || !novoAnalistaId || !novoPrazo || !novoTipo || createAnalise.isPending}>
+            <Button size="sm" className="w-full" onClick={handleCriar} disabled={!novoEmissor || !novoAnalistaId || !novoPrazo || createAnalise.isPending}>
               {createAnalise.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Criar Análise
             </Button>
