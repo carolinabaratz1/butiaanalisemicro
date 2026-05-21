@@ -111,14 +111,15 @@ export default function PipelineResearchPage() {
   const [novoAnalista, setNovoAnalista] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  // Nova análise form
+  // Nova análise form (tipo é definido na entrega pelo analista)
   const [novoEmissor, setNovoEmissor] = useState('');
-  const [novoTipo, setNovoTipo] = useState('');
   const [novoAnalistaId, setNovoAnalistaId] = useState('');
   const [novoPrazo, setNovoPrazo] = useState<Date>();
   const [novoObs, setNovoObs] = useState('');
 
-  // Entrega (conclusão) extra fields
+  // Entrega (conclusão) — dual: Ações e/ou Crédito Privado
+  const [incluiAcoes, setIncluiAcoes] = useState(false);
+  const [incluiRf, setIncluiRf] = useState(false);
   const [recomendacao, setRecomendacao] = useState('');
   const [recomendacaoRf, setRecomendacaoRf] = useState('');
   const [linkAnalise, setLinkAnalise] = useState('');
