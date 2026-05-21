@@ -667,14 +667,14 @@ export default function PipelineResearchPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {item.tipo && (
-                              <Badge variant="outline" className={`text-[9px] ${tipoAnaliseColors[item.tipo] || 'bg-muted/30 text-muted-foreground'}`}>
-                                {item.tipo}
+                            {(item as any).recomendacao_rf && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao_rf] || ''}`} title="Crédito Privado">
+                                CP: {(item as any).recomendacao_rf}
                               </Badge>
                             )}
-                            {((item as any).recomendacao || (item as any).recomendacao_rf) && (
-                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao || (item as any).recomendacao_rf] || ''}`}>
-                                {(item as any).recomendacao || (item as any).recomendacao_rf}
+                            {(item as any).recomendacao && (
+                              <Badge variant="outline" className={`text-[9px] ${recomendacaoColors[(item as any).recomendacao] || ''}`} title="Ações">
+                                AÇ: {(item as any).recomendacao}
                               </Badge>
                             )}
                             {(item as any).link_analise ? (
