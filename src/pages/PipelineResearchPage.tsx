@@ -299,10 +299,10 @@ export default function PipelineResearchPage() {
 
     // Group by empresa_id — keep only highest versao per empresa
     // Exception: if latest version is terminal (Reprovada), also show previous approved/vencida
-    // Group by empresa_id + tipo — different analysis types coexist independently
+    // Group by empresa_id — uma análise unificada por empresa
     const grouped = new Map<string, typeof withStatus>();
     withStatus.forEach(a => {
-      const key = `${a.empresa_id}::${a.tipo}`;
+      const key = a.empresa_id;
       const list = grouped.get(key) || [];
       list.push(a);
       grouped.set(key, list);
