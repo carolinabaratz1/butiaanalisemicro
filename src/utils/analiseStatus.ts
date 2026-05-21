@@ -62,12 +62,13 @@ export function getDisplayStatus(
   const isFidc = (tipoEmissor ?? '').toUpperCase() === 'FIDC';
   const um = umAnoAtras();
 
-  if (a.recomendacao && RECOMENDACOES.has(a.recomendacao)) {
+  const reco = a.recomendacao_rf || a.recomendacao;
+  if (reco && RECOMENDACOES.has(reco)) {
     if (!isFidc) {
       const ap = parseDate(a.data_aprovacao || a.data_comite || a.data_conclusao);
       if (ap && ap < um) return 'Vencida';
     }
-    return a.recomendacao;
+    return reco;
   }
 
   if (!isFidc && a.status === 'Aprovada' && a.data_conclusao) {
