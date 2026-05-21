@@ -216,17 +216,24 @@ export default function PosicoesPage() {
     return s;
   };
 
+  // Classes de produto consideradas Ações/Equity
+  const isEquityClass = (pc: string | null | undefined): boolean => {
+    const c = (pc || '').toLowerCase();
+    return c === 'equity' || c.startsWith('bdr') || c === 'termo' || c === 'funds br' || c.includes('etf');
+  };
+
   // Enriched positions
   const enriched = useMemo<EnrichedPosition[]>(() => {
     return posicoes.map(p => {
       const cnpj = p.isin ? isinToCnpj[p.isin] : undefined;
       const empresa = cnpj ? cnpjToEmpresa[cnpj] : undefined;
       const analise = cnpj ? latestAnaliseByEmpresa[cnpj] : undefined;
-      // Recomendação efetiva: campos explícitos OU o próprio status quando for Buy/Hold/Sell
-      const recEfetiva =
-        analise?.recomendacao
-        || (analise as any)?.recomendacao_rf
-        || (analise && isRecLike(analise.status) ? analise.status : null);
+      // Recomendação efetiva: roteia pelo product_class
+      // Equity → recomendacao (Ações); demais (FIDC/LF/CDB/Debênture/etc) → recomendacao_rf (Crédito)
+      const equity = isEquityClass(p.product_class);
+      const recEfetiva = equity
+        ? (analise?.recomendacao || (analise && isRecLike(analise.status) ? analise.status : null))
+        : ((analise as any)?.recomendacao_rf || (analise && isRecLike(analise.status) ? analise.status : null));
       return {
         ...p,
         cnpj,
