@@ -21,6 +21,7 @@ export interface AnaliseStatusInput {
   data_aprovacao?: string | null;
   data_comite?: string | null;
   recomendacao?: string | null;
+  recomendacao_rf?: string | null;
 }
 
 const RECOMENDACOES = new Set(['Buy', 'Hold', 'Sell']);
