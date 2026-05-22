@@ -733,7 +733,7 @@ export default function AssembleiasPage() {
                   <Badge variant="outline" className={cn('text-[10px] flex items-center gap-1', scfg.cls)}>{scfg.icon}{scfg.label}</Badge>
                   {ev.quorum_atingido !== null && <span className="text-xs text-muted-foreground">Quórum: {ev.quorum_atingido ? '✓ Atingido' : '✗ Não atingido'}</span>}
                 </div>
-                {ev.local_link && <div><strong>Local / link:</strong> <a href={ev.local_link} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">{ev.local_link}</a></div>}
+                {ev.local_link && <div><strong>Local / link:</strong> <a href={safeHref(ev.local_link)} target="_blank" rel="noreferrer" className="text-primary hover:underline break-all">{ev.local_link}</a></div>}
                 {ev.descricao && <div><strong>{ev.tipo === 'Fato Relevante' ? 'Conteúdo:' : 'Pauta:'}</strong><p className="text-muted-foreground mt-0.5 whitespace-pre-wrap">{ev.descricao}</p></div>}
                 {ev.voto_butia && <div className="flex items-center gap-2"><strong>Voto Butia:</strong><Badge variant="outline" className={cn('text-[10px]', VOTO_CLS[ev.voto_butia])}>{ev.voto_butia}</Badge></div>}
                 {ev.justificativa_voto && <div><strong>Justificativa:</strong><p className="text-muted-foreground mt-0.5">{ev.justificativa_voto}</p></div>}
