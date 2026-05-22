@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
+import { safeHref } from '@/lib/safeHref';
 
 type AnaliseStatus = 'Pendente' | 'Em Análise' | 'Concluída' | 'Buy' | 'Hold' | 'Sell' | 'Vencida c/ Alocação' | 'Vencida s/ Alocação';
 
@@ -678,7 +679,7 @@ export default function PipelineResearchPage() {
                               </Badge>
                             )}
                             {(item as any).link_analise ? (
-                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                              <a href={safeHref((item as any).link_analise)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
                                 <LinkIcon className="h-3 w-3" />
                               </a>
                             ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Buy' || item.displayStatus === 'Hold' || item.displayStatus === 'Sell' ? (
@@ -836,7 +837,7 @@ export default function PipelineResearchPage() {
                               </Badge>
                             )}
                             {(item as any).link_analise ? (
-                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                              <a href={safeHref((item as any).link_analise)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
                                 <LinkIcon className="h-3 w-3" />
                               </a>
                             ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Buy' || item.displayStatus === 'Hold' || item.displayStatus === 'Sell' ? (
@@ -975,7 +976,7 @@ export default function PipelineResearchPage() {
                     <p className="text-[10px] text-muted-foreground uppercase">Link da Análise</p>
                     {drawerAnalise.link_analise ? (
                       <a
-                        href={drawerAnalise.link_analise}
+                        href={safeHref(drawerAnalise.link_analise)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1 break-all"
