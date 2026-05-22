@@ -748,7 +748,7 @@ export default function AssembleiasPage() {
                   </div>
                 )}
                 <Separator />
-                {ev.url_b3 && <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Abrir notícia na B3</a>}
+                {ev.url_b3 && <a href={safeHref(ev.url_b3)} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="h-3 w-3" /> Abrir notícia na B3</a>}
                 <ParticipacoesPanel
                   assembleiaId={ev.id}
                   cnpjEmissor={ev.cnpj_emissor ?? ev.cnpj_empresa}
