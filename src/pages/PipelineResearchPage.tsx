@@ -837,7 +837,7 @@ export default function PipelineResearchPage() {
                               </Badge>
                             )}
                             {(item as any).link_analise ? (
-                              <a href={(item as any).link_analise} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
+                              <a href={safeHref((item as any).link_analise)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:opacity-80" title="Abrir link da análise">
                                 <LinkIcon className="h-3 w-3" />
                               </a>
                             ) : item.displayStatus === 'Concluída' || item.displayStatus === 'Buy' || item.displayStatus === 'Hold' || item.displayStatus === 'Sell' ? (
