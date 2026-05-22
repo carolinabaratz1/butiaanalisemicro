@@ -480,7 +480,7 @@ export default function AssembleiasPage() {
                           : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
-                        {ev.url_b3 ? <a href={ev.url_b3} target="_blank" rel="noreferrer" className="text-primary inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a> : <span className="text-muted-foreground text-xs">—</span>}
+                        {ev.url_b3 ? <a href={safeHref(ev.url_b3)} target="_blank" rel="noreferrer" className="text-primary inline-flex"><ExternalLink className="h-3.5 w-3.5" /></a> : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
                       <TableCell className="py-2.5" onClick={e => e.stopPropagation()}>
                         {canWrite && (
