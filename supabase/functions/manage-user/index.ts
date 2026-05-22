@@ -61,8 +61,9 @@ Deno.serve(async (req) => {
     }
 
     if (action === "change-role") {
-      if (!newRole) {
-        return new Response(JSON.stringify({ error: "newRole é obrigatório" }), {
+      const VALID_ROLES = ["Gestor", "Coordenação/Especialista", "Analista", "Risco e Compliance", "Consulta"];
+      if (!newRole || !VALID_ROLES.includes(newRole)) {
+        return new Response(JSON.stringify({ error: "Função inválida" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
