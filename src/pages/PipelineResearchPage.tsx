@@ -976,7 +976,7 @@ export default function PipelineResearchPage() {
                     <p className="text-[10px] text-muted-foreground uppercase">Link da Análise</p>
                     {drawerAnalise.link_analise ? (
                       <a
-                        href={drawerAnalise.link_analise}
+                        href={safeHref(drawerAnalise.link_analise)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1 break-all"
