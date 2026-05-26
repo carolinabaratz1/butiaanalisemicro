@@ -12,6 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { Save, Plus, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   useAllocationLimits, useAllocationTargets, useAllocationTargetPeriods, useAllocationEmissorTargets,
+  useAllocationSetorTargets,
 } from "./useAllocationData";
 import { FUNDOS, FundoKey, fmtPct } from "./allocationUtils";
 
@@ -79,6 +80,7 @@ export function TargetsPanel() {
         <TabsList>
           <TabsTrigger value="tipo">Por Tipo de Ativo</TabsTrigger>
           <TabsTrigger value="emissor">Por Emissor</TabsTrigger>
+          <TabsTrigger value="setor">Por Setor</TabsTrigger>
         </TabsList>
         <TabsContent value="tipo" className="mt-3">
           {pLoading ? <Skeleton className="h-60 w-full" /> : (
@@ -88,6 +90,11 @@ export function TargetsPanel() {
         <TabsContent value="emissor" className="mt-3">
           {pLoading ? <Skeleton className="h-60 w-full" /> : (
             <EmissorTab fundo={fundo} periodId={periodId} editable={editable} />
+          )}
+        </TabsContent>
+        <TabsContent value="setor" className="mt-3">
+          {pLoading ? <Skeleton className="h-60 w-full" /> : (
+            <SetorTab fundo={fundo} periodId={periodId} editable={editable} />
           )}
         </TabsContent>
       </Tabs>
