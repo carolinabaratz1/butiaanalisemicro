@@ -17,7 +17,8 @@ import { AlocacaoPage } from "@/components/alocacao/AlocacaoPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X, Layers } from "lucide-react";
+import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X, Layers, Download } from "lucide-react";
+import { exportTradeAtivos } from "@/lib/tradeExport";
 
 interface TradeMonitorPageProps {
   /** Se passado, abre o monitor já filtrado por este CNPJ (vindo do módulo de emissores) */
@@ -174,6 +175,21 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
 
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => setMode(null)}>
             <ArrowLeftRight className="w-3.5 h-3.5" />Trocar
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 text-xs"
+            disabled={!filteredData.length}
+            title="Baixar dados visíveis em Excel"
+            onClick={() =>
+              exportTradeAtivos(filteredData, mode, view, {
+                fundo: selectedFund,
+                emissorCnpj,
+              })
+            }
+          >
+            <Download className="w-3.5 h-3.5" />Excel
           </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={refresh} disabled={loading}>
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />

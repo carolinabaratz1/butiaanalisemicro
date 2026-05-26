@@ -3,7 +3,8 @@ import { useMemo, useState } from "react";
 import { TradeAtivo, HistoryPoint, NTNBPoint, TradeMode, useTickerDetail } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import type { TradeIntegration } from "@/hooks/useTradeIntegration";
-import { X, ExternalLink, Wallet } from "lucide-react";
+import { X, ExternalLink, Wallet, Download } from "lucide-react";
+import { exportTickerDetail } from "@/lib/tradeExport";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface TradeDetailProps {
@@ -149,9 +150,18 @@ export function TradeDetail({ ticker, data, history, ntnbHist, mode, modeColor, 
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-0.5">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 mt-0.5">
+            <button
+              onClick={() => exportTickerDetail(t, mode, hist)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Baixar este ticker em Excel"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tags */}
