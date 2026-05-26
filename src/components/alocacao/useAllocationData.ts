@@ -214,7 +214,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       const { data: posicoes, error: posErr } = await supabase
         .from("posicoes")
-        .select("isin,product,product_class,amount,financial_price")
+        .select("isin,product,product_class,amount,financial_price,duration_du,yield")
         .eq("trading_desk_share_source", source)
         .eq("val_date", valDate);
       if (posErr) throw posErr;
@@ -234,19 +234,67 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const emissoes = (emissoesRes.data ?? []) as any[];
       const cnpjsNeeded = Array.from(new Set(emissoes.map(e => e.cnpj_emissor).filter(Boolean))) as string[];
       const empresasRes = cnpjsNeeded.length
-        ? await supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating").in("cnpj", cnpjsNeeded)
+        ? await supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating,tipo").in("cnpj", cnpjsNeeded)
         : { data: [] as any };
       const empresas = (empresasRes.data ?? []) as any[];
-      const tickers = Array.from(new Set(emissoes.map(e => e.ticker).filter(Boolean))) as string[];
-      const tradeAtivosRes = tickers.length
-        ? await supabase.from("trade_ativos").select("ticker,sub_indexador").in("ticker", tickers)
+
+      // Buscar TODOS os tickers (em carteira ou não) dos emissores envolvidos
+      const tradeAtivosGrupoRes = cnpjsNeeded.length
+        ? await supabase
+            .from("trade_ativos")
+            .select("ticker,nome_completo,emissor_cnpj,emissor_nome,indexador,sub_indexador,taxa_emissao,venc_date,anos_venc")
+            .in("emissor_cnpj", cnpjsNeeded)
         : { data: [] as any };
-      const tradeAtivos = (tradeAtivosRes.data ?? []) as any[];
+      const tradeAtivosGrupo = (tradeAtivosGrupoRes.data ?? []) as any[];
+
+      // Garantir que tickers vindos da carteira (via emissoes) entrem mesmo se não estiverem em trade_ativos
+      const tickersCarteira = Array.from(new Set(emissoes.map(e => e.ticker).filter(Boolean))) as string[];
+      const allTickersSet = new Set<string>([
+        ...tradeAtivosGrupo.map(t => t.ticker),
+        ...tickersCarteira,
+      ]);
+
+      const tradeMetricasRes = allTickersSet.size
+        ? await supabase
+            .from("trade_metricas")
+            .select("ticker,indexador,last_val,pu_curva,pu_indicativo,ntnb_taxa")
+            .in("ticker", Array.from(allTickersSet))
+        : { data: [] as any };
+      const tradeMetricas = (tradeMetricasRes.data ?? []) as any[];
+      const tickerToMetricas = new Map(tradeMetricas.map(m => [m.ticker, m]));
+
+      // Para tickers da carteira que não vieram em tradeAtivosGrupo (sem cadastro), buscar metadados
+      const missingTickers = tickersCarteira.filter(t => !tradeAtivosGrupo.find(a => a.ticker === t));
+      const tradeAtivosExtraRes = missingTickers.length
+        ? await supabase
+            .from("trade_ativos")
+            .select("ticker,nome_completo,emissor_cnpj,emissor_nome,indexador,sub_indexador,taxa_emissao,venc_date,anos_venc")
+            .in("ticker", missingTickers)
+        : { data: [] as any };
+      const tradeAtivosAll: any[] = [...tradeAtivosGrupo, ...((tradeAtivosExtraRes.data ?? []) as any[])];
+      const tickerToAtivo = new Map(tradeAtivosAll.map(a => [a.ticker, a]));
+      const tickerToSub = new Map(tradeAtivosAll.map(t => [t.ticker, t.sub_indexador]));
+
+      // Análises (última versão por empresa, tipo Crédito Privado)
+      const empresaIds = empresas.map(e => e.cnpj);
+      const analisesRes = empresaIds.length
+        ? await supabase
+            .from("analises")
+            .select("empresa_id,tipo,status,recomendacao,recomendacao_rf,data_aprovacao,data_conclusao,data_comite,prazo,versao,updated_at")
+            .eq("tipo", "Crédito Privado")
+            .in("empresa_id", empresaIds)
+        : { data: [] as any };
+      const analises = (analisesRes.data ?? []) as any[];
+      const latestAnalisePorCnpj = new Map<string, any>();
+      for (const a of analises) {
+        const cur = latestAnalisePorCnpj.get(a.empresa_id);
+        if (!cur || (a.versao ?? 0) > (cur.versao ?? 0)) {
+          latestAnalisePorCnpj.set(a.empresa_id, a);
+        }
+      }
 
       const isinToEmissao = new Map(emissoes.map(e => [e.isin, e]));
-      const tickerToSub = new Map(tradeAtivos.map(t => [t.ticker, t.sub_indexador]));
       const cnpjToEmpresa = new Map(empresas.map(e => [e.cnpj, e]));
-      // Classificação FIDC vinda da emissão: fidc_tipo='Não Padronizado' => NP; senão fidc_classe (Sênior/Mezanino)
       const isinToFidcClasse = new Map<string, FidcClasse>(
         emissoes
           .filter(e => e.fidc_tipo === "Não Padronizado" || e.fidc_classe === "Sênior" || e.fidc_classe === "Mezanino")
@@ -259,6 +307,8 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const porIndexador = new Map<string, AggBucket>();
       const porRating = new Map<string, AggBucket>();
       const grupoMap = new Map<string, IssuerRow>();
+      // ticker -> AtivoInfo (em carteira), por grupo
+      const grupoAtivosCarteira = new Map<string, Map<string, AtivoInfo>>();
       let termoTotal = 0;
 
       const addTo = (map: Map<string, AggBucket>, key: string, value: number) => {
@@ -267,15 +317,44 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         map.set(key, cur);
       };
 
+      const buildAtivo = (
+        ticker: string,
+        emissorNome: string,
+        emissorCnpj: string,
+        inCarteira: boolean,
+        pos?: any,
+      ): AtivoInfo => {
+        const ativo = tickerToAtivo.get(ticker);
+        const m = tickerToMetricas.get(ticker);
+        return {
+          ticker,
+          isin: pos?.isin ?? null,
+          emissorNome,
+          emissorCnpj,
+          inCarteira,
+          indexador: ativo?.indexador ?? null,
+          subIndexador: ativo?.sub_indexador ?? null,
+          taxaEmissao: ativo?.taxa_emissao ?? null,
+          lastSpread: m?.last_val != null ? Number(m.last_val) : null,
+          ntnbTaxa: m?.ntnb_taxa != null ? Number(m.ntnb_taxa) : null,
+          vencDate: ativo?.venc_date ?? null,
+          anosVenc: ativo?.anos_venc != null ? Number(ativo.anos_venc) : null,
+          duration: pos?.duration_du != null ? Number(pos.duration_du) : null,
+          yieldAbs: pos?.yield != null ? Number(pos.yield) : null,
+          pu: m?.pu_indicativo != null ? Number(m.pu_indicativo) : (pos?.financial_price ?? null),
+          puPar: m?.pu_curva != null ? Number(m.pu_curva) : null,
+          quantidade: pos?.amount != null ? Number(pos.amount) : null,
+          posicaoRs: pos?.posicao_rs ?? null,
+        };
+      };
+
       for (const p of positions) {
         const fin = p.posicao_rs;
         let tipo = tipoAtivoFromProduct(p.product, p.product_class);
-        // Cotas de Fundos CP -> classifica via fidc_classes pelo ISIN
         if (tipo === "Cotas de Fundos CP" && p.isin) {
           tipo = fidcTipoFromClasse(isinToFidcClasse.get(p.isin) ?? null);
         }
         addTo(porTipo, tipo, fin);
-        // Agregador "Crédito Privado"
         if (CREDITO_PRIVADO_TIPOS.has(tipo)) {
           addTo(porTipo, "Crédito Privado", fin);
         }
@@ -286,11 +365,9 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         addTo(porIndexador, indexLabel, fin);
 
         const empresa = emissao?.cnpj_emissor ? cnpjToEmpresa.get(emissao.cnpj_emissor) : null;
-        // Rating: Termo -> AAA (risco B3)
         const ratingB = isTermo(p.product, p.product_class) ? "AAA" : ratingBucket(empresa?.rating);
         addTo(porRating, ratingB, fin);
 
-        // Termo: não listar como emissor, agregar em linha resumo
         if (isTermo(p.product, p.product_class)) {
           termoTotal += fin;
           continue;
@@ -317,6 +394,19 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
               isSoberano,
             });
           }
+
+          // Coleta ativo em carteira
+          if (emissao?.ticker) {
+            let map = grupoAtivosCarteira.get(grupoKey);
+            if (!map) { map = new Map(); grupoAtivosCarteira.set(grupoKey, map); }
+            const existingAtivo = map.get(emissao.ticker);
+            if (existingAtivo) {
+              existingAtivo.quantidade = (existingAtivo.quantidade ?? 0) + (Number(p.amount) || 0);
+              existingAtivo.posicaoRs = (existingAtivo.posicaoRs ?? 0) + fin;
+            } else {
+              map.set(emissao.ticker, buildAtivo(emissao.ticker, empresa.nome, empresa.cnpj, true, p));
+            }
+          }
         }
       }
 
@@ -325,13 +415,49 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       };
       finalize(porTipo); finalize(porIndexador); finalize(porRating);
 
-      const porGrupo: IssuerRow[] = Array.from(grupoMap.values()).map(g => ({
-        ...g,
-        pct: totalFundo > 0 ? (g.total / totalFundo) * 100 : 0,
-        ratingBucket: g.isSoberano ? "AAA" : worstRating(g.emissores.map(e => ratingBucket(e.rating))),
-      })).sort((a, b) => b.pct - a.pct);
+      // CNPJ -> grupoKey
+      const cnpjToGrupo = new Map<string, string>();
+      for (const [grupoKey, row] of grupoMap.entries()) {
+        for (const e of row.emissores) cnpjToGrupo.set(e.cnpj, grupoKey);
+      }
 
-      // Linha resumo de Termo
+      const porGrupo: IssuerRow[] = Array.from(grupoMap.values()).map(g => {
+        const ativosCarteiraMap = grupoAtivosCarteira.get(g.grupo) ?? new Map<string, AtivoInfo>();
+        const ativosCarteira = Array.from(ativosCarteiraMap.values());
+
+        // Tickers extras do grupo (não em carteira) via trade_ativos por cnpj
+        const tickersDoGrupo = tradeAtivosGrupo.filter(a => a.emissor_cnpj && cnpjToGrupo.get(a.emissor_cnpj) === g.grupo);
+        const extras: AtivoInfo[] = [];
+        for (const a of tickersDoGrupo) {
+          if (ativosCarteiraMap.has(a.ticker)) continue;
+          const emp = cnpjToEmpresa.get(a.emissor_cnpj);
+          extras.push(buildAtivo(a.ticker, emp?.nome ?? a.emissor_nome ?? "—", a.emissor_cnpj, false));
+        }
+
+        const ativos = [...ativosCarteira, ...extras].sort((x, y) => {
+          if (x.inCarteira !== y.inCarteira) return x.inCarteira ? -1 : 1;
+          return x.ticker.localeCompare(y.ticker);
+        });
+
+        // Status: usa a análise mais recente entre os emissores do grupo
+        let statusAnalise: string | null = null;
+        for (const e of g.emissores) {
+          const an = latestAnalisePorCnpj.get(e.cnpj);
+          if (!an) continue;
+          const emp = cnpjToEmpresa.get(e.cnpj);
+          const s = getDisplayStatus(an, emp?.tipo);
+          if (s) { statusAnalise = s; break; }
+        }
+
+        return {
+          ...g,
+          pct: totalFundo > 0 ? (g.total / totalFundo) * 100 : 0,
+          ratingBucket: g.isSoberano ? "AAA" : worstRating(g.emissores.map(e => ratingBucket(e.rating))),
+          ativos,
+          statusAnalise,
+        };
+      }).sort((a, b) => b.pct - a.pct);
+
       if (termoTotal > 0) {
         porGrupo.push({
           grupo: "Termo (B3)",
