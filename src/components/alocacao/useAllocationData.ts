@@ -248,7 +248,8 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       if (!valDate) {
         return {
           loading: false, valDate: null, totalFundo: 0,
-          porTipo: new Map(), porIndexador: new Map(), porRating: new Map(), porGrupo: [],
+          porTipo: new Map(), porIndexador: new Map(), porRating: new Map(), porSetor: new Map(), porGrupo: [],
+          breakdownPorTipo: new Map(), breakdownPorIndexador: new Map(), breakdownPorRating: new Map(), breakdownPorSetor: new Map(),
         };
       }
 
