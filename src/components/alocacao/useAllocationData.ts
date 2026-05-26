@@ -149,25 +149,22 @@ export interface AllocationData {
   porGrupo: IssuerRow[];
 }
 
+async function fetchFundDates(source: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc(
+    "get_posicoes_val_dates_by_source" as any,
+    { p_source: source }
+  );
+  if (error) throw error;
+  return ((data as any[]) ?? [])
+    .map((r) => r.val_date_text as string)
+    .filter(Boolean);
+}
+
 export function useAllocationDates(fundo: FundoKey) {
   const source = sourceFromFundo(fundo);
   return useQuery({
     queryKey: ["alocacao-dates", fundo],
-    queryFn: async (): Promise<string[]> => {
-      const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
-      if (error) throw error;
-      const allDates = ((data as any[]) ?? [])
-        .map((r) => r.val_date_text as string)
-        .filter(Boolean);
-      if (allDates.length === 0) return [];
-      const { data: fundDates } = await supabase
-        .from("posicoes")
-        .select("val_date")
-        .eq("trading_desk_share_source", source)
-        .limit(10000);
-      const fundSet = new Set(((fundDates as any[]) ?? []).map((r) => r.val_date));
-      return allDates.filter((d) => fundSet.has(d));
-    },
+    queryFn: async (): Promise<string[]> => fetchFundDates(source),
   });
 }
 
@@ -179,23 +176,10 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       let valDate: string | null = valDateOverride ?? null;
       if (!valDate) {
-        const { data: fundDates } = await supabase
-          .from("posicoes")
-          .select("val_date")
-          .eq("trading_desk_share_source", source)
-          .limit(10000);
-        const uniq = Array.from(new Set(((fundDates as any[]) ?? []).map((r) => r.val_date).filter(Boolean))) as string[];
-        const parseDate = (s: string): number => {
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-            const [y, m, d] = s.split("-").map(Number);
-            return new Date(y, (m || 1) - 1, d || 1).getTime();
-          }
-          const [m, d, y] = s.split("/").map(Number);
-          return new Date(y, (m || 1) - 1, d || 1).getTime();
-        };
-        uniq.sort((a, b) => parseDate(b) - parseDate(a));
-        valDate = uniq[0] ?? null;
+        const dates = await fetchFundDates(source);
+        valDate = dates[0] ?? null;
       }
+
 
       if (!valDate) {
         return {
