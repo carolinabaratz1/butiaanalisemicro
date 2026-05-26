@@ -176,6 +176,21 @@ export function TradeMonitorPage({ emissorCnpj, initialTicker }: TradeMonitorPag
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => setMode(null)}>
             <ArrowLeftRight className="w-3.5 h-3.5" />Trocar
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 text-xs"
+            disabled={!filteredData.length}
+            title="Baixar dados visíveis em Excel"
+            onClick={() =>
+              exportTradeAtivos(filteredData, mode, view, {
+                fundo: selectedFund,
+                emissorCnpj,
+              })
+            }
+          >
+            <Download className="w-3.5 h-3.5" />Excel
+          </Button>
           <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={refresh} disabled={loading}>
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
