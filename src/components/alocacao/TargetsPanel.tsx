@@ -494,3 +494,158 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
     </div>
   );
 }
+
+const DEFAULT_SETOR_LIMIT = 20;
+
+function SetorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: string | null; editable: boolean }) {
+  const { currentUser } = useAuth();
+  const qc = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [limDrafts, setLimDrafts] = useState<Record<string, string>>({});
+  const [sortKey, setSortKey] = useState<"setor" | "target" | "limite">("setor");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir(k === "setor" ? "asc" : "desc"); }
+  };
+  const SortIcon = ({ k }: { k: typeof sortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="w-3 h-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="w-3 h-3 inline ml-1" /> : <ArrowDown className="w-3 h-3 inline ml-1" />;
+  };
+
+  const { data: setores = [] } = useQuery({
+    queryKey: ["empresas-setores-distinct"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("empresas").select("setor").not("setor", "is", null);
+      if (error) throw error;
+      const set = new Set<string>();
+      for (const r of (data ?? []) as any[]) if (r.setor) set.add(r.setor.trim());
+      set.add("FIDC"); set.add("Título Público"); set.add("Sem Setor");
+      return Array.from(set).sort();
+    },
+  });
+  const { data: setorTargets = [] } = useAllocationSetorTargets(periodId, fundo);
+
+  const mapByKey = useMemo(() => {
+    const m = new Map<string, { target: number | null; limite: number | null }>();
+    for (const t of setorTargets) m.set(t.setor, { target: t.target_pct, limite: t.limite_pct });
+    return m;
+  }, [setorTargets]);
+
+  useEffect(() => {
+    const t: Record<string, string> = {};
+    const l: Record<string, string> = {};
+    for (const s of setores) {
+      const v = mapByKey.get(s);
+      t[s] = v?.target == null ? "" : String(v.target);
+      l[s] = v?.limite == null ? "" : String(v.limite);
+    }
+    setTargetDrafts(t);
+    setLimDrafts(l);
+  }, [setores, setorTargets, periodId]);
+
+  const parseNum = (s: string | undefined): number | null => {
+    if (s == null || s.trim() === "") return null;
+    const v = Number(s.replace(",", "."));
+    return isNaN(v) ? null : v;
+  };
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q ? setores.filter(s => s.toLowerCase().includes(q)) : setores;
+    const arr = [...list];
+    arr.sort((a, b) => {
+      let av: any, bv: any;
+      switch (sortKey) {
+        case "setor": av = a; bv = b; break;
+        case "target": av = parseNum(targetDrafts[a]) ?? -Infinity; bv = parseNum(targetDrafts[b]) ?? -Infinity; break;
+        case "limite": av = parseNum(limDrafts[a]) ?? -Infinity; bv = parseNum(limDrafts[b]) ?? -Infinity; break;
+      }
+      if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortDir === "asc" ? (av - bv) : (bv - av);
+    });
+    return arr;
+  }, [setores, search, sortKey, sortDir, targetDrafts, limDrafts]);
+
+  async function saveOne(setor: string, tRaw: string, lRaw: string) {
+    if (!editable || !periodId) return;
+    const t = parseNum(tRaw);
+    const l = parseNum(lRaw);
+    for (const v of [t, l]) {
+      if (v != null && (isNaN(v) || v < 0 || v > 999)) {
+        toast({ title: "Valor inválido", variant: "destructive" });
+        throw new Error("invalid");
+      }
+    }
+    const payload = { period_id: periodId, fundo, setor, target_pct: t, limite_pct: l, updated_by: currentUser?.id };
+    const { error } = await supabase
+      .from("allocation_targets_setor" as any)
+      .upsert(payload, { onConflict: "period_id,fundo,setor" } as any);
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+      throw error;
+    }
+    qc.invalidateQueries({ queryKey: ["allocation_targets_setor"] });
+  }
+
+  if (!periodId) return <div className="text-sm text-muted-foreground p-4">Nenhum período disponível.</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Filtrar setor..." value={search} onChange={e => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
+        </div>
+        <span className="text-xs text-muted-foreground">{filtered.length} setores · padrão {DEFAULT_SETOR_LIMIT}%</span>
+      </div>
+      <div className="border rounded-lg overflow-x-auto max-h-[60vh] overflow-y-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("setor")}>Setor<SortIcon k="setor" /></TableHead>
+              <TableHead className="text-right w-[140px] cursor-pointer select-none" onClick={() => toggleSort("target")}>Target %<SortIcon k="target" /></TableHead>
+              <TableHead className="text-right w-[160px] cursor-pointer select-none" onClick={() => toggleSort("limite")}>Limite %<SortIcon k="limite" /></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.map(s => (
+              <TableRow key={s}>
+                <TableCell className="font-medium">{s}</TableCell>
+                <TableCell className="text-right">
+                  <Input
+                    type="text"
+                    value={targetDrafts[s] ?? ""}
+                    disabled={!editable}
+                    className="h-8 text-right font-mono w-24 ml-auto"
+                    onChange={(ev) => setTargetDrafts(d => ({ ...d, [s]: ev.target.value }))}
+                    onBlur={(ev) => { saveOne(s, ev.target.value, limDrafts[s] ?? "").catch(() => {}); }}
+                    onKeyDown={(ev) => { if (ev.key === "Enter") (ev.target as HTMLInputElement).blur(); }}
+                    placeholder="—"
+                  />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Input
+                    type="text"
+                    value={limDrafts[s] ?? ""}
+                    disabled={!editable}
+                    className="h-8 text-right font-mono w-24 ml-auto"
+                    onChange={(ev) => setLimDrafts(d => ({ ...d, [s]: ev.target.value }))}
+                    onBlur={(ev) => { saveOne(s, targetDrafts[s] ?? "", ev.target.value).catch(() => {}); }}
+                    onKeyDown={(ev) => { if (ev.key === "Enter") (ev.target as HTMLInputElement).blur(); }}
+                    placeholder={String(DEFAULT_SETOR_LIMIT)}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+            {filtered.length === 0 && (
+              <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground text-sm py-6">Nenhum setor.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
