@@ -163,6 +163,13 @@ export interface IssuerRow {
   ativos?: AtivoInfo[];
 }
 
+export interface AtivoBreakdown {
+  ticker: string;
+  emissor: string;
+  posicaoRs: number;
+  pct: number;
+}
+
 export interface AllocationData {
   loading: boolean;
   valDate: string | null;
@@ -170,7 +177,40 @@ export interface AllocationData {
   porTipo: Map<string, AggBucket>;
   porIndexador: Map<string, AggBucket>;
   porRating: Map<string, AggBucket>;
+  porSetor: Map<string, AggBucket>;
   porGrupo: IssuerRow[];
+  breakdownPorTipo: Map<string, AtivoBreakdown[]>;
+  breakdownPorIndexador: Map<string, AtivoBreakdown[]>;
+  breakdownPorRating: Map<string, AtivoBreakdown[]>;
+  breakdownPorSetor: Map<string, AtivoBreakdown[]>;
+}
+
+export interface SetorTargetRow {
+  id?: string;
+  period_id: string;
+  fundo: string;
+  setor: string;
+  target_pct: number | null;
+  limite_pct: number | null;
+  updated_at?: string;
+}
+
+export function useAllocationSetorTargets(periodId?: string | null, fundo?: FundoKey) {
+  return useQuery({
+    queryKey: ["allocation_targets_setor", periodId ?? "none", fundo ?? "all"],
+    queryFn: async (): Promise<SetorTargetRow[]> => {
+      if (!periodId) return [];
+      let q: any = supabase
+        .from("allocation_targets_setor" as any)
+        .select("id,period_id,fundo,setor,target_pct,limite_pct,updated_at")
+        .eq("period_id", periodId);
+      if (fundo) q = q.eq("fundo", fundo);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+    enabled: !!periodId,
+  });
 }
 
 async function fetchFundDates(source: string): Promise<string[]> {
