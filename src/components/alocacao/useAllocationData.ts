@@ -373,29 +373,52 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           continue;
         }
 
-        if (empresa) {
-          const isSoberano = isTesouroNacional(empresa.nome) || isTesouroNacional(empresa.grupo_economico);
-          const grupoKey = isSoberano
+        // Overnight / Compromissadas / LFT (Tesouro) — agregar sob Tesouro Nacional
+        const prodLc = (p.product || "").toLowerCase();
+        const classLc = (p.product_class || "").toLowerCase();
+        const isOvernightOrTesouro =
+          prodLc.includes("overnight") || classLc.includes("overnight") ||
+          prodLc.includes("compromiss") || classLc.includes("compromiss") ||
+          prodLc.includes("lft") || prodLc.includes("ltn") || prodLc.includes("ntn");
+
+        let empresaEff = empresa;
+        let isSoberanoEff = !!empresa && (isTesouroNacional(empresa.nome) || isTesouroNacional(empresa.grupo_economico));
+        if (!empresaEff && isOvernightOrTesouro) {
+          // Sintetiza emissor Tesouro Nacional para garantir agregação no grupo
+          empresaEff = cnpjToEmpresa.get("00.000.000/0001-91") || {
+            id: null,
+            cnpj: "00.000.000/0001-91",
+            nome: "TESOURO NACIONAL",
+            grupo_economico: "Tesouro Nacional",
+            rating: "AAA",
+          } as any;
+          isSoberanoEff = true;
+        } else if (empresaEff && isOvernightOrTesouro) {
+          isSoberanoEff = true;
+        }
+
+        if (empresaEff) {
+          const grupoKey = isSoberanoEff
             ? "Tesouro Nacional"
-            : (empresa.grupo_economico?.trim() || empresa.nome);
+            : (empresaEff.grupo_economico?.trim() || empresaEff.nome);
           const existing = grupoMap.get(grupoKey);
           if (existing) {
             existing.total += fin;
-            if (!existing.emissores.find(e => e.cnpj === empresa.cnpj)) {
-              existing.emissores.push({ nome: empresa.nome, cnpj: empresa.cnpj, empresaId: empresa.id, rating: empresa.rating });
+            if (!existing.emissores.find(e => e.cnpj === empresaEff!.cnpj)) {
+              existing.emissores.push({ nome: empresaEff!.nome, cnpj: empresaEff!.cnpj, empresaId: empresaEff!.id, rating: empresaEff!.rating });
             }
           } else {
             grupoMap.set(grupoKey, {
               grupo: grupoKey,
-              emissores: [{ nome: empresa.nome, cnpj: empresa.cnpj, empresaId: empresa.id, rating: empresa.rating }],
-              ratingBucket: isSoberano ? "AAA" : ratingB,
+              emissores: [{ nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating }],
+              ratingBucket: isSoberanoEff ? "AAA" : ratingB,
               total: fin,
               pct: 0,
-              isSoberano,
+              isSoberano: isSoberanoEff,
             });
           }
 
-          // Coleta ativo em carteira
+          // Coleta ativo em carteira (quando há ticker)
           if (emissao?.ticker) {
             let map = grupoAtivosCarteira.get(grupoKey);
             if (!map) { map = new Map(); grupoAtivosCarteira.set(grupoKey, map); }
@@ -404,11 +427,12 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
               existingAtivo.quantidade = (existingAtivo.quantidade ?? 0) + (Number(p.amount) || 0);
               existingAtivo.posicaoRs = (existingAtivo.posicaoRs ?? 0) + fin;
             } else {
-              map.set(emissao.ticker, buildAtivo(emissao.ticker, empresa.nome, empresa.cnpj, true, p));
+              map.set(emissao.ticker, buildAtivo(emissao.ticker, empresaEff.nome, empresaEff.cnpj, true, p));
             }
           }
         }
       }
+
 
       const finalize = (map: Map<string, AggBucket>) => {
         for (const v of map.values()) v.pct = totalFundo > 0 ? (v.total / totalFundo) * 100 : 0;
