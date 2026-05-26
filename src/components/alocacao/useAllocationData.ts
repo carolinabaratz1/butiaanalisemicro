@@ -593,7 +593,14 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         });
       }
 
-      return { loading: false, valDate, totalFundo, porTipo, porIndexador, porRating, porGrupo };
+      return {
+        loading: false, valDate, totalFundo,
+        porTipo, porIndexador, porRating, porSetor, porGrupo,
+        breakdownPorTipo: breakdownTipoOut,
+        breakdownPorIndexador: breakdownIndexOut,
+        breakdownPorRating: breakdownRatingOut,
+        breakdownPorSetor: breakdownSetorOut,
+      };
     },
   });
 }
