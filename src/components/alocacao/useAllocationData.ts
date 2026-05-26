@@ -163,6 +163,13 @@ export interface IssuerRow {
   ativos?: AtivoInfo[];
 }
 
+export interface AtivoBreakdown {
+  ticker: string;
+  emissor: string;
+  posicaoRs: number;
+  pct: number;
+}
+
 export interface AllocationData {
   loading: boolean;
   valDate: string | null;
@@ -170,7 +177,40 @@ export interface AllocationData {
   porTipo: Map<string, AggBucket>;
   porIndexador: Map<string, AggBucket>;
   porRating: Map<string, AggBucket>;
+  porSetor: Map<string, AggBucket>;
   porGrupo: IssuerRow[];
+  breakdownPorTipo: Map<string, AtivoBreakdown[]>;
+  breakdownPorIndexador: Map<string, AtivoBreakdown[]>;
+  breakdownPorRating: Map<string, AtivoBreakdown[]>;
+  breakdownPorSetor: Map<string, AtivoBreakdown[]>;
+}
+
+export interface SetorTargetRow {
+  id?: string;
+  period_id: string;
+  fundo: string;
+  setor: string;
+  target_pct: number | null;
+  limite_pct: number | null;
+  updated_at?: string;
+}
+
+export function useAllocationSetorTargets(periodId?: string | null, fundo?: FundoKey) {
+  return useQuery({
+    queryKey: ["allocation_targets_setor", periodId ?? "none", fundo ?? "all"],
+    queryFn: async (): Promise<SetorTargetRow[]> => {
+      if (!periodId) return [];
+      let q: any = supabase
+        .from("allocation_targets_setor" as any)
+        .select("id,period_id,fundo,setor,target_pct,limite_pct,updated_at")
+        .eq("period_id", periodId);
+      if (fundo) q = q.eq("fundo", fundo);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as any;
+    },
+    enabled: !!periodId,
+  });
 }
 
 async function fetchFundDates(source: string): Promise<string[]> {
@@ -208,7 +248,8 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       if (!valDate) {
         return {
           loading: false, valDate: null, totalFundo: 0,
-          porTipo: new Map(), porIndexador: new Map(), porRating: new Map(), porGrupo: [],
+          porTipo: new Map(), porIndexador: new Map(), porRating: new Map(), porSetor: new Map(), porGrupo: [],
+          breakdownPorTipo: new Map(), breakdownPorIndexador: new Map(), breakdownPorRating: new Map(), breakdownPorSetor: new Map(),
         };
       }
 
@@ -306,10 +347,31 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const porTipo = new Map<string, AggBucket>();
       const porIndexador = new Map<string, AggBucket>();
       const porRating = new Map<string, AggBucket>();
+      const porSetor = new Map<string, AggBucket>();
       const grupoMap = new Map<string, IssuerRow>();
       // ticker -> AtivoInfo (em carteira), por grupo
       const grupoAtivosCarteira = new Map<string, Map<string, AtivoInfo>>();
+      // breakdown: categoria_key -> ticker -> AtivoBreakdown (acumulado)
+      const breakdownPorTipo = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorIndexador = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorRating = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorSetor = new Map<string, Map<string, AtivoBreakdown>>();
       let termoTotal = 0;
+
+      const addBreakdown = (
+        map: Map<string, Map<string, AtivoBreakdown>>,
+        key: string,
+        ticker: string,
+        emissor: string,
+        value: number,
+      ) => {
+        let inner = map.get(key);
+        if (!inner) { inner = new Map(); map.set(key, inner); }
+        const id = ticker || `(sem ticker) ${emissor}`;
+        const cur = inner.get(id);
+        if (cur) cur.posicaoRs += value;
+        else inner.set(id, { ticker: id, emissor, posicaoRs: value, pct: 0 });
+      };
 
       const addTo = (map: Map<string, AggBucket>, key: string, value: number) => {
         const cur = map.get(key) ?? { key, total: 0, pct: 0 };
@@ -370,6 +432,12 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
         if (isTermo(p.product, p.product_class)) {
           termoTotal += fin;
+          const tk = emissao?.ticker || "(Termo)";
+          const em = empresa?.nome || "Termo (B3)";
+          addBreakdown(breakdownPorTipo, tipo, tk, em, fin);
+          if (CREDITO_PRIVADO_TIPOS.has(tipo)) addBreakdown(breakdownPorTipo, "Crédito Privado", tk, em, fin);
+          addBreakdown(breakdownPorIndexador, indexLabel, tk, em, fin);
+          addBreakdown(breakdownPorRating, ratingB, tk, em, fin);
           continue;
         }
 
@@ -391,11 +459,28 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
             nome: "TESOURO NACIONAL",
             grupo_economico: "Tesouro Nacional",
             rating: "AAA",
+            setor: "Título Público",
           } as any;
           isSoberanoEff = true;
         } else if (empresaEff && isOvernightOrTesouro) {
           isSoberanoEff = true;
         }
+
+        // Determinar setor
+        let setorKey: string;
+        if (isSoberanoEff) setorKey = "Título Público";
+        else if (tipo === "FIDC Cota Sênior" || tipo === "FIDC Mezanino" || tipo === "FIDC NP" || tipo === "Cotas de Fundos CP") setorKey = "FIDC";
+        else setorKey = (empresaEff as any)?.setor?.trim() || "Sem Setor";
+        addTo(porSetor, setorKey, fin);
+
+        // Breakdown por categoria
+        const tickerKey = emissao?.ticker || "(sem ticker)";
+        const emissorNome = empresaEff?.nome || "—";
+        addBreakdown(breakdownPorTipo, tipo, tickerKey, emissorNome, fin);
+        if (CREDITO_PRIVADO_TIPOS.has(tipo)) addBreakdown(breakdownPorTipo, "Crédito Privado", tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorIndexador, indexLabel, tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorRating, ratingB, tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorSetor, setorKey, tickerKey, emissorNome, fin);
 
         if (empresaEff) {
           const grupoKey = isSoberanoEff
@@ -437,7 +522,22 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const finalize = (map: Map<string, AggBucket>) => {
         for (const v of map.values()) v.pct = totalFundo > 0 ? (v.total / totalFundo) * 100 : 0;
       };
-      finalize(porTipo); finalize(porIndexador); finalize(porRating);
+      finalize(porTipo); finalize(porIndexador); finalize(porRating); finalize(porSetor);
+
+      const finalizeBreakdown = (m: Map<string, Map<string, AtivoBreakdown>>) => {
+        const out = new Map<string, AtivoBreakdown[]>();
+        for (const [k, inner] of m.entries()) {
+          const arr = Array.from(inner.values())
+            .map(a => ({ ...a, pct: totalFundo > 0 ? (a.posicaoRs / totalFundo) * 100 : 0 }))
+            .sort((a, b) => b.posicaoRs - a.posicaoRs);
+          out.set(k, arr);
+        }
+        return out;
+      };
+      const breakdownTipoOut = finalizeBreakdown(breakdownPorTipo);
+      const breakdownIndexOut = finalizeBreakdown(breakdownPorIndexador);
+      const breakdownRatingOut = finalizeBreakdown(breakdownPorRating);
+      const breakdownSetorOut = finalizeBreakdown(breakdownPorSetor);
 
       // CNPJ -> grupoKey
       const cnpjToGrupo = new Map<string, string>();
@@ -493,7 +593,14 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         });
       }
 
-      return { loading: false, valDate, totalFundo, porTipo, porIndexador, porRating, porGrupo };
+      return {
+        loading: false, valDate, totalFundo,
+        porTipo, porIndexador, porRating, porSetor, porGrupo,
+        breakdownPorTipo: breakdownTipoOut,
+        breakdownPorIndexador: breakdownIndexOut,
+        breakdownPorRating: breakdownRatingOut,
+        breakdownPorSetor: breakdownSetorOut,
+      };
     },
   });
 }

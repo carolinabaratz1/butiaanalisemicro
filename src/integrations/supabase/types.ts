@@ -165,6 +165,50 @@ export type Database = {
           },
         ]
       }
+      allocation_targets_setor: {
+        Row: {
+          created_at: string
+          fundo: string
+          id: string
+          limite_pct: number | null
+          period_id: string
+          setor: string
+          target_pct: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          fundo: string
+          id?: string
+          limite_pct?: number | null
+          period_id: string
+          setor: string
+          target_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          fundo?: string
+          id?: string
+          limite_pct?: number | null
+          period_id?: string
+          setor?: string
+          target_pct?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "allocation_targets_setor_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "allocation_target_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analises: {
         Row: {
           analista_responsavel: string
