@@ -3,7 +3,8 @@ import { useMemo, useState } from "react";
 import { TradeAtivo, HistoryPoint, NTNBPoint, TradeMode, useTickerDetail } from "@/hooks/useTradeData";
 import { useChartTheme } from "@/hooks/useChartTheme";
 import type { TradeIntegration } from "@/hooks/useTradeIntegration";
-import { X, ExternalLink, Wallet } from "lucide-react";
+import { X, ExternalLink, Wallet, Download } from "lucide-react";
+import { exportTickerDetail } from "@/lib/tradeExport";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface TradeDetailProps {
