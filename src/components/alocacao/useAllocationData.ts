@@ -129,6 +129,27 @@ export interface AggBucket {
   pct: number;
 }
 
+export interface AtivoInfo {
+  ticker: string;
+  isin: string | null;
+  emissorNome: string;
+  emissorCnpj: string;
+  inCarteira: boolean;
+  indexador: string | null;
+  subIndexador: string | null;
+  taxaEmissao: string | null;
+  lastSpread: number | null;
+  ntnbTaxa: number | null;
+  vencDate: string | null;
+  anosVenc: number | null;
+  duration: number | null;
+  yieldAbs: number | null;
+  pu: number | null;
+  puPar: number | null;
+  quantidade: number | null;
+  posicaoRs: number | null;
+}
+
 export interface IssuerRow {
   grupo: string;
   emissores: { nome: string; cnpj: string; empresaId: string | null; rating: string | null }[];
@@ -137,6 +158,8 @@ export interface IssuerRow {
   pct: number;
   isSoberano?: boolean;
   isTermoSummary?: boolean;
+  statusAnalise?: string | null;
+  ativos?: AtivoInfo[];
 }
 
 export interface AllocationData {
