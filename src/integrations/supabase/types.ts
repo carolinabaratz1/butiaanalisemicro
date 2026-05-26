@@ -1191,6 +1191,13 @@ export type Database = {
           val_date_text: string
         }[]
       }
+      get_posicoes_val_dates_by_source: {
+        Args: { p_source: string }
+        Returns: {
+          val_date_parsed: string
+          val_date_text: string
+        }[]
+      }
       get_profile_names: {
         Args: never
         Returns: {
