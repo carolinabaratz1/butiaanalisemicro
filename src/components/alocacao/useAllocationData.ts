@@ -432,6 +432,12 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
         if (isTermo(p.product, p.product_class)) {
           termoTotal += fin;
+          const tk = emissao?.ticker || "(Termo)";
+          const em = empresa?.nome || "Termo (B3)";
+          addBreakdown(breakdownPorTipo, tipo, tk, em, fin);
+          if (CREDITO_PRIVADO_TIPOS.has(tipo)) addBreakdown(breakdownPorTipo, "Crédito Privado", tk, em, fin);
+          addBreakdown(breakdownPorIndexador, indexLabel, tk, em, fin);
+          addBreakdown(breakdownPorRating, ratingB, tk, em, fin);
           continue;
         }
 
@@ -453,11 +459,28 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
             nome: "TESOURO NACIONAL",
             grupo_economico: "Tesouro Nacional",
             rating: "AAA",
+            setor: "Título Público",
           } as any;
           isSoberanoEff = true;
         } else if (empresaEff && isOvernightOrTesouro) {
           isSoberanoEff = true;
         }
+
+        // Determinar setor
+        let setorKey: string;
+        if (isSoberanoEff) setorKey = "Título Público";
+        else if (tipo === "FIDC Cota Sênior" || tipo === "FIDC Mezanino" || tipo === "FIDC NP" || tipo === "Cotas de Fundos CP") setorKey = "FIDC";
+        else setorKey = (empresaEff as any)?.setor?.trim() || "Sem Setor";
+        addTo(porSetor, setorKey, fin);
+
+        // Breakdown por categoria
+        const tickerKey = emissao?.ticker || "(sem ticker)";
+        const emissorNome = empresaEff?.nome || "—";
+        addBreakdown(breakdownPorTipo, tipo, tickerKey, emissorNome, fin);
+        if (CREDITO_PRIVADO_TIPOS.has(tipo)) addBreakdown(breakdownPorTipo, "Crédito Privado", tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorIndexador, indexLabel, tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorRating, ratingB, tickerKey, emissorNome, fin);
+        addBreakdown(breakdownPorSetor, setorKey, tickerKey, emissorNome, fin);
 
         if (empresaEff) {
           const grupoKey = isSoberanoEff
@@ -499,7 +522,22 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const finalize = (map: Map<string, AggBucket>) => {
         for (const v of map.values()) v.pct = totalFundo > 0 ? (v.total / totalFundo) * 100 : 0;
       };
-      finalize(porTipo); finalize(porIndexador); finalize(porRating);
+      finalize(porTipo); finalize(porIndexador); finalize(porRating); finalize(porSetor);
+
+      const finalizeBreakdown = (m: Map<string, Map<string, AtivoBreakdown>>) => {
+        const out = new Map<string, AtivoBreakdown[]>();
+        for (const [k, inner] of m.entries()) {
+          const arr = Array.from(inner.values())
+            .map(a => ({ ...a, pct: totalFundo > 0 ? (a.posicaoRs / totalFundo) * 100 : 0 }))
+            .sort((a, b) => b.posicaoRs - a.posicaoRs);
+          out.set(k, arr);
+        }
+        return out;
+      };
+      const breakdownTipoOut = finalizeBreakdown(breakdownPorTipo);
+      const breakdownIndexOut = finalizeBreakdown(breakdownPorIndexador);
+      const breakdownRatingOut = finalizeBreakdown(breakdownPorRating);
+      const breakdownSetorOut = finalizeBreakdown(breakdownPorSetor);
 
       // CNPJ -> grupoKey
       const cnpjToGrupo = new Map<string, string>();
