@@ -347,10 +347,31 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
       const porTipo = new Map<string, AggBucket>();
       const porIndexador = new Map<string, AggBucket>();
       const porRating = new Map<string, AggBucket>();
+      const porSetor = new Map<string, AggBucket>();
       const grupoMap = new Map<string, IssuerRow>();
       // ticker -> AtivoInfo (em carteira), por grupo
       const grupoAtivosCarteira = new Map<string, Map<string, AtivoInfo>>();
+      // breakdown: categoria_key -> ticker -> AtivoBreakdown (acumulado)
+      const breakdownPorTipo = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorIndexador = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorRating = new Map<string, Map<string, AtivoBreakdown>>();
+      const breakdownPorSetor = new Map<string, Map<string, AtivoBreakdown>>();
       let termoTotal = 0;
+
+      const addBreakdown = (
+        map: Map<string, Map<string, AtivoBreakdown>>,
+        key: string,
+        ticker: string,
+        emissor: string,
+        value: number,
+      ) => {
+        let inner = map.get(key);
+        if (!inner) { inner = new Map(); map.set(key, inner); }
+        const id = ticker || `(sem ticker) ${emissor}`;
+        const cur = inner.get(id);
+        if (cur) cur.posicaoRs += value;
+        else inner.set(id, { ticker: id, emissor, posicaoRs: value, pct: 0 });
+      };
 
       const addTo = (map: Map<string, AggBucket>, key: string, value: number) => {
         const cur = map.get(key) ?? { key, total: 0, pct: 0 };
