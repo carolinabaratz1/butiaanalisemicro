@@ -17,7 +17,8 @@ import { AlocacaoPage } from "@/components/alocacao/AlocacaoPage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X, Layers } from "lucide-react";
+import { LayoutDashboard, TableIcon, RefreshCw, ArrowLeftRight, Wallet, X, Layers, Download } from "lucide-react";
+import { exportTradeAtivos } from "@/lib/tradeExport";
 
 interface TradeMonitorPageProps {
   /** Se passado, abre o monitor já filtrado por este CNPJ (vindo do módulo de emissores) */
