@@ -5,6 +5,7 @@ import {
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
   fidcTipoFromClasse, FidcClasse,
 } from "./allocationUtils";
+import { getDisplayStatus } from "@/utils/analiseStatus";
 
 export interface FidcClassRow {
   isin: string;
