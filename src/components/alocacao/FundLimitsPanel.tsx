@@ -1,11 +1,14 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
+import { ChevronDown, ArrowDown, ArrowUp, ArrowUpDown, Search, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAllocationLimits, useAllocationData, useAllocationTargetPeriods, useAllocationTargets } from "./useAllocationData";
+import {
+  useAllocationLimits, useAllocationData, useAllocationTargetPeriods, useAllocationTargets,
+  useAllocationSetorTargets, AtivoBreakdown,
+} from "./useAllocationData";
 import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
@@ -18,17 +21,16 @@ const CATEGORIAS: { key: "tipo_ativo" | "indexador" | "rating"; titulo: string }
   { key: "rating", titulo: "Limites por Faixa de Rating" },
 ];
 
+const DEFAULT_SETOR_LIMIT = 20; // %
+
 export function FundLimitsPanel({ fundo, valDate }: Props) {
   const { data: limits = [], isLoading: lLoading } = useAllocationLimits();
   const { data: agg, isLoading: aLoading } = useAllocationData(fundo, valDate ?? null);
   const { data: periods = [] } = useAllocationTargetPeriods(fundo);
   const activePeriod = periods.find(p => p.ativo) ?? null;
   const { data: periodTargets = [] } = useAllocationTargets(activePeriod?.id ?? null);
+  const { data: setorTargets = [] } = useAllocationSetorTargets(activePeriod?.id ?? null, fundo);
 
-  // Para cada tipo_ativo do fundo no período ativo:
-  //  - se houver target_pct definido, ele vira o limite efetivo
-  //  - senão, se houver limite_pct (override gerencial), usa esse
-  //  - senão, usa o limite preestabelecido em allocation_limits
   const overrideByTipo = useMemo(() => {
     const m = new Map<string, number | null>();
     for (const t of periodTargets) {
@@ -58,6 +60,22 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
     return m;
   }, [limits, fundo, overrideByTipo]);
 
+  // Linhas para Setor: união entre setores presentes nas posições e setores com limite definido
+  const setorRows = useMemo(() => {
+    const limMap = new Map<string, number | null>();
+    for (const t of setorTargets) {
+      const v = t.limite_pct ?? t.target_pct;
+      limMap.set(t.setor, v);
+    }
+    const keys = new Set<string>();
+    for (const k of limMap.keys()) keys.add(k);
+    if (agg?.porSetor) for (const k of agg.porSetor.keys()) keys.add(k);
+    return Array.from(keys).sort().map(k => ({
+      sub: k,
+      lim: limMap.has(k) ? limMap.get(k)! : DEFAULT_SETOR_LIMIT,
+    }));
+  }, [setorTargets, agg]);
+
   if (lLoading) return <Skeleton className="h-40 w-full" />;
 
   const hasData = (agg?.totalFundo ?? 0) > 0;
@@ -74,7 +92,6 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
           rows={limitsByCat[key] ?? []}
           getPct={(sub) => {
             const map = key === "tipo_ativo" ? agg?.porTipo : key === "indexador" ? agg?.porIndexador : agg?.porRating;
-            // Caixa Mínimo exibe a soma de Título Público (Caixa Mínimo) + Compromissadas (Overnight)
             if (key === "tipo_ativo" && sub === "Caixa Mínimo") {
               const a = agg?.porTipo?.get("Caixa Mínimo")?.pct ?? 0;
               const b = agg?.porTipo?.get("Compromissadas (Overnight)")?.pct ?? 0;
@@ -82,11 +99,29 @@ export function FundLimitsPanel({ fundo, valDate }: Props) {
             }
             return map?.get(sub)?.pct ?? 0;
           }}
+          getAtivos={(sub) => {
+            const map = key === "tipo_ativo" ? agg?.breakdownPorTipo : key === "indexador" ? agg?.breakdownPorIndexador : agg?.breakdownPorRating;
+            if (key === "tipo_ativo" && sub === "Caixa Mínimo") {
+              const a = agg?.breakdownPorTipo?.get("Caixa Mínimo") ?? [];
+              const b = agg?.breakdownPorTipo?.get("Compromissadas (Overnight)") ?? [];
+              return [...a, ...b];
+            }
+            return map?.get(sub) ?? [];
+          }}
           hasData={hasData}
           loading={aLoading}
           pinFirst={key === "tipo_ativo" ? "Crédito Privado" : null}
         />
       ))}
+      <CategoryPanel
+        titulo="Limites por Setor (20% padrão)"
+        rows={setorRows}
+        getPct={(sub) => agg?.porSetor?.get(sub)?.pct ?? 0}
+        getAtivos={(sub) => agg?.breakdownPorSetor?.get(sub) ?? []}
+        hasData={hasData}
+        loading={aLoading}
+        pinFirst={null}
+      />
     </div>
   );
 }
@@ -95,11 +130,12 @@ type SortKey = "sub" | "lim" | "pos" | "headroom" | "status";
 type SortDir = "asc" | "desc";
 
 function CategoryPanel({
-  titulo, rows, getPct, hasData, loading, pinFirst,
+  titulo, rows, getPct, getAtivos, hasData, loading, pinFirst,
 }: {
   titulo: string;
   rows: { sub: string; lim: number | null }[];
   getPct: (sub: string) => number;
+  getAtivos: (sub: string) => AtivoBreakdown[];
   hasData: boolean;
   loading: boolean;
   pinFirst: string | null;
@@ -108,6 +144,15 @@ function CategoryPanel({
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("sub");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (k: string) => {
+    setExpanded(prev => {
+      const n = new Set(prev);
+      n.has(k) ? n.delete(k) : n.add(k);
+      return n;
+    });
+  };
 
   const enriched = useMemo(() => rows.map(r => {
     const pos = getPct(r.sub);
@@ -177,6 +222,7 @@ function CategoryPanel({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead className="w-1/3 cursor-pointer select-none" onClick={() => toggleSort("sub")}>Categoria<SortIcon k="sub" /></TableHead>
                 <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("lim")}>Limite<SortIcon k="lim" /></TableHead>
                 <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pos")}>Posição Atual<SortIcon k="pos" /></TableHead>
@@ -185,21 +231,73 @@ function CategoryPanel({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map(r => (
-                <TableRow key={r.sub}>
-                  <TableCell className="font-medium">{r.sub}</TableCell>
-                  <TableCell className="text-right font-mono">{fmtPct(r.lim)}</TableCell>
-                  <TableCell className="text-right font-mono">{loading ? "…" : fmtPct(r.pos)}</TableCell>
-                  <TableCell className="text-right font-mono">{fmtPct(r.headroom)}</TableCell>
-                  <TableCell className="text-center">
-                    <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide", STATUS_BADGE_CLASS[r.st])}>
-                      {STATUS_LABEL[r.st]}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sorted.map(r => {
+                const ativos = getAtivos(r.sub);
+                const canExpand = ativos.length > 0;
+                const isExp = expanded.has(r.sub);
+                return (
+                  <Fragment key={r.sub}>
+                    <TableRow>
+                      <TableCell className="w-8 p-1">
+                        {canExpand && (
+                          <button
+                            onClick={() => toggleExpand(r.sub)}
+                            className="p-1 hover:bg-muted rounded"
+                            aria-label={isExp ? "Recolher" : "Expandir"}
+                          >
+                            {isExp ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{r.sub}</TableCell>
+                      <TableCell className="text-right font-mono">{fmtPct(r.lim)}</TableCell>
+                      <TableCell className="text-right font-mono">{loading ? "…" : fmtPct(r.pos)}</TableCell>
+                      <TableCell className="text-right font-mono">{fmtPct(r.headroom)}</TableCell>
+                      <TableCell className="text-center">
+                        <span className={cn("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide", STATUS_BADGE_CLASS[r.st])}>
+                          {STATUS_LABEL[r.st]}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                    {isExp && canExpand && (
+                      <TableRow className="bg-muted/20 hover:bg-muted/20">
+                        <TableCell />
+                        <TableCell colSpan={5} className="p-3">
+                          <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">
+                            Ativos que compõem ({ativos.length})
+                          </div>
+                          <div className="border rounded bg-background">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-[10px] uppercase">Ticker</TableHead>
+                                  <TableHead className="text-[10px] uppercase">Emissor</TableHead>
+                                  <TableHead className="text-right text-[10px] uppercase">Posição (R$)</TableHead>
+                                  <TableHead className="text-right text-[10px] uppercase">% do PL</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {ativos.map(a => (
+                                  <TableRow key={a.ticker}>
+                                    <TableCell className="font-mono text-xs font-semibold">{a.ticker}</TableCell>
+                                    <TableCell className="text-xs">{a.emissor}</TableCell>
+                                    <TableCell className="text-right font-mono text-xs">
+                                      {a.posicaoRs.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-xs">{fmtPct(a.pct)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
               {sorted.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground text-sm">Nenhuma linha.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground text-sm">Nenhuma linha.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
