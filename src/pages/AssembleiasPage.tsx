@@ -126,6 +126,8 @@ export default function AssembleiasPage() {
   const [deleteId, setDeleteId] = useState(null as string | null);
   const [form, setForm] = useState(emptyForm());
   const [novoDoc, setNovoDoc] = useState({ nome: '', url: '' });
+  const [isinSearch, setIsinSearch] = useState('');
+  const [empresaSearch, setEmpresaSearch] = useState('');
 
   const { data: eventos = [], isLoading } = useQuery({
     queryKey: ['assembleias'],
