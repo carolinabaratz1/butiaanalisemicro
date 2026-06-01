@@ -476,32 +476,74 @@ export default function PipelineResearchPage() {
   };
 
   const handleComite = () => {
-    if (!comiteModal || !dataComite || !comiteDecisao) return;
-    if (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) return;
+    if (!comiteModal || !dataComite) return;
+    const hasAcoes = comiteModal.hasAcoes;
+    const hasRf = comiteModal.hasRf;
+    const decAcoes = hasAcoes ? comiteDecisaoAcoes : '';
+    const decRf = hasRf ? comiteDecisaoRf : '';
+    const decLegacy = (!hasAcoes && !hasRf) ? comiteDecisao : '';
+
+    // Validação por trilha
+    if (hasAcoes && !decAcoes) return;
+    if (hasRf && !decRf) return;
+    if (!hasAcoes && !hasRf && !decLegacy) return;
+
+    const sells: string[] = [];
+    if (decAcoes === 'Sell') sells.push('AÇ');
+    if (decRf === 'Sell') sells.push('CP');
+    if (decLegacy === 'Sell') sells.push('Geral');
+    if (sells.length > 0 && !comentarioReprovacao.trim()) return;
+
+    // Status consolidado (mais restritivo: Sell > Hold > Buy)
+    const rank: Record<string, number> = { Buy: 1, Hold: 2, Sell: 3 };
+    const candidates = [decAcoes, decRf, decLegacy].filter(Boolean) as string[];
+    const consolidado = candidates.reduce((acc, cur) => (rank[cur] > rank[acc] ? cur : acc), candidates[0]);
+
     const analise = analisesComStatus.find(a => a.id === comiteModal.id);
     const etapaAnterior = analise?.displayStatus || analise?.status || '';
+    const dataComiteStr = format(dataComite, 'yyyy-MM-dd');
+
+    const extras: Record<string, any> = {
+      data_comite: dataComiteStr,
+      ...(sells.length > 0 ? { justificativa_rejeicao: comentarioReprovacao } : {}),
+    };
+    if (hasAcoes) extras.recomendacao = decAcoes;
+    if (hasRf) extras.recomendacao_rf = decRf;
+
     updateStatus.mutate({
       id: comiteModal.id,
-      status: comiteDecisao,
-      extras: {
-        data_comite: format(dataComite, 'yyyy-MM-dd'),
-        ...(comiteDecisao === 'Sell' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
-      },
+      status: consolidado,
+      extras,
     });
-    registrarEvento({
-      analise_id: comiteModal.id,
-      acao: comiteDecisao === 'Sell' ? 'reprovado' : 'aprovado',
-      etapa_anterior: etapaAnterior,
-      etapa_nova: comiteDecisao,
-      data_comite: format(dataComite, 'yyyy-MM-dd'),
-      comentario: comiteDecisao === 'Sell' ? comentarioReprovacao : null,
+
+    // Audit trail: um evento por trilha (ou um único quando só uma trilha)
+    const eventos: Array<{ trilha: string; dec: string }> = [];
+    if (hasRf) eventos.push({ trilha: 'CP', dec: decRf });
+    if (hasAcoes) eventos.push({ trilha: 'AÇ', dec: decAcoes });
+    if (!hasAcoes && !hasRf) eventos.push({ trilha: '', dec: decLegacy });
+
+    eventos.forEach(ev => {
+      registrarEvento({
+        analise_id: comiteModal.id,
+        acao: ev.dec === 'Sell' ? 'reprovado' : 'aprovado',
+        etapa_anterior: etapaAnterior,
+        etapa_nova: ev.dec,
+        data_comite: dataComiteStr,
+        comentario: ev.trilha
+          ? `${ev.trilha}: ${ev.dec}${ev.dec === 'Sell' ? ` — ${comentarioReprovacao}` : ''}`
+          : (ev.dec === 'Sell' ? comentarioReprovacao : null),
+      });
     });
+
     setComiteModal(null);
     setDataComite(undefined);
     setComiteDecisao('');
+    setComiteDecisaoAcoes('');
+    setComiteDecisaoRf('');
     setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
+
 
   const handleReatribuir = () => {
     if (!reatribuirModal || !novoAnalista) return;
