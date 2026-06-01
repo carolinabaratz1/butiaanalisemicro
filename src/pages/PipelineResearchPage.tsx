@@ -133,11 +133,46 @@ export default function PipelineResearchPage() {
   const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
   const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
 
-  // Comitê modal (Buy / Hold / Sell)
-  const [comiteModal, setComiteModal] = useState<{ id: string; recoInicial?: string } | null>(null);
+  // Comitê modal (Buy / Hold / Sell) — suporta decisões separadas para Crédito (RF) e Ações
+  const [comiteModal, setComiteModal] = useState<{
+    id: string;
+    hasAcoes: boolean;
+    hasRf: boolean;
+    recoAnalistaAcoes?: string;
+    recoAnalistaRf?: string;
+  } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
-  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
+  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>(''); // usado quando nenhuma trilha foi preenchida pelo analista (rejeição de Pendente/Em Análise)
+  const [comiteDecisaoAcoes, setComiteDecisaoAcoes] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
+  const [comiteDecisaoRf, setComiteDecisaoRf] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
+
+  // Helper: abre modal do Comitê detectando trilhas preenchidas pelo analista
+  const openComiteModal = useCallback((item: any, opts?: { forceSell?: boolean }) => {
+    const recoAcoes = (item?.recomendacao as string) || '';
+    const recoRf = (item?.recomendacao_rf as string) || '';
+    const hasAcoes = !!recoAcoes;
+    const hasRf = !!recoRf;
+    setComiteModal({
+      id: item.id,
+      hasAcoes,
+      hasRf,
+      recoAnalistaAcoes: recoAcoes,
+      recoAnalistaRf: recoRf,
+    });
+    const isReco = (v: string): v is 'Buy' | 'Hold' | 'Sell' => v === 'Buy' || v === 'Hold' || v === 'Sell';
+    if (opts?.forceSell) {
+      setComiteDecisao('Sell');
+      setComiteDecisaoAcoes(hasAcoes ? 'Sell' : '');
+      setComiteDecisaoRf(hasRf ? 'Sell' : '');
+    } else {
+      setComiteDecisao(isReco(recoAcoes) ? recoAcoes : (isReco(recoRf) ? recoRf : 'Buy'));
+      setComiteDecisaoAcoes(isReco(recoAcoes) ? recoAcoes : (hasAcoes ? 'Buy' : ''));
+      setComiteDecisaoRf(isReco(recoRf) ? recoRf : (hasRf ? 'Buy' : ''));
+    }
+    setDataComite(undefined);
+    setComentarioReprovacao('');
+  }, []);
 
   // Reabrir modal (com novo prazo)
   const [reabrirModal, setReabrirModal] = useState<any | null>(null);
