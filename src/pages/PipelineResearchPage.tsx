@@ -133,11 +133,46 @@ export default function PipelineResearchPage() {
   const [rejeitarAnalistaModal, setRejeitarAnalistaModal] = useState<string | null>(null);
   const [justificativaRejeicao, setJustificativaRejeicao] = useState('');
 
-  // Comitê modal (Buy / Hold / Sell)
-  const [comiteModal, setComiteModal] = useState<{ id: string; recoInicial?: string } | null>(null);
+  // Comitê modal (Buy / Hold / Sell) — suporta decisões separadas para Crédito (RF) e Ações
+  const [comiteModal, setComiteModal] = useState<{
+    id: string;
+    hasAcoes: boolean;
+    hasRf: boolean;
+    recoAnalistaAcoes?: string;
+    recoAnalistaRf?: string;
+  } | null>(null);
   const [dataComite, setDataComite] = useState<Date>();
-  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
+  const [comiteDecisao, setComiteDecisao] = useState<'Buy' | 'Hold' | 'Sell' | ''>(''); // usado quando nenhuma trilha foi preenchida pelo analista (rejeição de Pendente/Em Análise)
+  const [comiteDecisaoAcoes, setComiteDecisaoAcoes] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
+  const [comiteDecisaoRf, setComiteDecisaoRf] = useState<'Buy' | 'Hold' | 'Sell' | ''>('');
   const [comentarioReprovacao, setComentarioReprovacao] = useState('');
+
+  // Helper: abre modal do Comitê detectando trilhas preenchidas pelo analista
+  const openComiteModal = useCallback((item: any, opts?: { forceSell?: boolean }) => {
+    const recoAcoes = (item?.recomendacao as string) || '';
+    const recoRf = (item?.recomendacao_rf as string) || '';
+    const hasAcoes = !!recoAcoes;
+    const hasRf = !!recoRf;
+    setComiteModal({
+      id: item.id,
+      hasAcoes,
+      hasRf,
+      recoAnalistaAcoes: recoAcoes,
+      recoAnalistaRf: recoRf,
+    });
+    const isReco = (v: string): v is 'Buy' | 'Hold' | 'Sell' => v === 'Buy' || v === 'Hold' || v === 'Sell';
+    if (opts?.forceSell) {
+      setComiteDecisao('Sell');
+      setComiteDecisaoAcoes(hasAcoes ? 'Sell' : '');
+      setComiteDecisaoRf(hasRf ? 'Sell' : '');
+    } else {
+      setComiteDecisao(isReco(recoAcoes) ? recoAcoes : (isReco(recoRf) ? recoRf : 'Buy'));
+      setComiteDecisaoAcoes(isReco(recoAcoes) ? recoAcoes : (hasAcoes ? 'Buy' : ''));
+      setComiteDecisaoRf(isReco(recoRf) ? recoRf : (hasRf ? 'Buy' : ''));
+    }
+    setDataComite(undefined);
+    setComentarioReprovacao('');
+  }, []);
 
   // Reabrir modal (com novo prazo)
   const [reabrirModal, setReabrirModal] = useState<any | null>(null);
@@ -441,32 +476,74 @@ export default function PipelineResearchPage() {
   };
 
   const handleComite = () => {
-    if (!comiteModal || !dataComite || !comiteDecisao) return;
-    if (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) return;
+    if (!comiteModal || !dataComite) return;
+    const hasAcoes = comiteModal.hasAcoes;
+    const hasRf = comiteModal.hasRf;
+    const decAcoes = hasAcoes ? comiteDecisaoAcoes : '';
+    const decRf = hasRf ? comiteDecisaoRf : '';
+    const decLegacy = (!hasAcoes && !hasRf) ? comiteDecisao : '';
+
+    // Validação por trilha
+    if (hasAcoes && !decAcoes) return;
+    if (hasRf && !decRf) return;
+    if (!hasAcoes && !hasRf && !decLegacy) return;
+
+    const sells: string[] = [];
+    if (decAcoes === 'Sell') sells.push('AÇ');
+    if (decRf === 'Sell') sells.push('CP');
+    if (decLegacy === 'Sell') sells.push('Geral');
+    if (sells.length > 0 && !comentarioReprovacao.trim()) return;
+
+    // Status consolidado (mais restritivo: Sell > Hold > Buy)
+    const rank: Record<string, number> = { Buy: 1, Hold: 2, Sell: 3 };
+    const candidates = [decAcoes, decRf, decLegacy].filter(Boolean) as string[];
+    const consolidado = candidates.reduce((acc, cur) => (rank[cur] > rank[acc] ? cur : acc), candidates[0]);
+
     const analise = analisesComStatus.find(a => a.id === comiteModal.id);
     const etapaAnterior = analise?.displayStatus || analise?.status || '';
+    const dataComiteStr = format(dataComite, 'yyyy-MM-dd');
+
+    const extras: Record<string, any> = {
+      data_comite: dataComiteStr,
+      ...(sells.length > 0 ? { justificativa_rejeicao: comentarioReprovacao } : {}),
+    };
+    if (hasAcoes) extras.recomendacao = decAcoes;
+    if (hasRf) extras.recomendacao_rf = decRf;
+
     updateStatus.mutate({
       id: comiteModal.id,
-      status: comiteDecisao,
-      extras: {
-        data_comite: format(dataComite, 'yyyy-MM-dd'),
-        ...(comiteDecisao === 'Sell' ? { justificativa_rejeicao: comentarioReprovacao } : {}),
-      },
+      status: consolidado,
+      extras,
     });
-    registrarEvento({
-      analise_id: comiteModal.id,
-      acao: comiteDecisao === 'Sell' ? 'reprovado' : 'aprovado',
-      etapa_anterior: etapaAnterior,
-      etapa_nova: comiteDecisao,
-      data_comite: format(dataComite, 'yyyy-MM-dd'),
-      comentario: comiteDecisao === 'Sell' ? comentarioReprovacao : null,
+
+    // Audit trail: um evento por trilha (ou um único quando só uma trilha)
+    const eventos: Array<{ trilha: string; dec: string }> = [];
+    if (hasRf) eventos.push({ trilha: 'CP', dec: decRf });
+    if (hasAcoes) eventos.push({ trilha: 'AÇ', dec: decAcoes });
+    if (!hasAcoes && !hasRf) eventos.push({ trilha: '', dec: decLegacy });
+
+    eventos.forEach(ev => {
+      registrarEvento({
+        analise_id: comiteModal.id,
+        acao: ev.dec === 'Sell' ? 'reprovado' : 'aprovado',
+        etapa_anterior: etapaAnterior,
+        etapa_nova: ev.dec,
+        data_comite: dataComiteStr,
+        comentario: ev.trilha
+          ? `${ev.trilha}: ${ev.dec}${ev.dec === 'Sell' ? ` — ${comentarioReprovacao}` : ''}`
+          : (ev.dec === 'Sell' ? comentarioReprovacao : null),
+      });
     });
+
     setComiteModal(null);
     setDataComite(undefined);
     setComiteDecisao('');
+    setComiteDecisaoAcoes('');
+    setComiteDecisaoRf('');
     setComentarioReprovacao('');
     setDrawerAnalise(null);
   };
+
 
   const handleReatribuir = () => {
     if (!reatribuirModal || !novoAnalista) return;
@@ -530,9 +607,15 @@ export default function PipelineResearchPage() {
     }
 
     if (targetStatus === 'Buy' || targetStatus === 'Hold' || targetStatus === 'Sell') {
-      const recoInicial = (item as any).recomendacao || (item as any).recomendacao_rf || '';
-      setComiteModal({ id: draggedId, recoInicial });
-      setComiteDecisao(targetStatus);
+      openComiteModal(item, { forceSell: targetStatus === 'Sell' });
+      // Se for drag para Buy/Hold/Sell específico, força o valor escolhido em todas as trilhas presentes
+      if (targetStatus !== 'Sell') {
+        const hasAcoes = !!(item as any).recomendacao;
+        const hasRf = !!(item as any).recomendacao_rf;
+        if (hasAcoes) setComiteDecisaoAcoes(targetStatus);
+        if (hasRf) setComiteDecisaoRf(targetStatus);
+        if (!hasAcoes && !hasRf) setComiteDecisao(targetStatus);
+      }
       setDraggedId(null);
       return;
     }
@@ -731,14 +814,15 @@ export default function PipelineResearchPage() {
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => openComiteModal(item)}>
+
                                   <ThumbsUp className="h-2.5 w-2.5" /> Comitê
                                 </Button>
                               </>
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => openComiteModal(item, { forceSell: true })}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
                                 </Button>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReatribuirModal(item.id); setNovoAnalista(item.analista_responsavel); }}>
@@ -884,7 +968,7 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => openComiteModal(item)}>
                                 <ThumbsUp className="h-2.5 w-2.5" /> Comitê
                               </Button>
                             )}
@@ -1033,12 +1117,12 @@ export default function PipelineResearchPage() {
                     </>
                   )}
                   {(isGestor || isCoord) && drawerAnalise.status === 'Concluída' && (
-                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { const r = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf || ''; setComiteModal({ id: drawerAnalise.id, recoInicial: r }); setComiteDecisao((r === 'Buy' || r === 'Hold' || r === 'Sell') ? r : 'Buy'); setDataComite(undefined); }}>
+                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => openComiteModal(drawerAnalise)}>
                       <ThumbsUp className="h-3 w-3" /> Decisão do Comitê
                     </Button>
                   )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
-                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => openComiteModal(drawerAnalise, { forceSell: true })}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
@@ -1290,62 +1374,123 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Comitê Modal (Buy / Hold / Sell) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComentarioReprovacao(''); }}>
+      {/* Comitê Modal (Buy / Hold / Sell) — decisões separadas para Crédito e Ações quando aplicável */}
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComiteDecisaoAcoes(''); setComiteDecisaoRf(''); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
             <DialogTitle>Decisão do Comitê</DialogTitle>
             <DialogDescription>
-              {comiteModal?.recoInicial
-                ? `Recomendação do analista: ${comiteModal.recoInicial}. Confirme ou altere a decisão.`
-                : 'Selecione a decisão final do Comitê.'}
+              {(() => {
+                if (!comiteModal) return 'Selecione a decisão final do Comitê.';
+                const parts: string[] = [];
+                if (comiteModal.hasRf) parts.push(`CP: ${comiteModal.recoAnalistaRf}`);
+                if (comiteModal.hasAcoes) parts.push(`AÇ: ${comiteModal.recoAnalistaAcoes}`);
+                if (parts.length === 0) return 'Selecione a decisão final do Comitê.';
+                return `Recomendação do analista — ${parts.join(' / ')}. Confirme ou altere.`;
+              })()}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Decisão (obrigatória)</Label>
-              <Select value={comiteDecisao} onValueChange={(v) => setComiteDecisao(v as 'Buy' | 'Hold' | 'Sell')}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="Buy">Buy</SelectItem>
-                  <SelectItem value="Hold">Hold</SelectItem>
-                  <SelectItem value="Sell">Sell</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Data do Comitê (obrigatória)</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                    {dataComite ? format(dataComite, 'dd/MM/yyyy') : 'Selecionar data'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dataComite} onSelect={setDataComite} className="p-3 pointer-events-auto" />
-                </PopoverContent>
-              </Popover>
-            </div>
-            {comiteDecisao === 'Sell' && (
-              <div>
-                <Label className="text-xs">Motivo (obrigatório)</Label>
-                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
+          {(() => {
+            const hasAcoes = !!comiteModal?.hasAcoes;
+            const hasRf = !!comiteModal?.hasRf;
+            const dual = hasAcoes && hasRf;
+            const someSell = dual
+              ? (comiteDecisaoAcoes === 'Sell' || comiteDecisaoRf === 'Sell')
+              : (hasAcoes ? comiteDecisaoAcoes === 'Sell'
+                : hasRf ? comiteDecisaoRf === 'Sell'
+                : comiteDecisao === 'Sell');
+            const canConfirm = !!dataComite && (
+              dual ? (!!comiteDecisaoAcoes && !!comiteDecisaoRf)
+                : hasAcoes ? !!comiteDecisaoAcoes
+                : hasRf ? !!comiteDecisaoRf
+                : !!comiteDecisao
+            ) && (!someSell || comentarioReprovacao.trim().length > 0);
+            return (
+              <div className="space-y-3">
+                {dual ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Crédito Privado</Label>
+                      <Select value={comiteDecisaoRf} onValueChange={(v) => setComiteDecisaoRf(v as 'Buy' | 'Hold' | 'Sell')}>
+                        <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          <SelectItem value="Buy">Buy</SelectItem>
+                          <SelectItem value="Hold">Hold</SelectItem>
+                          <SelectItem value="Sell">Sell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Ações</Label>
+                      <Select value={comiteDecisaoAcoes} onValueChange={(v) => setComiteDecisaoAcoes(v as 'Buy' | 'Hold' | 'Sell')}>
+                        <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          <SelectItem value="Buy">Buy</SelectItem>
+                          <SelectItem value="Hold">Hold</SelectItem>
+                          <SelectItem value="Sell">Sell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs">
+                      {hasRf ? 'Decisão Crédito Privado' : hasAcoes ? 'Decisão Ações' : 'Decisão'} (obrigatória)
+                    </Label>
+                    <Select
+                      value={hasRf ? comiteDecisaoRf : hasAcoes ? comiteDecisaoAcoes : comiteDecisao}
+                      onValueChange={(v) => {
+                        const val = v as 'Buy' | 'Hold' | 'Sell';
+                        if (hasRf) setComiteDecisaoRf(val);
+                        else if (hasAcoes) setComiteDecisaoAcoes(val);
+                        else setComiteDecisao(val);
+                      }}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="Buy">Buy</SelectItem>
+                        <SelectItem value="Hold">Hold</SelectItem>
+                        <SelectItem value="Sell">Sell</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div>
+                  <Label className="text-xs">Data do Comitê (obrigatória)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {dataComite ? format(dataComite, 'dd/MM/yyyy') : 'Selecionar data'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dataComite} onSelect={setDataComite} className="p-3 pointer-events-auto" />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                {someSell && (
+                  <div>
+                    <Label className="text-xs">Motivo do Sell (obrigatório)</Label>
+                    <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  className="w-full"
+                  variant={someSell ? 'destructive' : 'default'}
+                  onClick={handleComite}
+                  disabled={!canConfirm || updateStatus.isPending}
+                >
+                  {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Confirmar Decisão
+                </Button>
               </div>
-            )}
-            <Button
-              size="sm"
-              className="w-full"
-              variant={comiteDecisao === 'Sell' ? 'destructive' : 'default'}
-              onClick={handleComite}
-              disabled={!dataComite || !comiteDecisao || (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) || updateStatus.isPending}
-            >
-              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Confirmar {comiteDecisao || 'Decisão'}
-            </Button>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+
 
       {/* Reatribuir Modal */}
       <Dialog open={!!reatribuirModal} onOpenChange={() => setReatribuirModal(null)}>
