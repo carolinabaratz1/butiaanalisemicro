@@ -1075,7 +1075,7 @@ export default function PipelineResearchPage() {
                     </>
                   )}
                   {(isGestor || isCoord) && drawerAnalise.status === 'Concluída' && (
-                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => { const r = drawerAnalise.recomendacao || drawerAnalise.recomendacao_rf || ''; setComiteModal({ id: drawerAnalise.id, recoInicial: r }); setComiteDecisao((r === 'Buy' || r === 'Hold' || r === 'Sell') ? r : 'Buy'); setDataComite(undefined); }}>
+                    <Button size="sm" className="gap-1 text-xs bg-status-success hover:bg-status-success/80" onClick={() => openComiteModal(drawerAnalise)}>
                       <ThumbsUp className="h-3 w-3" /> Decisão do Comitê
                     </Button>
                   )}
