@@ -565,9 +565,15 @@ export default function PipelineResearchPage() {
     }
 
     if (targetStatus === 'Buy' || targetStatus === 'Hold' || targetStatus === 'Sell') {
-      const recoInicial = (item as any).recomendacao || (item as any).recomendacao_rf || '';
-      setComiteModal({ id: draggedId, recoInicial });
-      setComiteDecisao(targetStatus);
+      openComiteModal(item, { forceSell: targetStatus === 'Sell' });
+      // Se for drag para Buy/Hold/Sell específico, força o valor escolhido em todas as trilhas presentes
+      if (targetStatus !== 'Sell') {
+        const hasAcoes = !!(item as any).recomendacao;
+        const hasRf = !!(item as any).recomendacao_rf;
+        if (hasAcoes) setComiteDecisaoAcoes(targetStatus);
+        if (hasRf) setComiteDecisaoRf(targetStatus);
+        if (!hasAcoes && !hasRf) setComiteDecisao(targetStatus);
+      }
       setDraggedId(null);
       return;
     }
