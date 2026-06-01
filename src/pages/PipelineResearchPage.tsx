@@ -780,7 +780,7 @@ export default function PipelineResearchPage() {
                             )}
                             {(isGestor || isCoord) && (item.displayStatus === 'Pendente' || item.displayStatus === 'Em Análise') && (
                               <>
-                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setComiteModal({ id: item.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
+                                <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => openComiteModal(item, { forceSell: true })}>
                                   <X className="h-2.5 w-2.5" /> Rejeitar
                                 </Button>
                                 <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setReatribuirModal(item.id); setNovoAnalista(item.analista_responsavel); }}>
