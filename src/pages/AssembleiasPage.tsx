@@ -126,6 +126,8 @@ export default function AssembleiasPage() {
   const [deleteId, setDeleteId] = useState(null as string | null);
   const [form, setForm] = useState(emptyForm());
   const [novoDoc, setNovoDoc] = useState({ nome: '', url: '' });
+  const [isinSearch, setIsinSearch] = useState('');
+  const [empresaSearch, setEmpresaSearch] = useState('');
 
   const { data: eventos = [], isLoading } = useQuery({
     queryKey: ['assembleias'],
@@ -523,15 +525,43 @@ export default function AssembleiasPage() {
               {form.tipo && !usaIsin(form.tipo) && (
                 <div className="col-span-2">
                   <Label className="text-xs mb-1.5 block">Empresa *</Label>
-                  <Select value={form.cnpj_empresa} onValueChange={v => set('cnpj_empresa', v)}>
-                    <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
-                    <SelectContent>{empresas.map((e: any) => <SelectItem key={e.cnpj} value={e.cnpj}>{e.nome}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start font-normal h-10">
+                        {form.cnpj_empresa
+                          ? (empresas.find((e: any) => e.cnpj === form.cnpj_empresa)?.nome ?? form.cnpj_empresa)
+                          : <span className="text-muted-foreground">Selecione a empresa...</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input autoFocus value={empresaSearch} onChange={e => setEmpresaSearch(e.target.value)} placeholder="Buscar por nome ou CNPJ..." className="pl-7 h-8 text-sm" />
+                        </div>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-1">
+                        {(() => {
+                          const q = empresaSearch.trim().toLowerCase();
+                          const lista = q
+                            ? empresas.filter((e: any) => (e.nome ?? '').toLowerCase().includes(q) || (e.cnpj ?? '').toLowerCase().includes(q))
+                            : empresas;
+                          if (lista.length === 0) return <p className="text-xs text-muted-foreground p-3">Nenhuma empresa encontrada</p>;
+                          return lista.slice(0, 200).map((e: any) => (
+                            <button key={e.cnpj} type="button" onClick={() => { set('cnpj_empresa', e.cnpj); setEmpresaSearch(''); }} className={cn('w-full text-left px-2 py-1.5 rounded-sm hover:bg-accent text-sm', form.cnpj_empresa === e.cnpj && 'bg-accent')}>
+                              <div className="truncate">{e.nome}</div>
+                              <div className="text-[11px] font-mono text-muted-foreground">{e.cnpj}</div>
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               )}
               {form.tipo && usaIsin(form.tipo) && (
                 <div className="col-span-2">
-                  <Label className="text-xs mb-1.5 block">Emissão(ões) (ISIN) * <span className="text-muted-foreground font-normal">— pode selecionar múltiplas</span></Label>
+                  <Label className="text-xs mb-1.5 block">Emissão(ões) (ISIN) * <span className="text-muted-foreground font-normal">— pode selecionar múltiplas (busque por ISIN, ticker ou nome)</span></Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className="w-full justify-start font-normal h-auto min-h-10 py-2">
@@ -548,26 +578,46 @@ export default function AssembleiasPage() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <div className="p-2 border-b flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input autoFocus value={isinSearch} onChange={e => setIsinSearch(e.target.value)} placeholder="Buscar por ISIN, ticker ou emissor..." className="pl-7 h-8 text-sm" />
+                        </div>
+                        {form.isins.length > 0 && (
+                          <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setForm(f => ({ ...f, isins: [] }))}>Limpar</Button>
+                        )}
+                      </div>
                       <div className="max-h-72 overflow-y-auto p-1">
-                        {emissoes.length === 0 && <p className="text-xs text-muted-foreground p-3">Nenhuma emissão cadastrada</p>}
-                        {emissoes.map((e: any) => {
-                          const checked = form.isins.includes(e.isin);
-                          return (
-                            <label key={e.isin} className="flex items-start gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer text-sm">
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(v) => {
-                                  setForm(f => ({ ...f, isins: v ? [...f.isins, e.isin] : f.isins.filter(x => x !== e.isin) }));
-                                }}
-                                className="mt-0.5"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-mono text-xs">{e.isin}{e.ticker ? ' (' + e.ticker + ')' : ''}</div>
-                                <div className="text-xs text-muted-foreground truncate">{empresasMap.get(e.cnpj_emissor) ?? e.cnpj_emissor}</div>
-                              </div>
-                            </label>
-                          );
-                        })}
+                        {(() => {
+                          const q = isinSearch.trim().toLowerCase();
+                          const lista = (emissoes as any[]).filter((e: any) => {
+                            if (!q) return true;
+                            const empresa = (empresasMap.get(e.cnpj_emissor) ?? '').toLowerCase();
+                            return (e.isin ?? '').toLowerCase().includes(q)
+                              || (e.ticker ?? '').toLowerCase().includes(q)
+                              || empresa.includes(q)
+                              || (e.cnpj_emissor ?? '').toLowerCase().includes(q);
+                          });
+                          if (lista.length === 0) return <p className="text-xs text-muted-foreground p-3">Nenhuma emissão encontrada</p>;
+                          return lista.slice(0, 300).map((e: any) => {
+                            const checked = form.isins.includes(e.isin);
+                            return (
+                              <label key={e.isin} className="flex items-start gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer text-sm">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(v) => {
+                                    setForm(f => ({ ...f, isins: v ? [...f.isins, e.isin] : f.isins.filter(x => x !== e.isin) }));
+                                  }}
+                                  className="mt-0.5"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-mono text-xs">{e.isin}{e.ticker ? ' (' + e.ticker + ')' : ''}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{empresasMap.get(e.cnpj_emissor) ?? e.cnpj_emissor}</div>
+                                </div>
+                              </label>
+                            );
+                          });
+                        })()}
                       </div>
                     </PopoverContent>
                   </Popover>
