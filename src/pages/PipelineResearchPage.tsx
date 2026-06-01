@@ -926,7 +926,7 @@ export default function PipelineResearchPage() {
                               </>
                             )}
                             {(isGestor || isCoord) && item.displayStatus === 'Concluída' && (
-                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => { const r = (item as any).recomendacao || (item as any).recomendacao_rf || ''; setComiteModal({ id: item.id, recoInicial: r }); setComiteDecisao('Buy'); setDataComite(undefined); }}>
+                              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2 text-status-success" onClick={() => openComiteModal(item)}>
                                 <ThumbsUp className="h-2.5 w-2.5" /> Comitê
                               </Button>
                             )}
