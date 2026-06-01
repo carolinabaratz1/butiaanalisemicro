@@ -1332,62 +1332,123 @@ export default function PipelineResearchPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Comitê Modal (Buy / Hold / Sell) */}
-      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComentarioReprovacao(''); }}>
+      {/* Comitê Modal (Buy / Hold / Sell) — decisões separadas para Crédito e Ações quando aplicável */}
+      <Dialog open={!!comiteModal} onOpenChange={() => { setComiteModal(null); setDataComite(undefined); setComiteDecisao(''); setComiteDecisaoAcoes(''); setComiteDecisaoRf(''); setComentarioReprovacao(''); }}>
         <DialogContent className="max-w-sm bg-card border-border">
           <DialogHeader>
             <DialogTitle>Decisão do Comitê</DialogTitle>
             <DialogDescription>
-              {comiteModal?.recoInicial
-                ? `Recomendação do analista: ${comiteModal.recoInicial}. Confirme ou altere a decisão.`
-                : 'Selecione a decisão final do Comitê.'}
+              {(() => {
+                if (!comiteModal) return 'Selecione a decisão final do Comitê.';
+                const parts: string[] = [];
+                if (comiteModal.hasRf) parts.push(`CP: ${comiteModal.recoAnalistaRf}`);
+                if (comiteModal.hasAcoes) parts.push(`AÇ: ${comiteModal.recoAnalistaAcoes}`);
+                if (parts.length === 0) return 'Selecione a decisão final do Comitê.';
+                return `Recomendação do analista — ${parts.join(' / ')}. Confirme ou altere.`;
+              })()}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Decisão (obrigatória)</Label>
-              <Select value={comiteDecisao} onValueChange={(v) => setComiteDecisao(v as 'Buy' | 'Hold' | 'Sell')}>
-                <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="Buy">Buy</SelectItem>
-                  <SelectItem value="Hold">Hold</SelectItem>
-                  <SelectItem value="Sell">Sell</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Data do Comitê (obrigatória)</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                    {dataComite ? format(dataComite, 'dd/MM/yyyy') : 'Selecionar data'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dataComite} onSelect={setDataComite} className="p-3 pointer-events-auto" />
-                </PopoverContent>
-              </Popover>
-            </div>
-            {comiteDecisao === 'Sell' && (
-              <div>
-                <Label className="text-xs">Motivo (obrigatório)</Label>
-                <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
+          {(() => {
+            const hasAcoes = !!comiteModal?.hasAcoes;
+            const hasRf = !!comiteModal?.hasRf;
+            const dual = hasAcoes && hasRf;
+            const someSell = dual
+              ? (comiteDecisaoAcoes === 'Sell' || comiteDecisaoRf === 'Sell')
+              : (hasAcoes ? comiteDecisaoAcoes === 'Sell'
+                : hasRf ? comiteDecisaoRf === 'Sell'
+                : comiteDecisao === 'Sell');
+            const canConfirm = !!dataComite && (
+              dual ? (!!comiteDecisaoAcoes && !!comiteDecisaoRf)
+                : hasAcoes ? !!comiteDecisaoAcoes
+                : hasRf ? !!comiteDecisaoRf
+                : !!comiteDecisao
+            ) && (!someSell || comentarioReprovacao.trim().length > 0);
+            return (
+              <div className="space-y-3">
+                {dual ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Crédito Privado</Label>
+                      <Select value={comiteDecisaoRf} onValueChange={(v) => setComiteDecisaoRf(v as 'Buy' | 'Hold' | 'Sell')}>
+                        <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          <SelectItem value="Buy">Buy</SelectItem>
+                          <SelectItem value="Hold">Hold</SelectItem>
+                          <SelectItem value="Sell">Sell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Ações</Label>
+                      <Select value={comiteDecisaoAcoes} onValueChange={(v) => setComiteDecisaoAcoes(v as 'Buy' | 'Hold' | 'Sell')}>
+                        <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          <SelectItem value="Buy">Buy</SelectItem>
+                          <SelectItem value="Hold">Hold</SelectItem>
+                          <SelectItem value="Sell">Sell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs">
+                      {hasRf ? 'Decisão Crédito Privado' : hasAcoes ? 'Decisão Ações' : 'Decisão'} (obrigatória)
+                    </Label>
+                    <Select
+                      value={hasRf ? comiteDecisaoRf : hasAcoes ? comiteDecisaoAcoes : comiteDecisao}
+                      onValueChange={(v) => {
+                        const val = v as 'Buy' | 'Hold' | 'Sell';
+                        if (hasRf) setComiteDecisaoRf(val);
+                        else if (hasAcoes) setComiteDecisaoAcoes(val);
+                        else setComiteDecisao(val);
+                      }}
+                    >
+                      <SelectTrigger className="mt-1 h-8 text-sm bg-surface-1 border-border"><SelectValue placeholder="Selecionar" /></SelectTrigger>
+                      <SelectContent className="bg-card border-border">
+                        <SelectItem value="Buy">Buy</SelectItem>
+                        <SelectItem value="Hold">Hold</SelectItem>
+                        <SelectItem value="Sell">Sell</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div>
+                  <Label className="text-xs">Data do Comitê (obrigatória)</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className={cn("mt-1 w-full h-8 text-sm justify-start bg-surface-1 border-border", !dataComite && "text-muted-foreground")}>
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                        {dataComite ? format(dataComite, 'dd/MM/yyyy') : 'Selecionar data'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={dataComite} onSelect={setDataComite} className="p-3 pointer-events-auto" />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                {someSell && (
+                  <div>
+                    <Label className="text-xs">Motivo do Sell (obrigatório)</Label>
+                    <Textarea value={comentarioReprovacao} onChange={e => setComentarioReprovacao(e.target.value)} rows={3} className="mt-1 text-sm bg-surface-1 border-border" placeholder="Explique o motivo..." />
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  className="w-full"
+                  variant={someSell ? 'destructive' : 'default'}
+                  onClick={handleComite}
+                  disabled={!canConfirm || updateStatus.isPending}
+                >
+                  {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Confirmar Decisão
+                </Button>
               </div>
-            )}
-            <Button
-              size="sm"
-              className="w-full"
-              variant={comiteDecisao === 'Sell' ? 'destructive' : 'default'}
-              onClick={handleComite}
-              disabled={!dataComite || !comiteDecisao || (comiteDecisao === 'Sell' && !comentarioReprovacao.trim()) || updateStatus.isPending}
-            >
-              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Confirmar {comiteDecisao || 'Decisão'}
-            </Button>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
+
 
       {/* Reatribuir Modal */}
       <Dialog open={!!reatribuirModal} onOpenChange={() => setReatribuirModal(null)}>
