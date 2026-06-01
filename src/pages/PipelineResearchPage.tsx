@@ -1080,7 +1080,7 @@ export default function PipelineResearchPage() {
                     </Button>
                   )}
                   {(isGestor || isCoord) && (drawerAnalise.status === 'Pendente' || drawerAnalise.status === 'Em Análise') && (
-                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => { setComiteModal({ id: drawerAnalise.id, recoInicial: '' }); setComiteDecisao('Sell'); setDataComite(undefined); }}>
+                    <Button size="sm" variant="destructive" className="gap-1 text-xs" onClick={() => openComiteModal(drawerAnalise, { forceSell: true })}>
                       <X className="h-3 w-3" /> Rejeitar
                     </Button>
                   )}
