@@ -72,7 +72,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("analises")
-        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, data_comite, decisao, conviccao");
+        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, data_comite, decisao, conviccao, recomendacao, recomendacao_rf");
       return data ?? [];
     },
   });
