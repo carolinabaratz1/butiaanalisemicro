@@ -399,10 +399,10 @@ export default function DashboardPage() {
                   {ultimasAprovadas.map((a) => {
                     const ref = (a as any).data_comite || a.data_conclusao;
                     return (
-                      <TableRow key={a.id} className="border-border">
+                      <TableRow key={`${a.id}-${a._trilha}`} className="border-border">
                         <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
-                        <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                        <TableCell className="text-sm py-2">{statusBadge(a.computedStatus)}</TableCell>
+                        <TableCell className="text-sm py-2">{a._tipo}</TableCell>
+                        <TableCell className="text-sm py-2">{statusBadge(a._decisao)}</TableCell>
                         <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel ? (analistaNomeById.get(a.analista_responsavel) || "—") : "—"}</TableCell>
                         <TableCell className="text-sm py-2">
                           {ref ? new Date(String(ref).split("T")[0]).toLocaleDateString("pt-BR") : "-"}
