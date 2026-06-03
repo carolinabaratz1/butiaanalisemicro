@@ -1,57 +1,34 @@
-# Decisão do Comitê — Crédito e Ações separadamente
+## Problema
 
-## Problema identificado
+No card **"Últimas Análises Aprovadas"** (DashboardPage), a análise da Brisanet aparece como uma única linha "Crédito Privado · Sell". O analista entregou **Buy para Crédito Privado** e **Sell para Ações**, e o comitê confirmou as duas trilhas — mas o card ignora isso porque:
 
-Na análise da Brisanet, o analista entregou duas recomendações na mesma análise:
-- **Crédito Privado (RF):** Buy
-- **Ações:** Sell
+1. A query de `analises` (linha 75) não busca `recomendacao` nem `recomendacao_rf`.
+2. A coluna **Tipo** mostra `analises.tipo` (um único valor), e a **Decisão** usa `computedStatus`, que reflete a decisão **consolidada mais restritiva** (Sell). A trilha Buy de Crédito fica invisível.
 
-Hoje, ao abrir o modal **"Decisão do Comitê"** em `PipelineResearchPage.tsx`, o usuário só pode escolher **um** valor (Buy / Hold / Sell). Esse único valor é salvo em `analises.status` e os campos `recomendacao` (Ações) e `recomendacao_rf` (Crédito) **não são atualizados** — então o comitê acaba sobrescrevendo o "status geral" com apenas um lado da decisão (no caso, Sell), e a recomendação Buy do analista para Crédito fica perdida visualmente (cartão mostra Sell).
+## Solução
 
-Causa raiz (linhas 443-469 de `PipelineResearchPage.tsx` e modal nas linhas 1293-1350): o `handleComite` grava apenas `status: comiteDecisao` + `data_comite` e ignora a coexistência de Ações + Crédito na mesma análise.
+Tornar o card ciente das duas trilhas, sem mexer em backend nem em outras telas.
 
-## Solução proposta
+### 1. Query
+Em `dashboard-analises` (linha 70-78), adicionar `recomendacao, recomendacao_rf` ao `select`.
 
-Tornar o modal do Comitê **ciente das duas trilhas** quando a análise contempla ambas (`recomendacao` e `recomendacao_rf` preenchidos pelo analista):
+### 2. Expandir linhas no `ultimasAprovadas`
+Antes do `.map` do `<TableBody>` (≈ linhas 239-245 e 383), transformar cada análise em **uma ou duas linhas** conforme as trilhas presentes:
 
-1. **Modal "Decisão do Comitê"**
-   - Se a análise tem **apenas uma trilha**: comportamento atual (um único select Buy/Hold/Sell).
-   - Se a análise tem **as duas trilhas** (Ações + Crédito):
-     - Exibir **dois selects** lado a lado, pré-preenchidos com a recomendação do analista:
-       - "Decisão Crédito Privado" → default = `recomendacao_rf`
-       - "Decisão Ações" → default = `recomendacao`
-     - Mensagem do header: "Recomendação do analista — CP: Buy / AÇ: Sell. Confirme ou altere."
-   - Campo **Data do Comitê** continua obrigatório.
-   - Campo **Justificativa** passa a ser obrigatório quando **qualquer uma** das decisões for `Sell` (rótulo: "Justificativa (obrigatória para Sell)").
+- Se `recomendacao_rf` ∈ {Buy, Hold, Sell} → linha com `tipo = "Crédito Privado"`, `decisao = recomendacao_rf`.
+- Se `recomendacao` ∈ {Buy, Hold, Sell} → linha com `tipo = "Ações"`, `decisao = recomendacao`.
+- Se nenhum dos dois estiver preenchido → fallback atual (`a.tipo` + `computedStatus`), preservando análises antigas.
 
-2. **`handleComite` (gravação)**
-   - Atualizar `analises.recomendacao` e `analises.recomendacao_rf` com a decisão final do comitê (sobrescrevendo a do analista quando o comitê alterar).
-   - `analises.status` passa a refletir a **decisão consolidada**:
-     - Se ambas existem → usar a **mais restritiva** para o badge geral (Sell > Hold > Buy). O status detalhado por trilha continua disponível via os dois campos.
-     - Se só uma trilha → `status` = a decisão dessa trilha (comportamento atual).
-   - Gravar `data_comite` e, quando houver Sell em alguma trilha, `justificativa_rejeicao`.
+A ordenação por `data_comite/data_conclusao` continua sendo aplicada **antes** da expansão; o `slice(0, 5)` passa a ser aplicado **depois** da expansão (para não cortar a segunda linha de uma mesma análise).
 
-3. **Audit trail (`pipeline_eventos`)**
-   - Registrar **um evento por trilha** quando houver duas decisões, com `comentario` indicando a trilha (ex.: `"CP: Buy"`, `"AÇ: Sell — <justificativa>"`), `acao = aprovado|reprovado` conforme cada decisão, e a mesma `data_comite`.
+### 3. Vencimento por trilha
+A regra de "Vencida" no `computedStatus` (linhas 153-167) é por análise inteira. Ao expandir, manter o mesmo `computedStatus` por linha quando o status original já é "Vencida …"; para Buy/Hold/Sell vindos das trilhas, exibir o valor da trilha diretamente (o badge usa `STATUS_BADGE_CLASS` já existente). Não há mudança na lógica de KPIs nem em outras seções.
 
-4. **Exibição nos cartões/Kanban e drawer**
-   - As badges `CP: ...` e `AÇ: ...` (linhas 671-679, 834-836) já leem `recomendacao` / `recomendacao_rf`, então passarão a mostrar a decisão final do comitê automaticamente após o ajuste no `handleComite`.
-   - O badge principal de status do cartão continuará usando a regra "mais restritiva" definida acima.
-
-5. **Botão "Comitê" verde no cartão (linhas 734, 887)**
-   - Hoje ele já abre o modal pré-selecionando `Buy`. Passará a abrir o novo modal de 2 selects quando a análise tiver as duas trilhas, ambos pré-selecionados com a recomendação do analista (que é o caso da Brisanet → vem CP=Buy, AÇ=Sell).
-   - O botão "Reprovar" (linhas 741, 1041) continuará forçando Sell em todas as trilhas presentes, com justificativa obrigatória.
-
-## Arquivos a alterar
-
-- `src/pages/PipelineResearchPage.tsx`
-  - Estado: substituir `comiteDecisao` por `comiteDecisaoRf` e `comiteDecisaoAcoes` (ambos opcionais; usados conforme trilhas presentes na análise).
-  - Modal (≈1293-1350): renderização condicional 1 vs 2 selects.
-  - `handleComite` (443-469): persistir as recomendações por trilha + status consolidado + eventos por trilha.
-  - Handlers dos botões "Comitê" e "Reprovar" (734, 741, 887, 1036, 1041): inicializar os novos estados a partir das recomendações do analista.
+### 4. Chave de React
+Usar `key={`${a.id}-${trilha}`}` para evitar colisão quando uma mesma análise gera duas linhas.
 
 ## Fora de escopo
 
-- Não altera schema do banco — `recomendacao` e `recomendacao_rf` já existem em `analises`.
-- Não muda o fluxo do analista ao entregar a análise (modal de entrega já permite as duas trilhas).
-- Não altera regras de "Vencida" / 1 ano.
+- KPIs (Buys/Holds/Sells, Cobertura ativa, Aprovadas no mês) — não alterados nesta passada.
+- Pipeline da semana e Alertas — sem mudança.
+- Schema do banco — `recomendacao` e `recomendacao_rf` já existem.

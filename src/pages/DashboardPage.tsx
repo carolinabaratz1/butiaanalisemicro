@@ -72,7 +72,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("analises")
-        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, data_comite, decisao, conviccao");
+        .select("id, empresa_id, tipo, versao, analista_responsavel, status, data_conclusao, data_inicio, data_comite, decisao, conviccao, recomendacao, recomendacao_rf");
       return data ?? [];
     },
   });
@@ -235,14 +235,30 @@ export default function DashboardPage() {
     .sort((a, b) => (a.data_inicio ?? "").localeCompare(b.data_inicio ?? ""))
     .slice(0, 5);
 
-  // Últimas análises deliberadas pelo Comitê (5 mais recentes por data_comite)
-  const ultimasAprovadas = [...deliberadas]
-    .sort((a, b) => {
-      const da = String((b as any).data_comite || b.data_conclusao || "");
-      const db = String((a as any).data_comite || a.data_conclusao || "");
-      return da.localeCompare(db);
-    })
-    .slice(0, 5);
+  // Últimas análises deliberadas pelo Comitê — expande trilhas Crédito/Ações em linhas separadas
+  const RECOS = new Set(["Buy", "Hold", "Sell"]);
+  const ultimasAprovadasOrdenadas = [...deliberadas].sort((a, b) => {
+    const da = String((b as any).data_comite || b.data_conclusao || "");
+    const db = String((a as any).data_comite || a.data_conclusao || "");
+    return da.localeCompare(db);
+  });
+  const ultimasAprovadas: Array<any> = [];
+  for (const a of ultimasAprovadasOrdenadas) {
+    const rf = (a as any).recomendacao_rf;
+    const ac = (a as any).recomendacao;
+    const trilhas: Array<{ trilha: string; tipo: string; decisao: string }> = [];
+    if (rf && RECOS.has(rf)) trilhas.push({ trilha: "rf", tipo: "Crédito Privado", decisao: rf });
+    if (ac && RECOS.has(ac)) trilhas.push({ trilha: "ac", tipo: "Ações", decisao: ac });
+    if (trilhas.length === 0) {
+      ultimasAprovadas.push({ ...a, _trilha: "single", _tipo: a.tipo, _decisao: a.computedStatus });
+    } else {
+      for (const t of trilhas) {
+        ultimasAprovadas.push({ ...a, _trilha: t.trilha, _tipo: t.tipo, _decisao: t.decisao });
+      }
+    }
+    if (ultimasAprovadas.length >= 5) break;
+  }
+  ultimasAprovadas.splice(5);
 
   // Alertas dinâmicos: vencidas com alocação (mais urgentes)
   const analistaNomeById = new Map((analistasData ?? []).map((p: any) => [p.id, p.nome]));
@@ -383,10 +399,10 @@ export default function DashboardPage() {
                   {ultimasAprovadas.map((a) => {
                     const ref = (a as any).data_comite || a.data_conclusao;
                     return (
-                      <TableRow key={a.id} className="border-border">
+                      <TableRow key={`${a.id}-${a._trilha}`} className="border-border">
                         <TableCell className="text-sm py-2">{getEmpresaNome(a.empresa_id)}</TableCell>
-                        <TableCell className="text-sm py-2">{a.tipo}</TableCell>
-                        <TableCell className="text-sm py-2">{statusBadge(a.computedStatus)}</TableCell>
+                        <TableCell className="text-sm py-2">{a._tipo}</TableCell>
+                        <TableCell className="text-sm py-2">{statusBadge(a._decisao)}</TableCell>
                         <TableCell className="text-sm py-2 hidden sm:table-cell">{a.analista_responsavel ? (analistaNomeById.get(a.analista_responsavel) || "—") : "—"}</TableCell>
                         <TableCell className="text-sm py-2">
                           {ref ? new Date(String(ref).split("T")[0]).toLocaleDateString("pt-BR") : "-"}
