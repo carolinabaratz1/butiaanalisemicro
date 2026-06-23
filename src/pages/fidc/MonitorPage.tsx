@@ -96,7 +96,7 @@ export default function MonitorPage() {
         <MetricCard label="Exposição em FIDCs" value={BRL(summary.exposure, { compact: true })} hint={summary.nav > 0 ? PCT(summary.pct) : ""} />
         <MetricCard label="Total de FIDCs" value={String(summary.fidcCount)} />
         <MetricCard label="ISINs não mapeados" value={String(unmapped)} accent={unmapped > 0 ? "warning" : "normal"} />
-        <MetricCard label="Status do informe" value={<span className="text-[12px] font-medium">Pendente</span>} hint="Aguardando upload mensal" />
+        <MetricCard label="FIDCs c/ informe" value={`${reportCoverage.withReport}/${summary.fidcCount}`} accent={reportCoverage.withReport < summary.fidcCount ? "warning" : "normal"} hint={reportCoverage.lastRef ? `Último: ${reportCoverage.lastRef}` : ""} />
         <MetricCard label="Data da posição" value={latestValDate ?? "—"} />
       </div>
 
