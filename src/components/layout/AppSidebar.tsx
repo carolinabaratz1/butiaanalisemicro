@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, FileSearch, Kanban, Settings, Briefcase,
-  CalendarDays, ArrowLeftRight, Upload, BarChart3
+  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,6 +18,7 @@ const mainItems = [
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
   { label: 'Trade Monitor',     icon: ArrowLeftRight,   path: '/trade' },
   { label: 'Atualizar Dados',   icon: Upload,           path: '/trade/upload' },
+  { label: 'FIDC Monitor',      icon: Activity,         path: '/fidc-monitor' },
 ];
 
 const bottomItems = [

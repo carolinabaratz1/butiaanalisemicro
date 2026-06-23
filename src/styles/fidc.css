@@ -1,0 +1,43 @@
+/* FIDC Monitor — utilitários portados do projeto origem (FIDC Navigator).
+   Reaproveita os tokens do tema Butiá (hsl(var(--…))) e adiciona apenas
+   classes específicas de risco e densidade que o módulo usa. */
+
+.text-risk-normal   { color: hsl(var(--status-success)); }
+.text-risk-warning  { color: hsl(var(--status-warning)); }
+.text-risk-critical { color: hsl(var(--status-danger)); }
+.text-risk-missing  { color: hsl(var(--status-muted)); }
+
+.bg-risk-normal     { background-color: hsl(var(--status-success)); }
+.bg-risk-warning    { background-color: hsl(var(--status-warning)); }
+.bg-risk-critical   { background-color: hsl(var(--status-danger)); }
+.bg-risk-missing    { background-color: hsl(var(--status-muted)); }
+
+.bg-risk-normal-bg   { background-color: hsl(var(--status-success) / 0.18); }
+.bg-risk-warning-bg  { background-color: hsl(var(--status-warning) / 0.18); }
+.bg-risk-critical-bg { background-color: hsl(var(--status-danger) / 0.18); }
+.bg-risk-missing-bg  { background-color: hsl(var(--status-muted) / 0.20); }
+
+.border-l-risk-normal   { border-left-color: hsl(var(--status-success)); }
+.border-l-risk-warning  { border-left-color: hsl(var(--status-warning)); }
+.border-l-risk-critical { border-left-color: hsl(var(--status-danger)); }
+
+.bg-surface    { background-color: hsl(var(--surface-1)); }
+.bg-surface-2  { background-color: hsl(var(--surface-2)); }
+.bg-surface-3  { background-color: hsl(var(--surface-3)); }
+
+.hairline-b { border-bottom: 1px solid hsl(var(--border)); }
+.hairline-t { border-top:    1px solid hsl(var(--border)); }
+.hairline-r { border-right:  1px solid hsl(var(--border)); }
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, "Consolas", monospace;
+}
