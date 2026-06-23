@@ -119,6 +119,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         pdd_value: parsed.metrics.pddValue,
         cash_value: parsed.metrics.cashValue,
         repurchase_value: parsed.metrics.repurchaseValue,
+        investors_count: parsed.metrics.investorsCount,
         subordinated_value: parsed.quotaClasses
           .filter((q) => q.quotaType === "Subordinada" || q.quotaType === "Mezanino")
           .reduce((a, q) => a + (q.navValue ?? 0), 0) || null,
@@ -134,7 +135,17 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         imported_by: userRes.user?.id ?? null,
         version: nextVersion,
         is_current_version: true,
-        raw_data: parsed.rawSnapshot as never,
+        raw_data: {
+          ...parsed.rawSnapshot,
+          credit_rights_a: parsed.metrics.creditRightsAValue,
+          credit_rights_b: parsed.metrics.creditRightsBValue,
+          monthly_average_nav_value: parsed.metrics.monthlyAverageNavValue,
+          total_assets: parsed.metrics.assetsTotal,
+          total_liabilities: parsed.metrics.liabilitiesTotal,
+          segment_carteira_total: parsed.metrics.segmentCarteiraTotal,
+          overdue_source: parsed.metrics.overdueSource,
+          fidc_name_in_file: parsed.fidcNameInFile,
+        } as never,
       } as never;
 
       const { data: inserted, error: insErr } = await supabase
