@@ -213,16 +213,16 @@ export default function MonitorPage() {
                   <Td>{r.quota?.class_name || r.quota?.internal_quota_name || <span className="text-muted-foreground">—</span>}</Td>
                   <Td right mono>{BRL(r.value, { compact: true })}</Td>
                   <Td right mono>{PCT(r.pctPortfolio)}</Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
-                  <Td right><NoDataChip /></Td>
+                  <Td right mono>{r.report ? BRL(r.navNow, { compact: true }) : <NoDataChip />}</Td>
+                  <Td right mono>{r.varNav != null ? PCT(r.varNav) : <NoDataChip />}</Td>
+                  <Td right mono>{r.report && r.quotaNow > 0 ? r.quotaNow.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 }) : <NoDataChip />}</Td>
+                  <Td right mono>{r.varQuota != null ? PCT(r.varQuota) : <NoDataChip />}</Td>
+                  <Td right mono>{r.atrasoDC != null ? PCT(r.atrasoDC) : <NoDataChip />}</Td>
+                  <Td right mono>{r.caixaPL != null ? PCT(r.caixaPL) : <NoDataChip />}</Td>
+                  <Td right mono>{r.pddAtraso != null ? PCT(r.pddAtraso) : <NoDataChip />}</Td>
+                  <Td right mono>{r.pddDC != null ? PCT(r.pddDC) : <NoDataChip />}</Td>
+                  <Td right mono>{r.recompraDC != null ? PCT(r.recompraDC) : <NoDataChip />}</Td>
+                  <Td right mono>{r.subordPct != null ? PCT(r.subordPct) : <NoDataChip />}</Td>
                   <Td><NoDataInline /></Td>
                 </tr>
               );
