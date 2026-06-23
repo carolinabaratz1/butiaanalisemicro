@@ -309,7 +309,7 @@ export function useFidcMonitorData() {
       0,
     );
 
-  // Alertas permitidos nesta etapa (sem métricas mensais)
+  // Alertas: posição + métricas mensais (quando informe importado)
   type PositionAlert = {
     id: string;
     severity: "warning" | "critical";
@@ -318,9 +318,17 @@ export function useFidcMonitorData() {
       | "carteira_sem_pl"
       | "carteira_sem_posicao"
       | "posicao_duplicada"
-      | "divergencia_pct";
+      | "divergencia_pct"
+      | "informe_ausente"
+      | "subordinacao_inconsistente"
+      | "pdd_alto"
+      | "atraso_alto"
+      | "queda_pl"
+      | "queda_cota";
     portfolioName: string | null;
     isin: string | null;
+    fidcId?: string | null;
+    fidcName?: string | null;
     message: string;
     valDate: string | null;
   };
