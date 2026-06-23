@@ -276,7 +276,7 @@ export function useTradeIntegration() {
       return rows
         .map((r) => {
           const total = maps.fundTotal.get(r.trading_desk_share_source) ?? 0;
-          const fin = r.financial_price ?? 0;
+          const fin = (Number(r.amount) || 0) * (Number(r.financial_price) || 0);
           return {
             fundo: r.trading_desk_share_source,
             val_date: r.val_date,
