@@ -112,7 +112,7 @@ export default function DashboardCarteirasPage() {
           value={String(consolidated.unmappedTotal)}
           accent={consolidated.unmappedTotal > 0 ? "warning" : "normal"}
         />
-        <MetricCard label="Informes mensais" value="0" hint="Pendente de upload" accent="warning" />
+        <MetricCard label="Informes mensais" value={`${fidcsWithReportCount}/${consolidated.fidcsMonitorados}`} hint={fidcsWithReportCount === 0 ? "Pendente de upload" : "Última versão por FIDC"} accent={fidcsWithReportCount < consolidated.fidcsMonitorados ? "warning" : "normal"} />
       </div>
 
       {/* Tabela de carteiras */}
