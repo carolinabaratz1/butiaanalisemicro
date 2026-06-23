@@ -43,6 +43,26 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
+  const { data: prevReport } = useQuery({
+    queryKey: ["fidc-monthly-reports", id, "prev", latestReport?.reference_month ?? null],
+    queryFn: async () => {
+      const ref = latestReport?.reference_month as string | undefined;
+      if (!ref) return null;
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select("nav_value, quota_value, reference_month")
+        .eq("fidc_id", id)
+        .eq("is_current_version", true)
+        .lt("reference_month", ref)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Record<string, unknown> | null;
+    },
+    enabled: !!id && !!latestReport?.reference_month,
+  });
+
   const { data: reportsHistory = [] } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "history"],
     queryFn: async () => {
