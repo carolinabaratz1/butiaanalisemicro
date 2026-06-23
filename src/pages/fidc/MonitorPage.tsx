@@ -17,7 +17,7 @@ export default function MonitorPage() {
   const statusFilter = (sp.get("status") ?? "all") as "all" | PosStatus;
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
 
-  const { isLoading, portfolioSummaries, latestValDate } = useFidcMonitorData();
+  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, fidcsWithReportCount } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
 
   const rows = useMemo(() => {
