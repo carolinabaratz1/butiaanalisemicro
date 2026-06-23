@@ -123,6 +123,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           ...t,
           setor: info?.setor ?? "Sem setor",
           emissor_label: info?.nome ?? t.emissor_nome ?? "—",
+          grupo_economico: info?.grupo_economico ?? null,
           rating_norm: normRating(t.rating),
         };
       });
