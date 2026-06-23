@@ -429,6 +429,7 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
     referenceMonth: last.iso,
     referenceLabel: last.label,
     availableMonths: months,
+    months: slices,
     metrics,
     quotaClasses,
     checklist,
