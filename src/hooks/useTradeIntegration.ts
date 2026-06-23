@@ -212,9 +212,10 @@ export function useTradeIntegration() {
       const arr = posByIsin.get(p.isin) ?? [];
       arr.push(p);
       posByIsin.set(p.isin, arr);
+      const fin = (Number(p.amount) || 0) * (Number(p.financial_price) || 0);
       fundTotal.set(
         p.trading_desk_share_source,
-        (fundTotal.get(p.trading_desk_share_source) ?? 0) + (p.financial_price ?? 0),
+        (fundTotal.get(p.trading_desk_share_source) ?? 0) + fin,
       );
       const s = fundIsins.get(p.trading_desk_share_source) ?? new Set<string>();
       s.add(p.isin);
