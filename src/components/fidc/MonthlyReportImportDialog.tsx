@@ -55,10 +55,18 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
     enabled: open,
   });
 
-  const validation = useMemo(() => (parsed ? validateQuotas(parsed) : null), [parsed]);
+  const previewSlice = useMemo(() => {
+    if (!parsed) return null;
+    return parsed.months.find((m) => m.iso === selectedMonth) ?? parsed.months[parsed.months.length - 1];
+  }, [parsed, selectedMonth]);
+
+  const validation = useMemo(
+    () => (previewSlice ? validateQuotas({ metrics: previewSlice.metrics, quotaClasses: previewSlice.quotaClasses }) : null),
+    [previewSlice],
+  );
   const matches = useMemo<QuotaMatch[]>(
-    () => (parsed ? matchQuotaClasses(parsed.quotaClasses, master) : []),
-    [parsed, master],
+    () => (previewSlice ? matchQuotaClasses(previewSlice.quotaClasses, master) : []),
+    [previewSlice, master],
   );
 
   const cnpjMatches = parsed?.cnpj && fidcCnpjClean && parsed.cnpj === fidcCnpjClean;
@@ -86,109 +94,119 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      if (!parsed || !validation) throw new Error("Nada para importar.");
-      const month = selectedMonth || parsed.referenceMonth;
-
-      // Encerrar versão anterior para o mesmo (fidc, mês)
-      await supabase
-        .from("fidc_monthly_reports")
-        .update({ is_current_version: false } as never)
-        .eq("fidc_id", fidcId)
-        .eq("reference_month", month)
-        .eq("is_current_version", true);
-
-      // Buscar maior versão já existente
-      const { data: prev } = await supabase
-        .from("fidc_monthly_reports")
-        .select("version")
-        .eq("fidc_id", fidcId)
-        .eq("reference_month", month)
-        .order("version", { ascending: false })
-        .limit(1);
-      const nextVersion = ((prev?.[0] as { version?: number } | undefined)?.version ?? 0) + 1;
-
+      if (!parsed) throw new Error("Nada para importar.");
       const { data: userRes } = await supabase.auth.getUser();
+      const userId = userRes.user?.id ?? null;
 
-      const payload = {
-        fidc_id: fidcId,
-        reference_month: month,
-        nav_value: parsed.metrics.navValue,
-        quota_value: parsed.metrics.quotaValue,
-        credit_rights_value: parsed.metrics.creditRightsValue,
-        overdue_value: parsed.metrics.overdueValue,
-        pdd_value: parsed.metrics.pddValue,
-        cash_value: parsed.metrics.cashValue,
-        repurchase_value: parsed.metrics.repurchaseValue,
-        investors_count: parsed.metrics.investorsCount,
-        subordinated_value: parsed.quotaClasses
-          .filter((q) => q.quotaType === "Subordinada" || q.quotaType === "Mezanino")
-          .reduce((a, q) => a + (q.navValue ?? 0), 0) || null,
-        quota_total_nav_value: validation.quotasNavSum,
-        quota_validation_status: validation.status,
-        quota_validation_difference: validation.differenceAbs,
-        quota_validation_difference_percentage:
-          validation.differencePct != null ? validation.differencePct * 100 : null,
-        quota_classes_found_count: validation.quotaClassesFoundCount,
-        subordinated_calculation_status: validation.subordinatedStatus,
-        subordinated_calculation_notes: validation.subordinatedNotes,
-        source_file_name: parsed.fileName,
-        imported_by: userRes.user?.id ?? null,
-        version: nextVersion,
-        is_current_version: true,
-        raw_data: {
-          ...parsed.rawSnapshot,
-          credit_rights_a: parsed.metrics.creditRightsAValue,
-          credit_rights_b: parsed.metrics.creditRightsBValue,
-          monthly_average_nav_value: parsed.metrics.monthlyAverageNavValue,
-          total_assets: parsed.metrics.assetsTotal,
-          total_liabilities: parsed.metrics.liabilitiesTotal,
-          segment_carteira_total: parsed.metrics.segmentCarteiraTotal,
-          overdue_source: parsed.metrics.overdueSource,
-          fidc_name_in_file: parsed.fidcNameInFile,
-        } as never,
-      } as never;
+      let imported = 0;
+      let skipped = 0;
+      const monthSlices = parsed.months;
 
-      const { data: inserted, error: insErr } = await supabase
-        .from("fidc_monthly_reports")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (insErr) throw insErr;
-      const reportId = (inserted as { id: string }).id;
+      for (const slice of monthSlices) {
+        const sliceValidation = validateQuotas({
+          metrics: slice.metrics,
+          quotaClasses: slice.quotaClasses,
+        });
 
-      // Cotas/classes
-      if (matches.length > 0) {
-        const rows = matches.map((m) => ({
-          fidc_monthly_report_id: reportId,
-          fidc_quota_class_id: m.matchedId,
-          isin: null,
-          class_name: m.parsed.className,
-          quota_type: m.parsed.quotaType,
-          nav_value: m.parsed.navValue,
-          quota_value: m.parsed.quotaValue,
-          number_of_quotas: m.parsed.numberOfQuotas,
-          seniority_level: m.parsed.seniorityLevel,
-          rating: m.parsed.rating,
-          matching_status: m.matchingStatus,
-        }));
-        const { error } = await supabase
-          .from("fidc_monthly_quota_classes")
-          .insert(rows as never);
-        if (error) throw error;
+        // Pular meses completamente vazios (sem PL e sem cotas)
+        if (slice.metrics.navValue == null && slice.quotaClasses.length === 0) {
+          skipped++;
+          continue;
+        }
+
+        const month = slice.iso;
+        // Encerrar versão anterior para o mesmo (fidc, mês)
+        await supabase
+          .from("fidc_monthly_reports")
+          .update({ is_current_version: false } as never)
+          .eq("fidc_id", fidcId)
+          .eq("reference_month", month)
+          .eq("is_current_version", true);
+
+        const { data: prev } = await supabase
+          .from("fidc_monthly_reports")
+          .select("version")
+          .eq("fidc_id", fidcId)
+          .eq("reference_month", month)
+          .order("version", { ascending: false })
+          .limit(1);
+        const nextVersion = ((prev?.[0] as { version?: number } | undefined)?.version ?? 0) + 1;
+
+        const sliceMatches = matchQuotaClasses(slice.quotaClasses, master);
+        const payload = {
+          fidc_id: fidcId,
+          reference_month: month,
+          nav_value: slice.metrics.navValue,
+          quota_value: slice.metrics.quotaValue ?? slice.quotaClasses[0]?.quotaValue ?? null,
+          credit_rights_value: slice.metrics.creditRightsValue,
+          overdue_value: slice.metrics.overdueValue,
+          pdd_value: slice.metrics.pddValue,
+          cash_value: slice.metrics.cashValue,
+          repurchase_value: slice.metrics.repurchaseValue,
+          investors_count: slice.metrics.investorsCount,
+          subordinated_value: slice.quotaClasses
+            .filter((q) => q.quotaType === "Subordinada" || q.quotaType === "Mezanino")
+            .reduce((a, q) => a + (q.navValue ?? 0), 0) || null,
+          quota_total_nav_value: sliceValidation.quotasNavSum,
+          quota_validation_status: sliceValidation.status,
+          quota_validation_difference: sliceValidation.differenceAbs,
+          quota_validation_difference_percentage:
+            sliceValidation.differencePct != null ? sliceValidation.differencePct * 100 : null,
+          quota_classes_found_count: sliceValidation.quotaClassesFoundCount,
+          subordinated_calculation_status: sliceValidation.subordinatedStatus,
+          subordinated_calculation_notes: sliceValidation.subordinatedNotes,
+          source_file_name: parsed.fileName,
+          imported_by: userId,
+          version: nextVersion,
+          is_current_version: true,
+          raw_data: {
+            assetsTotal: slice.metrics.assetsTotal,
+            liabilitiesTotal: slice.metrics.liabilitiesTotal,
+            segmentCarteiraTotal: slice.metrics.segmentCarteiraTotal,
+            monthlyAverageNavValue: slice.metrics.monthlyAverageNavValue,
+            creditRightsAValue: slice.metrics.creditRightsAValue,
+            creditRightsBValue: slice.metrics.creditRightsBValue,
+            overdueSource: slice.metrics.overdueSource,
+            fidc_name_in_file: parsed.fidcNameInFile,
+            month_label: slice.label,
+          } as never,
+        } as never;
+
+        const { data: inserted, error: insErr } = await supabase
+          .from("fidc_monthly_reports")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (insErr) throw insErr;
+        const reportId = (inserted as { id: string }).id;
+
+        if (sliceMatches.length > 0) {
+          const rows = sliceMatches.map((m) => ({
+            fidc_monthly_report_id: reportId,
+            fidc_quota_class_id: m.matchedId,
+            isin: null,
+            class_name: m.parsed.className,
+            quota_type: m.parsed.quotaType,
+            nav_value: m.parsed.navValue,
+            quota_value: m.parsed.quotaValue,
+            number_of_quotas: m.parsed.numberOfQuotas,
+            seniority_level: m.parsed.seniorityLevel,
+            rating: m.parsed.rating,
+            matching_status: m.matchingStatus,
+          }));
+          const { error } = await supabase
+            .from("fidc_monthly_quota_classes")
+            .insert(rows as never);
+          if (error) throw error;
+        }
+        imported++;
       }
 
-      return { reportId, status: validation.status };
+      return { imported, skipped };
     },
-    onSuccess: ({ status }) => {
-      toast.success("Informe importado", {
-        description:
-          status === "valid"
-            ? "PL bate com a soma das cotas."
-            : status === "warning"
-              ? "Importado com aviso de divergência de PL."
-              : status === "cotas_ausentes"
-                ? "Importado sem cotas/classes — subordinação indisponível."
-                : "Importado com divergência crítica de PL.",
+    onSuccess: ({ imported, skipped }) => {
+      toast.success("Informes importados", {
+        description: `${imported} mês(es) importado(s)${skipped ? `, ${skipped} ignorado(s) por falta de dados` : ""}.`,
       });
       qc.invalidateQueries({ queryKey: ["fidc-monthly-reports", fidcId] });
       reset();
@@ -265,11 +283,21 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
               </div>
             </div>
 
-            {/* Mês de referência */}
-            <div className="flex items-center gap-3">
-              <div className="text-[12px] text-muted-foreground">Mês de referência</div>
+            {/* Meses no arquivo */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="text-[12px] text-muted-foreground">Meses no arquivo</div>
+              <span className="text-[12px] font-medium">
+                {parsed.availableMonths.length > 0
+                  ? `${parsed.availableMonths[0].label} → ${parsed.availableMonths[parsed.availableMonths.length - 1].label}`
+                  : "—"}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                ({parsed.availableMonths.length} meses) — todos serão importados de uma vez
+              </span>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 w-[220px]">
+                  <SelectValue placeholder="Pré-visualizar mês" />
+                </SelectTrigger>
                 <SelectContent>
                   {parsed.availableMonths.map((m) => (
                     <SelectItem key={m.iso} value={m.iso}>
@@ -278,9 +306,6 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-[11px] text-muted-foreground">
-                {parsed.availableMonths.length} meses disponíveis no arquivo
-              </span>
             </div>
 
             {/* Validação PL x Cotas */}
@@ -419,7 +444,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
             onClick={() => importMutation.mutate()}
             disabled={!canImport || importMutation.isPending}
           >
-            {importMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</> : "Importar"}
+            {importMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</> : `Importar ${parsed?.months.length ?? 0} meses`}
           </Button>
         </DialogFooter>
       </DialogContent>

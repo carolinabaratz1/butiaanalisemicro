@@ -24,6 +24,32 @@ export type ChecklistRow = {
   status: "found" | "missing" | "inconsistent" | "validated";
 };
 
+export type MonthlyMetrics = {
+  navValue: number | null;
+  monthlyAverageNavValue: number | null;
+  quotaValue: number | null;
+  creditRightsValue: number | null;
+  creditRightsAValue: number | null;
+  creditRightsBValue: number | null;
+  overdueValue: number | null;
+  overdueSource: "V_VI" | "fallback_I" | null;
+  pddValue: number | null;
+  cashValue: number | null;
+  repurchaseValue: number | null;
+  assetsTotal: number | null;
+  liabilitiesTotal: number | null;
+  segmentCarteiraTotal: number | null;
+  investorsCount: number | null;
+};
+
+export type ParsedMonthSlice = {
+  iso: string;             // YYYY-MM-01
+  label: string;           // e.g. "set/2025"
+  columnIndex: number;
+  metrics: MonthlyMetrics;
+  quotaClasses: ParsedQuotaClass[];
+};
+
 export type ParsedMonthlyReport = {
   fileName: string;
   cnpj: string | null;            // 14 dígitos
@@ -31,24 +57,9 @@ export type ParsedMonthlyReport = {
   referenceMonth: string;         // YYYY-MM-01 (último mês)
   referenceLabel: string;
   availableMonths: { label: string; iso: string; columnIndex: number }[];
-  metrics: {
-    navValue: number | null;             // PL IV.a
-    monthlyAverageNavValue: number | null; // IV.b
-    quotaValue: number | null;           // primeira classe (referência)
-    creditRightsValue: number | null;    // I.2.a + I.2.b
-    creditRightsAValue: number | null;   // I.2.a
-    creditRightsBValue: number | null;   // I.2.b
-    overdueValue: number | null;         // V.b + VI.b ou fallback
-    overdueSource: "V_VI" | "fallback_I" | null;
-    pddValue: number | null;             // |I.2.a.10| + |I.2.b.10|
-    cashValue: number | null;            // I.1
-    repurchaseValue: number | null;      // VII.d.2
-    assetsTotal: number | null;          // I
-    liabilitiesTotal: number | null;     // III
-    segmentCarteiraTotal: number | null; // II
-    investorsCount: number | null;       // X.1
-  };
-  quotaClasses: ParsedQuotaClass[];
+  months: ParsedMonthSlice[];     // todos os meses do arquivo
+  metrics: MonthlyMetrics;        // do mês mais recente (compat)
+  quotaClasses: ParsedQuotaClass[]; // do mês mais recente (compat)
   checklist: ChecklistRow[];
   rawSnapshot: Record<string, unknown>;
 };
@@ -165,13 +176,8 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
   if (!months.length) throw new Error("Não foi possível identificar meses no cabeçalho do informe.");
 
   const last = months[months.length - 1];
-  const col = last.columnIndex;
-  const valueAt = (rowIdx: number): number | null =>
-    rowIdx >= 0 ? asNumber(matrix[rowIdx]?.[col]) : null;
-  const labelAt = (rowIdx: number): string | null =>
-    rowIdx >= 0 ? String(matrix[rowIdx]?.[0] ?? "").trim() : null;
 
-  // ---- Âncoras seccionais ----
+  // ---- Âncoras seccionais (uma vez para o arquivo todo) ----
   const rAtivo     = findRowStartsWith(matrix, "I - Ativo");
   const rCarteira  = findRowStartsWith(matrix, "II - Carteira por Segmento");
   const rPassivo   = findRowStartsWith(matrix, "III - Passivo");
@@ -182,24 +188,17 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
   const rIX        = findRowStartsWith(matrix, "IX - Taxas Praticadas");
   const rX         = findRowStartsWith(matrix, "X - Outras Informações");
 
-  // ---- I.1 Caixa / Disponibilidades (dentro de I antes de I.2) ----
   const rDisp = findRowStartsWith(matrix, "1 - Disponibilidades",
     rAtivo >= 0 ? rAtivo : 0,
     rCarteira > 0 ? rCarteira : (rPassivo > 0 ? rPassivo : -1));
-
-  // ---- I.2.a e I.2.b ----
   const rDcA = findRowContains(matrix, "a) direitos creditorios com aquisicao substancial",
     rAtivo >= 0 ? rAtivo : 0, rPassivo > 0 ? rPassivo : -1);
   const rDcB = findRowContains(matrix, "b) direitos creditorios sem aquisicao substancial",
     rAtivo >= 0 ? rAtivo : 0, rPassivo > 0 ? rPassivo : -1);
-
-  // ---- I.2.a.10 e I.2.b.10 Provisão (PDD) ----
   const rPddA = rDcA >= 0 ? findRowContains(matrix, "a.10) provisao",
     rDcA, rDcB > 0 ? rDcB + 30 : rPassivo > 0 ? rPassivo : -1) : -1;
   const rPddB = rDcB >= 0 ? findRowContains(matrix, "b.10) provisao",
     rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
-
-  // ---- Atrasos fallback: I.2.a.3, I.2.b.3, I.2.a.2.1, I.2.b.2.1 ----
   const rA3 = rDcA >= 0 ? findRowContains(matrix, "a.3) creditos existentes inadimplentes",
     rDcA, rDcB > 0 ? rDcB : (rPassivo > 0 ? rPassivo : -1)) : -1;
   const rB3 = rDcB >= 0 ? findRowContains(matrix, "b.3) creditos existentes inadimplentes",
@@ -208,87 +207,79 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
     rDcA, rDcB > 0 ? rDcB : (rPassivo > 0 ? rPassivo : -1)) : -1;
   const rB21 = rDcB >= 0 ? findRowContains(matrix, "b.2.1) valor total das parcelas inadimplentes",
     rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
-
-  // ---- V.b e VI.b Inadimplentes ----
   const rVb = rV >= 0 ? findRowStartsWith(matrix, "b) Inadimplentes",
     rV, rVI > 0 ? rVI : (rVII > 0 ? rVII : -1)) : -1;
   const rVIb = rVI >= 0 ? findRowStartsWith(matrix, "b) Inadimplentes",
     rVI, rVII > 0 ? rVII : (rIX > 0 ? rIX : -1)) : -1;
-
-  // ---- VII.d.2 Recompras Valor ----
   const rRecD = rVII >= 0 ? findRowContains(matrix, "d) recompras",
     rVII, rIX > 0 ? rIX : (rX > 0 ? rX : -1)) : -1;
   const rRecD2 = rRecD >= 0 ? findRowContains(matrix, "d.2) valor",
     rRecD, rRecD + 10) : -1;
-
-  // ---- IV.a e IV.b ----
   const rPLa = rPL >= 0 ? findRowContains(matrix, "a) valor do patrimonio liquido",
     rPL, rV > 0 ? rV : -1) : -1;
   const rPLb = rPL >= 0 ? findRowContains(matrix, "b) valor do patrimonio liquido medio",
     rPL, rV > 0 ? rV : -1) : -1;
-
-  // ---- X.1 Número de Cotistas (opcional, pode não existir no Quantum) ----
   const rInvestors = rX >= 0 ? findRowContains(matrix, "numero de cotistas",
     rX, Math.min(matrix.length, rX + 60)) : -1;
 
-  // ---- Métricas ----
-  const dcA = valueAt(rDcA);
-  const dcB = valueAt(rDcB);
-  const creditRightsValue = dcA != null || dcB != null ? (dcA ?? 0) + (dcB ?? 0) : null;
+  const labelAt = (rowIdx: number): string | null =>
+    rowIdx >= 0 ? String(matrix[rowIdx]?.[0] ?? "").trim() : null;
 
-  const pddA = valueAt(rPddA);
-  const pddB = valueAt(rPddB);
-  const pddValue = pddA != null || pddB != null
-    ? Math.abs(pddA ?? 0) + Math.abs(pddB ?? 0)
-    : null;
+  // Builder de métricas por coluna (mês)
+  const metricsForColumn = (col: number): MonthlyMetrics => {
+    const v = (r: number) => (r >= 0 ? asNumber(matrix[r]?.[col]) : null);
+    const dcA = v(rDcA);
+    const dcB = v(rDcB);
+    const creditRightsValue = dcA != null || dcB != null ? (dcA ?? 0) + (dcB ?? 0) : null;
+    const pddA = v(rPddA);
+    const pddB = v(rPddB);
+    const pddValue = pddA != null || pddB != null
+      ? Math.abs(pddA ?? 0) + Math.abs(pddB ?? 0) : null;
 
-  // Atraso: preferir V.b + VI.b
-  let overdueValue: number | null = null;
-  let overdueSource: "V_VI" | "fallback_I" | null = null;
-  const vbVal = valueAt(rVb);
-  const vibVal = valueAt(rVIb);
-  if (vbVal != null || vibVal != null) {
-    overdueValue = (vbVal ?? 0) + (vibVal ?? 0);
-    overdueSource = "V_VI";
-  } else {
-    const a3 = valueAt(rA3); const b3 = valueAt(rB3);
-    const a21 = valueAt(rA21); const b21 = valueAt(rB21);
-    if ([a3, b3, a21, b21].some((x) => x != null)) {
-      overdueValue = (a3 ?? 0) + (b3 ?? 0) + (a21 ?? 0) + (b21 ?? 0);
-      overdueSource = "fallback_I";
+    let overdueValue: number | null = null;
+    let overdueSource: "V_VI" | "fallback_I" | null = null;
+    const vbVal = v(rVb); const vibVal = v(rVIb);
+    if (vbVal != null || vibVal != null) {
+      overdueValue = (vbVal ?? 0) + (vibVal ?? 0);
+      overdueSource = "V_VI";
+    } else {
+      const a3 = v(rA3); const b3 = v(rB3); const a21 = v(rA21); const b21 = v(rB21);
+      if ([a3, b3, a21, b21].some((x) => x != null)) {
+        overdueValue = (a3 ?? 0) + (b3 ?? 0) + (a21 ?? 0) + (b21 ?? 0);
+        overdueSource = "fallback_I";
+      }
     }
-  }
-
-  const investorsRaw = valueAt(rInvestors);
-  const investorsCount = investorsRaw != null ? Math.round(investorsRaw) : null;
-
-  const metrics = {
-    navValue: valueAt(rPLa),
-    monthlyAverageNavValue: valueAt(rPLb),
-    quotaValue: null as number | null,
-    creditRightsValue,
-    creditRightsAValue: dcA,
-    creditRightsBValue: dcB,
-    overdueValue,
-    overdueSource,
-    pddValue,
-    cashValue: valueAt(rDisp),
-    repurchaseValue: valueAt(rRecD2),
-    assetsTotal: valueAt(rAtivo),
-    liabilitiesTotal: valueAt(rPassivo),
-    segmentCarteiraTotal: valueAt(rCarteira),
-    investorsCount,
+    const investorsRaw = v(rInvestors);
+    return {
+      navValue: v(rPLa),
+      monthlyAverageNavValue: v(rPLb),
+      quotaValue: null,
+      creditRightsValue,
+      creditRightsAValue: dcA,
+      creditRightsBValue: dcB,
+      overdueValue,
+      overdueSource,
+      pddValue,
+      cashValue: v(rDisp),
+      repurchaseValue: v(rRecD2),
+      assetsTotal: v(rAtivo),
+      liabilitiesTotal: v(rPassivo),
+      segmentCarteiraTotal: v(rCarteira),
+      investorsCount: investorsRaw != null ? Math.round(investorsRaw) : null,
+    };
   };
 
-  // ---- Cotas/classes a partir de X ----
-  const quotaClasses: ParsedQuotaClass[] = [];
-  if (rX >= 0) {
+  // Builder de cotas/classes por coluna
+  const quotasForColumn = (col: number): ParsedQuotaClass[] => {
+    const list: ParsedQuotaClass[] = [];
+    if (rX < 0) return list;
+
     let currentType: { quotaType: string; seniority: number } | null = null;
     let currentClass: ParsedQuotaClass | null = null;
     let awaitingName = false;
 
     const pushCurrent = () => {
-      if (currentClass) { quotaClasses.push(currentClass); currentClass = null; }
+      if (currentClass) { list.push(currentClass); currentClass = null; }
     };
 
     for (let i = rX + 1; i < matrix.length; i++) {
@@ -298,14 +289,9 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
       const raw = String(label);
       const n = norm(raw);
       const ind = indent(raw);
-
-      // Disclaimer / rodapé → encerra
       if (n.startsWith("as informacoes") || n.startsWith("os valores") || n.startsWith("fonte:")) break;
-      // Outra seção romana (defensivo)
       if (/^x[iv]+\s*-\s/.test(n)) break;
 
-      // Cabeçalho de tipo (Classe Sênior / Subordinada / Mezanino / Única)
-      // Ex.: "      Classe Sênior" (ind=6, sem dígitos)
       const t = detectQuotaType(raw);
       if (t && ind <= 8 && !/\d/.test(raw)) {
         pushCurrent();
@@ -314,25 +300,23 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
         continue;
       }
 
-      // Campos da classe (Cota / PL / Quantidade de Cotas / Rating)
-      const isCotaField        = n === "cota" || n.startsWith("cota ");
-      const isPLField          = n.startsWith("patrimonio liquido");
-      const isQtdField         = n.startsWith("quantidade de cotas");
-      const isRatingField      = n === "rating" || n.startsWith("rating ");
-      const isAmortField       = n.startsWith("amortizacao");
+      const isCotaField   = n === "cota" || n.startsWith("cota ");
+      const isPLField     = n.startsWith("patrimonio liquido");
+      const isQtdField    = n.startsWith("quantidade de cotas");
+      const isRatingField = n === "rating" || n.startsWith("rating ");
+      const isAmortField  = n.startsWith("amortizacao");
       const isField = isCotaField || isPLField || isQtdField || isRatingField || isAmortField;
 
       if (isField && currentClass) {
         if (isAmortField) continue;
-        const v = asNumber(row[col]);
-        if (isCotaField) currentClass.quotaValue = v;
-        else if (isPLField) currentClass.navValue = v;
-        else if (isQtdField) currentClass.numberOfQuotas = v;
+        const val = asNumber(row[col]);
+        if (isCotaField) currentClass.quotaValue = val;
+        else if (isPLField) currentClass.navValue = val;
+        else if (isQtdField) currentClass.numberOfQuotas = val;
         else if (isRatingField) currentClass.rating = row[col] != null ? String(row[col]).trim() : null;
         continue;
       }
 
-      // Nome da classe (apenas se estamos aguardando)
       if (awaitingName && currentType && !isField && ind >= 6) {
         pushCurrent();
         const sub = detectQuotaType(raw) ?? currentType;
@@ -341,16 +325,12 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
           classNameNormalized: norm(raw),
           quotaType: sub.quotaType,
           seniorityLevel: sub.seniority,
-          navValue: null,
-          quotaValue: null,
-          numberOfQuotas: null,
-          rating: null,
+          navValue: null, quotaValue: null, numberOfQuotas: null, rating: null,
         };
         awaitingName = false;
         continue;
       }
 
-      // Se não conhecemos tipo ainda, tenta detectar pelo próprio nome (formato CVM puro)
       if (!currentType && !isField && ind >= 4) {
         const tt = detectQuotaType(raw);
         if (tt) {
@@ -366,11 +346,29 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
       }
     }
     pushCurrent();
-  }
+    return list;
+  };
 
-  if (quotaClasses.length > 0 && quotaClasses[0].quotaValue != null) {
-    metrics.quotaValue = quotaClasses[0].quotaValue;
-  }
+  // Constrói slice para cada mês disponível
+  const slices: ParsedMonthSlice[] = months.map((m) => {
+    const met = metricsForColumn(m.columnIndex);
+    const quotas = quotasForColumn(m.columnIndex);
+    if (quotas.length > 0 && quotas[0].quotaValue != null) met.quotaValue = quotas[0].quotaValue;
+    return { iso: m.iso, label: m.label, columnIndex: m.columnIndex, metrics: met, quotaClasses: quotas };
+  });
+
+  const lastSlice = slices[slices.length - 1];
+  const metrics = lastSlice.metrics;
+  const quotaClasses = lastSlice.quotaClasses;
+  const col = last.columnIndex;
+  const valueAt = (rowIdx: number): number | null =>
+    rowIdx >= 0 ? asNumber(matrix[rowIdx]?.[col]) : null;
+  // (creditRightsValue/dcA/dcB/etc. recomputados para o checklist)
+  const dcA = valueAt(rDcA); const dcB = valueAt(rDcB);
+  const creditRightsValue = metrics.creditRightsValue;
+  const pddValue = metrics.pddValue;
+  const overdueValue = metrics.overdueValue;
+  const overdueSource = metrics.overdueSource;
 
   // ---- Checklist ----
   const declared = metrics.navValue;
@@ -431,6 +429,7 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
     referenceMonth: last.iso,
     referenceLabel: last.label,
     availableMonths: months,
+    months: slices,
     metrics,
     quotaClasses,
     checklist,
@@ -463,11 +462,13 @@ export type QuotaValidation = {
   message: string;
 };
 
-export function validateQuotas(parsed: ParsedMonthlyReport): QuotaValidation {
-  const count = parsed.quotaClasses.length;
-  const declared = parsed.metrics.navValue;
+export function validateQuotas(
+  input: ParsedMonthlyReport | { metrics: MonthlyMetrics; quotaClasses: ParsedQuotaClass[] },
+): QuotaValidation {
+  const count = input.quotaClasses.length;
+  const declared = input.metrics.navValue;
   const sum = count > 0
-    ? parsed.quotaClasses.reduce((acc, q) => acc + (q.navValue ?? 0), 0)
+    ? input.quotaClasses.reduce((acc, q) => acc + (q.navValue ?? 0), 0)
     : null;
 
   if (count === 0) {

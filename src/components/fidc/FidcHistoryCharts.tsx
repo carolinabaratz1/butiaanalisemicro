@@ -1,11 +1,46 @@
 import { useMemo } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from "recharts";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, AreaChart, Area, Label,
+} from "recharts";
 import { BRL, PCT, monthLabel } from "@/lib/fidc/format";
 
 type Row = Record<string, unknown>;
 
-const num = (v: unknown): number | null => (v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null);
-const ratio = (a: number | null, b: number | null) => (a != null && b != null && b !== 0 ? a / b : null);
+const num = (v: unknown): number | null =>
+  v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null;
+const ratio = (a: number | null, b: number | null) =>
+  a != null && b != null && b !== 0 ? a / b : null;
+
+const tooltipStyle = {
+  contentStyle: {
+    background: "hsl(var(--popover))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: 4,
+    fontSize: 11,
+    padding: "6px 8px",
+  },
+  labelStyle: { color: "hsl(var(--foreground))", fontSize: 11, fontWeight: 500 },
+  itemStyle: { color: "hsl(var(--foreground))" },
+};
+
+const axisStyle = {
+  tick: { fontSize: 10, fill: "hsl(var(--muted-foreground))" },
+  stroke: "hsl(var(--border))",
+  tickLine: { stroke: "hsl(var(--border))" },
+};
+
+// Heurística: usa milhões ou bilhões dependendo da escala
+function moneyTickFormatter(values: (number | null)[]) {
+  const max = Math.max(...values.filter((v): v is number => v != null).map(Math.abs), 0);
+  if (max >= 1e9) return (v: number) => `${(v / 1e9).toFixed(1)} bi`;
+  if (max >= 1e6) return (v: number) => `${(v / 1e6).toFixed(0)} mi`;
+  if (max >= 1e3) return (v: number) => `${(v / 1e3).toFixed(0)} mil`;
+  return (v: number) => v.toLocaleString("pt-BR");
+}
+
+const pctTickFormatter = (v: number) => `${(v * 100).toFixed(1)}%`;
+const intTickFormatter = (v: number) => Number(v).toLocaleString("pt-BR");
 
 export function FidcHistoryCharts({ history }: { history: Row[] }) {
   const data = useMemo(() => {
@@ -42,20 +77,28 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
   if (data.length < 2) {
     return (
       <div className="px-4 py-6 text-center text-muted-foreground text-[11.5px]">
-        Importe ao menos 2 informes mensais para visualizar a evolução histórica.
+        Importe ao menos 2 meses do informe para visualizar a evolução histórica.
       </div>
     );
   }
 
-  const fmtBRLCompact = (v: number) => BRL(v, { compact: true });
-  const fmtPct = (v: number | null) => (v == null ? "—" : PCT(v));
-  const fmtInt = (v: number | null) => (v == null ? "—" : v.toLocaleString("pt-BR"));
+  const fmtPlAxis = moneyTickFormatter(data.map((d) => d.pl));
+  const fmtDcAxis = moneyTickFormatter(data.map((d) => d.dc));
+
+  const xAxisProps = {
+    dataKey: "label" as const,
+    interval: 0 as const,
+    angle: -35,
+    textAnchor: "end" as const,
+    height: 46,
+    ...axisStyle,
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
-      <ChartCard title="PL (Patrimônio Líquido)">
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="PL — Patrimônio Líquido" subtitle="R$">
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <defs>
               <linearGradient id="gPL" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
@@ -63,29 +106,41 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
               </linearGradient>
             </defs>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => BRL(v, { compact: true }) ?? ""} width={70} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtBRLCompact(v)} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={64} tickFormatter={fmtPlAxis} domain={["auto", "auto"]}>
+              <Label value="R$" position="insideTopLeft" offset={-2} style={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+            </YAxis>
+            <Tooltip {...tooltipStyle} formatter={(v: number) => BRL(v, { compact: true })} />
             <Area type="monotone" dataKey="pl" stroke="hsl(var(--primary))" strokeWidth={1.6} fill="url(#gPL)" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Cota">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Valor da Cota" subtitle="R$ por cota">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={70} tickFormatter={(v) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 })} domain={["auto", "auto"]} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 })} />
-            <Line type="monotone" dataKey="cota" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={false} />
+            <XAxis {...xAxisProps} />
+            <YAxis
+              {...axisStyle}
+              width={70}
+              tickFormatter={(v) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 })}
+              domain={["auto", "auto"]}
+            />
+            <Tooltip
+              {...tooltipStyle}
+              formatter={(v: number) =>
+                v.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 })
+              }
+            />
+            <Line type="monotone" dataKey="cota" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Direitos Creditórios">
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Direitos Creditórios" subtitle="R$">
+        <ResponsiveContainer width="100%" height={220}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <defs>
               <linearGradient id="gDC" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
@@ -93,74 +148,77 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
               </linearGradient>
             </defs>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => BRL(v, { compact: true }) ?? ""} width={70} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtBRLCompact(v)} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={64} tickFormatter={fmtDcAxis} domain={["auto", "auto"]} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => BRL(v, { compact: true })} />
             <Area type="monotone" dataKey="dc" stroke="#10b981" strokeWidth={1.6} fill="url(#gDC)" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Inadimplência e PDD (% DC)">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Inadimplência e PDD" subtitle="% sobre Direitos Creditórios">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} width={56} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtPct(v)} />
-            <Line type="monotone" dataKey="atrasoPct" name="Atraso/DC" stroke="#ef4444" strokeWidth={1.6} dot={false} />
-            <Line type="monotone" dataKey="pddPct" name="PDD/DC" stroke="#f59e0b" strokeWidth={1.6} dot={false} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={56} tickFormatter={pctTickFormatter} domain={[0, "auto"]} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => PCT(v)} />
+            <Line type="monotone" dataKey="atrasoPct" name="Atraso/DC" stroke="#ef4444" strokeWidth={1.6} dot={{ r: 2 }} />
+            <Line type="monotone" dataKey="pddPct" name="PDD/DC" stroke="#f59e0b" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
         <Legend items={[{ label: "Atraso/DC", color: "#ef4444" }, { label: "PDD/DC", color: "#f59e0b" }]} />
       </ChartCard>
 
-      <ChartCard title="PDD / Atrasos (cobertura)">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Cobertura PDD / Atrasos" subtitle="%">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} width={56} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtPct(v)} />
-            <Line type="monotone" dataKey="pddAtrasoPct" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={false} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={56} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} domain={["auto", "auto"]} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => PCT(v)} />
+            <Line type="monotone" dataKey="pddAtrasoPct" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Caixa/PL e Recompras/DC">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Caixa/PL e Recompras/DC" subtitle="%">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} width={56} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtPct(v)} />
-            <Line type="monotone" dataKey="caixaPct" name="Caixa/PL" stroke="#0ea5e9" strokeWidth={1.6} dot={false} />
-            <Line type="monotone" dataKey="recompraPct" name="Recompras/DC" stroke="#a855f7" strokeWidth={1.6} dot={false} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={56} tickFormatter={pctTickFormatter} domain={[0, "auto"]} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => PCT(v)} />
+            <Line type="monotone" dataKey="caixaPct" name="Caixa/PL" stroke="#0ea5e9" strokeWidth={1.6} dot={{ r: 2 }} />
+            <Line type="monotone" dataKey="recompraPct" name="Recompras/DC" stroke="#a855f7" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
         <Legend items={[{ label: "Caixa/PL", color: "#0ea5e9" }, { label: "Recompras/DC", color: "#a855f7" }]} />
       </ChartCard>
 
-      <ChartCard title="Subordinação (% PL)">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Subordinação" subtitle="% sobre PL">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v * 100).toFixed(1)}%`} width={56} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtPct(v)} />
-            <Line type="monotone" dataKey="subPct" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={false} connectNulls />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={56} tickFormatter={pctTickFormatter} domain={[0, "auto"]} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => PCT(v)} />
+            <Line
+              type="monotone" dataKey="subPct" stroke="hsl(var(--primary))"
+              strokeWidth={1.6} dot={{ r: 2 }} connectNulls
+            />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
 
-      <ChartCard title="Investidores">
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={data} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+      <ChartCard title="Número de Investidores" subtitle="cotistas">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-            <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => Number(v).toLocaleString("pt-BR")} width={56} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => fmtInt(v)} />
-            <Line type="monotone" dataKey="investidores" stroke="#6366f1" strokeWidth={1.6} dot={false} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...axisStyle} width={56} tickFormatter={intTickFormatter} domain={["auto", "auto"]} allowDecimals={false} />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => Number(v).toLocaleString("pt-BR")} />
+            <Line type="monotone" dataKey="investidores" stroke="#6366f1" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -168,22 +226,13 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
   );
 }
 
-const tooltipStyle = {
-  contentStyle: {
-    background: "hsl(var(--popover))",
-    border: "1px solid hsl(var(--border))",
-    borderRadius: 4,
-    fontSize: 11,
-    padding: "6px 8px",
-  },
-  labelStyle: { color: "hsl(var(--foreground))", fontSize: 11, fontWeight: 500 },
-  itemStyle: { color: "hsl(var(--foreground))" },
-};
-
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="border border-border bg-card">
-      <div className="px-3 pt-2 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground">{title}</div>
+      <div className="px-3 pt-2 pb-1 flex items-baseline justify-between gap-2">
+        <div className="text-[11.5px] font-medium text-foreground">{title}</div>
+        {subtitle && <div className="text-[10px] text-muted-foreground">{subtitle}</div>}
+      </div>
       {children}
     </div>
   );
