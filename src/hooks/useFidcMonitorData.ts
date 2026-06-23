@@ -72,7 +72,7 @@ export type FidcPosition = {
   quotaId: string | null;
   quota: QuotaRecord | null;
   isin: string;
-  value: number;             // financial_price (R$) — se ausente, usa amount como fallback
+  value: number;             // valor financeiro = amount × financial_price
   valDate: string;
 };
 
@@ -95,10 +95,10 @@ const isFidcLikeRow = (p: { product_class: string | null; product: string | null
 };
 
 const valueOf = (p: PosicaoRow): number => {
-  // Preferimos financial_price (valor financeiro). Se ausente/zero, usa amount.
-  const fp = Number(p.financial_price);
-  if (Number.isFinite(fp) && fp !== 0) return fp;
-  return Number(p.amount) || 0;
+  // Posição financeira = amount × financial_price
+  const amt = Number(p.amount) || 0;
+  const fp = Number(p.financial_price) || 0;
+  return amt * fp;
 };
 
 export function useFidcMonitorData() {
