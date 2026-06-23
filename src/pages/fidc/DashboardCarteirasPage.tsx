@@ -141,6 +141,9 @@ export default function DashboardCarteirasPage() {
             <tbody>
               {portfolioSummaries.map((s) => {
                 const mapped = s.positions.filter((p) => p.fidcId).length;
+                const fidcIdsInPort = Array.from(new Set(s.positions.map((p) => p.fidcId).filter(Boolean) as string[]));
+                const withInforme = fidcIdsInPort.filter((fid) => !!latestReportFor(fid)).length;
+                const informeOk = fidcIdsInPort.length > 0 && withInforme === fidcIdsInPort.length;
                 return (
                   <tr key={s.portfolio.id} className="hairline-b hover:bg-surface-2/50">
                     <td className="px-3 py-2">
@@ -158,11 +161,17 @@ export default function DashboardCarteirasPage() {
                     <td className={cn("px-3 py-2 text-right num", s.unmappedCount > 0 && "text-risk-warning")}>
                       {s.unmappedCount}
                     </td>
-                    <td className="px-3 py-2 text-right num text-muted-foreground">0/{s.fidcCount}</td>
+                    <td className="px-3 py-2 text-right num text-muted-foreground">{withInforme}/{s.fidcCount}</td>
                     <td className="px-3 py-2">
-                      <span className="inline-flex items-center gap-1 rounded-sm bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                        <AlertTriangle className="h-3 w-3" /> Pendente
-                      </span>
+                      {informeOk ? (
+                        <span className="inline-flex items-center gap-1 rounded-sm bg-risk-normal/15 px-1.5 py-0.5 text-[11px] text-risk-normal">
+                          <CheckCircle2 className="h-3 w-3" /> Completo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-sm bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          <AlertTriangle className="h-3 w-3" /> {withInforme > 0 ? "Parcial" : "Pendente"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{fmtDate(s.valDate)}</td>
                     <td className="px-3 py-2 text-right">
