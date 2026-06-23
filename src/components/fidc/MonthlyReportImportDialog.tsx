@@ -55,10 +55,18 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
     enabled: open,
   });
 
-  const validation = useMemo(() => (parsed ? validateQuotas(parsed) : null), [parsed]);
+  const previewSlice = useMemo(() => {
+    if (!parsed) return null;
+    return parsed.months.find((m) => m.iso === selectedMonth) ?? parsed.months[parsed.months.length - 1];
+  }, [parsed, selectedMonth]);
+
+  const validation = useMemo(
+    () => (previewSlice ? validateQuotas({ metrics: previewSlice.metrics, quotaClasses: previewSlice.quotaClasses }) : null),
+    [previewSlice],
+  );
   const matches = useMemo<QuotaMatch[]>(
-    () => (parsed ? matchQuotaClasses(parsed.quotaClasses, master) : []),
-    [parsed, master],
+    () => (previewSlice ? matchQuotaClasses(previewSlice.quotaClasses, master) : []),
+    [previewSlice, master],
   );
 
   const cnpjMatches = parsed?.cnpj && fidcCnpjClean && parsed.cnpj === fidcCnpjClean;
