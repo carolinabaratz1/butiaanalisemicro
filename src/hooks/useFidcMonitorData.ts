@@ -397,8 +397,101 @@ export function useFidcMonitorData() {
       });
     });
 
+    // Métricas mensais → alertas por FIDC monitorado (com posição em alguma carteira Butiá)
+    const monitoredFidcIds = new Set<string>();
+    portfolioSummaries.forEach((s) => s.positions.forEach((p) => p.fidcId && monitoredFidcIds.add(p.fidcId)));
+
+    monitoredFidcIds.forEach((fid) => {
+      const f = fidcById.get(fid);
+      const fname = f?.name ?? "—";
+      const latest = reportsByFidc.get(fid)?.[0] ?? null;
+      const prev = reportsByFidc.get(fid)?.[1] ?? null;
+      const refDate = latest?.reference_month ?? null;
+
+      if (!latest) {
+        alerts.push({
+          id: `a${i++}`,
+          severity: "warning",
+          kind: "informe_ausente",
+          portfolioName: null,
+          isin: null,
+          fidcId: fid,
+          fidcName: fname,
+          message: `Informe mensal do FIDC ${fname} ainda não importado.`,
+          valDate: null,
+        });
+        return;
+      }
+
+      // Subordinação inconsistente
+      const subDiffPct = Number(latest.quota_validation_difference_percentage ?? 0);
+      const subStatus = (latest.subordinated_calculation_status ?? "").toLowerCase();
+      if (subStatus === "inconsistent" || Math.abs(subDiffPct) > 0.002) {
+        alerts.push({
+          id: `a${i++}`, severity: "warning", kind: "subordinacao_inconsistente",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `Soma das cotas diverge do PL em ${(subDiffPct * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      // PDD / Direitos creditórios
+      const dc = Number(latest.credit_rights_value ?? 0);
+      const pdd = Math.abs(Number(latest.pdd_value ?? 0));
+      if (dc > 0 && pdd / dc > 0.05) {
+        alerts.push({
+          id: `a${i++}`, severity: pdd / dc > 0.1 ? "critical" : "warning", kind: "pdd_alto",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `PDD/DC em ${((pdd / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      // Atraso / Direitos creditórios
+      const overdue = Number(latest.overdue_value ?? 0);
+      if (dc > 0 && overdue / dc > 0.1) {
+        alerts.push({
+          id: `a${i++}`, severity: overdue / dc > 0.2 ? "critical" : "warning", kind: "atraso_alto",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `Inadimplência/DC em ${((overdue / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      if (prev) {
+        const navNow = Number(latest.nav_value ?? 0);
+        const navPrev = Number(prev.nav_value ?? 0);
+        if (navPrev > 0) {
+          const v = (navNow - navPrev) / navPrev;
+          if (v < -0.1) {
+            alerts.push({
+              id: `a${i++}`, severity: v < -0.2 ? "critical" : "warning", kind: "queda_pl",
+              portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+              message: `PL do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
+              valDate: refDate,
+            });
+          }
+        }
+        const qNow = Number(latest.quota_value ?? 0);
+        const qPrev = Number(prev.quota_value ?? 0);
+        if (qPrev > 0) {
+          const v = (qNow - qPrev) / qPrev;
+          if (v < -0.02) {
+            alerts.push({
+              id: `a${i++}`, severity: v < -0.05 ? "critical" : "warning", kind: "queda_cota",
+              portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+              message: `Cota do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
+              valDate: refDate,
+            });
+          }
+        }
+      }
+    });
+
     return alerts;
-  }, [portfolioSummaries]);
+  }, [portfolioSummaries, reportsByFidc, fidcById]);
+
+  const fidcsWithReportCount = reportsByFidc.size;
 
   return {
     isLoading,
@@ -412,5 +505,8 @@ export function useFidcMonitorData() {
     portfoliosForFidc,
     exposureForFidc,
     positionAlerts,
+    latestReportFor,
+    prevReportFor,
+    fidcsWithReportCount,
   };
 }
