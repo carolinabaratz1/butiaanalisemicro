@@ -43,6 +43,21 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
+  const { data: reportsHistory = [] } = useQuery({
+    queryKey: ["fidc-monthly-reports", id, "history"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select("id, reference_month, nav_value, quota_total_nav_value, quota_validation_difference, quota_validation_difference_percentage, quota_validation_status, quota_classes_found_count, subordinated_calculation_status, is_current_version, source_file_name, created_at")
+        .eq("fidc_id", id)
+        .eq("is_current_version", true)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<Record<string, unknown>>;
+    },
+    enabled: !!id,
+  });
+
   if (isLoading) {
     return <div className="px-6 py-12 text-center text-muted-foreground text-[12px]">
       <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando…
