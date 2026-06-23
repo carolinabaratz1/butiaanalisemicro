@@ -24,6 +24,12 @@ import AssembleiasPage from "./pages/AssembleiasPage";
 import DesempenhoPage from "./pages/DesempenhoPage";
 import { TradeMonitorPage } from "./components/trade/TradeMonitorPage";
 import { UploadPage as TradeUploadPage } from "./components/trade/UploadPage";
+import FidcMonitorPage from "./pages/fidc/MonitorPage";
+import FidcListPage from "./pages/fidc/FidcListPage";
+import FidcDetailPage from "./pages/fidc/FidcDetailPage";
+import FidcCadastroPage from "./pages/fidc/FidcCadastroPage";
+import FidcPareceresPage from "./pages/fidc/PareceresPage";
+import FidcAlertasPage from "./pages/fidc/AlertasPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -81,6 +87,12 @@ function ProtectedRoutes() {
         <Route path="/desempenho" element={<RouteGuard path="/desempenho"><DesempenhoPage /></RouteGuard>} />
         <Route path="/trade" element={<RouteGuard path="/trade"><TradeMonitorPage /></RouteGuard>} />
         <Route path="/trade/upload" element={<RouteGuard path="/trade/upload"><TradeUploadPage /></RouteGuard>} />
+        <Route path="/fidc-monitor" element={<RouteGuard path="/fidc-monitor"><FidcMonitorPage /></RouteGuard>} />
+        <Route path="/fidc-monitor/fidcs" element={<RouteGuard path="/fidc-monitor/fidcs"><FidcListPage /></RouteGuard>} />
+        <Route path="/fidc-monitor/fidcs/:id" element={<RouteGuard path="/fidc-monitor/fidcs"><FidcDetailPage /></RouteGuard>} />
+        <Route path="/fidc-monitor/cadastro" element={<RouteGuard path="/fidc-monitor/cadastro"><FidcCadastroPage /></RouteGuard>} />
+        <Route path="/fidc-monitor/pareceres" element={<RouteGuard path="/fidc-monitor/pareceres"><FidcPareceresPage /></RouteGuard>} />
+        <Route path="/fidc-monitor/alertas" element={<RouteGuard path="/fidc-monitor/alertas"><FidcAlertasPage /></RouteGuard>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
