@@ -10,6 +10,7 @@ import { Download, Upload, Loader2, TrendingUp, TrendingDown, Minus, AlertTriang
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { FundoDashboard } from '@/components/posicoes/FundoDashboard';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
@@ -725,6 +726,7 @@ export default function PosicoesPage() {
         <TabsList className="bg-surface-1 border border-border">
           <TabsTrigger value="tabela" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Tabela</TabsTrigger>
           <TabsTrigger value="analitico" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Painel Analítico</TabsTrigger>
+          <TabsTrigger value="dashboard" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Dashboard do Fundo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
@@ -1075,6 +1077,10 @@ export default function PosicoesPage() {
               )}
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="dashboard" className="mt-3">
+          <FundoDashboard />
         </TabsContent>
       </Tabs>
 

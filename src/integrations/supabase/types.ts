@@ -1753,6 +1753,26 @@ export type Database = {
               ticker: string
             }[]
           }
+      get_posicoes_dashboard_fundo: {
+        Args: { p_fundo: string }
+        Returns: {
+          amount: number
+          codigo_emissor: string
+          duration_du: number
+          financial_price: number
+          fundo: string
+          grupo_economico: string
+          indexador: string
+          isin: string
+          nome_emissor: string
+          product_class: string
+          rating: string
+          setor: string
+          sub_indexador: string
+          ticker: string
+          vencimento: string
+        }[]
+      }
       get_posicoes_val_dates: {
         Args: never
         Returns: {
