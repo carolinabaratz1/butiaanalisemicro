@@ -355,7 +355,7 @@ export default function FidcDetailPage() {
                     <td className="px-3 py-2 text-right num">{Number(r.quota_classes_found_count ?? 0)}</td>
                     <td className="px-3 py-2">
                       {r.subordinated_calculation_status === "ok" ? "Confiável" :
-                       r.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                       (r.subordinated_calculation_status === "missing" || r.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
                     </td>
                     <td className="px-3 py-2"><ValidationBadge status={String(r.quota_validation_status ?? "—")} /></td>
                     <td className="px-3 py-2 text-muted-foreground truncate max-w-[220px]" title={String(r.source_file_name ?? "")}>
