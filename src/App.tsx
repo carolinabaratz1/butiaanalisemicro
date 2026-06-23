@@ -25,6 +25,7 @@ import DesempenhoPage from "./pages/DesempenhoPage";
 import { TradeMonitorPage } from "./components/trade/TradeMonitorPage";
 import { UploadPage as TradeUploadPage } from "./components/trade/UploadPage";
 import FidcMonitorPage from "./pages/fidc/MonitorPage";
+import FidcDashboardCarteirasPage from "./pages/fidc/DashboardCarteirasPage";
 import FidcListPage from "./pages/fidc/FidcListPage";
 import FidcDetailPage from "./pages/fidc/FidcDetailPage";
 import FidcCadastroPage from "./pages/fidc/FidcCadastroPage";
