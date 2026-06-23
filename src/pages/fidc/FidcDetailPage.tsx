@@ -1,16 +1,20 @@
+import { useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
-import { BRL, PCT, formatCNPJ } from "@/lib/fidc/format";
+import { BRL, PCT, formatCNPJ, monthLabel } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { MonthlyReportImportDialog } from "@/components/fidc/MonthlyReportImportDialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, AlertTriangle, Upload, CheckCircle2 } from "lucide-react";
 
 export default function FidcDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const { fidcById, portfoliosForFidc, portfolioSummaries, exposureForFidc, latestValDate, isLoading } = useFidcMonitorData();
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: quotas = [] } = useQuery({
     queryKey: ["fidc-detail-quotas", id],
@@ -18,6 +22,23 @@ export default function FidcDetailPage() {
       const { data, error } = await supabase.from("fidc_quota_classes").select("*").eq("fidc_id", id);
       if (error) throw error;
       return data ?? [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: latestReport } = useQuery({
+    queryKey: ["fidc-monthly-reports", id, "latest"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select("*")
+        .eq("fidc_id", id)
+        .eq("is_current_version", true)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Record<string, unknown> | null;
     },
     enabled: !!id,
   });
@@ -46,9 +67,18 @@ export default function FidcDetailPage() {
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[20px] font-semibold tracking-tight">{f.name}</h1>
-              <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] bg-muted/40 text-muted-foreground">
-                <AlertTriangle className="h-3 w-3" /> Informe mensal pendente
-              </span>
+              {latestReport ? (
+                <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] bg-emerald-500/15 text-emerald-600">
+                  <CheckCircle2 className="h-3 w-3" /> Informe {monthLabel(String(latestReport.reference_month).slice(0, 10))}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] bg-muted/40 text-muted-foreground">
+                  <AlertTriangle className="h-3 w-3" /> Informe mensal pendente
+                </span>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-7 text-[11.5px]">
+                <Upload className="h-3.5 w-3.5 mr-1.5" /> Importar Informe Mensal
+              </Button>
             </div>
             <div className="mt-1 text-[11.5px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
               <span>CNPJ <span className="num text-foreground">{f.cnpj ? formatCNPJ(f.cnpj) : "—"}</span></span>
@@ -88,6 +118,56 @@ export default function FidcDetailPage() {
         <MetricCard label="Var. mensal PL" value={<NoDataInline />} />
         <MetricCard label="Investidores" value={<NoDataInline />} />
       </div>
+
+      {latestReport && (
+        <div className="px-6 pb-4">
+          <div className="bg-card border border-border p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="section-title">Validação PL × Cotas — {monthLabel(String(latestReport.reference_month).slice(0, 10))}</div>
+              <ValidationBadge status={String(latestReport.quota_validation_status ?? "—")} />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-[12px]">
+              <div>
+                <div className="text-[11px] text-muted-foreground">PL informado</div>
+                <div className="num font-medium">{BRL(latestReport.nav_value as number | null, { compact: true })}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted-foreground">Soma das cotas</div>
+                <div className="num font-medium">{BRL(latestReport.quota_total_nav_value as number | null, { compact: true })}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted-foreground">Diferença</div>
+                <div className="num font-medium">{BRL(latestReport.quota_validation_difference as number | null, { compact: true })}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted-foreground">% diferença</div>
+                <div className="num font-medium">
+                  {latestReport.quota_validation_difference_percentage != null
+                    ? `${(Number(latestReport.quota_validation_difference_percentage)).toFixed(3).replace(".", ",")}%`
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted-foreground">Cotas encontradas</div>
+                <div className="num font-medium">{Number(latestReport.quota_classes_found_count ?? 0)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-muted-foreground">Subordinação</div>
+                <div className="font-medium">
+                  {latestReport.subordinated_calculation_status === "ok" ? "Confiável" :
+                   latestReport.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                </div>
+              </div>
+            </div>
+            {latestReport.subordinated_calculation_notes ? (
+              <div className="mt-2 text-[11.5px] text-muted-foreground">
+                {String(latestReport.subordinated_calculation_notes)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
 
       <div className="px-6 pb-4">
         <div className="bg-card border border-border">
@@ -179,6 +259,26 @@ export default function FidcDetailPage() {
           </div>
         </div>
       </div>
+
+      <MonthlyReportImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        fidcId={id}
+        fidcName={f.name}
+        fidcCnpj={f.cnpj ?? null}
+      />
     </div>
   );
 }
+
+function ValidationBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    valid: { label: "Válido", cls: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" },
+    warning: { label: "Atenção", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30" },
+    invalid: { label: "Crítico", cls: "bg-red-500/15 text-red-600 border-red-500/30" },
+    cotas_ausentes: { label: "Cotas ausentes", cls: "bg-red-500/15 text-red-600 border-red-500/30" },
+  };
+  const v = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border" };
+  return <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] ${v.cls}`}>{v.label}</span>;
+}
+

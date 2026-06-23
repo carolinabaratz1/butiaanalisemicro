@@ -850,11 +850,13 @@ export type Database = {
           credit_rights_value: number | null
           fidc_id: string
           id: string
+          imported_by: string | null
           investors_count: number | null
           is_current_version: boolean
           nav_value: number | null
           overdue_value: number | null
           pdd_value: number | null
+          quota_classes_found_count: number | null
           quota_total_nav_value: number | null
           quota_validation_difference: number | null
           quota_validation_difference_percentage: number | null
@@ -865,6 +867,9 @@ export type Database = {
           raw_data: Json | null
           reference_month: string
           repurchase_value: number | null
+          source_file_name: string | null
+          subordinated_calculation_notes: string | null
+          subordinated_calculation_status: string | null
           subordinated_value: number | null
           updated_at: string
           version: number
@@ -875,11 +880,13 @@ export type Database = {
           credit_rights_value?: number | null
           fidc_id: string
           id?: string
+          imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
           nav_value?: number | null
           overdue_value?: number | null
           pdd_value?: number | null
+          quota_classes_found_count?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
           quota_validation_difference_percentage?: number | null
@@ -890,6 +897,9 @@ export type Database = {
           raw_data?: Json | null
           reference_month: string
           repurchase_value?: number | null
+          source_file_name?: string | null
+          subordinated_calculation_notes?: string | null
+          subordinated_calculation_status?: string | null
           subordinated_value?: number | null
           updated_at?: string
           version?: number
@@ -900,11 +910,13 @@ export type Database = {
           credit_rights_value?: number | null
           fidc_id?: string
           id?: string
+          imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
           nav_value?: number | null
           overdue_value?: number | null
           pdd_value?: number | null
+          quota_classes_found_count?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
           quota_validation_difference_percentage?: number | null
@@ -915,6 +927,9 @@ export type Database = {
           raw_data?: Json | null
           reference_month?: string
           repurchase_value?: number | null
+          source_file_name?: string | null
+          subordinated_calculation_notes?: string | null
+          subordinated_calculation_status?: string | null
           subordinated_value?: number | null
           updated_at?: string
           version?: number
@@ -1843,7 +1858,7 @@ export type Database = {
       fidc_recommendation: "manter" | "acompanhar" | "reduzir" | "zerar"
       fidc_threshold_direction: "above_is_worse" | "below_is_worse"
       fidc_threshold_scope: "global" | "per_fidc" | "per_portfolio"
-      fidc_validation_status: "valid" | "warning" | "invalid"
+      fidc_validation_status: "valid" | "warning" | "invalid" | "cotas_ausentes"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1983,7 +1998,7 @@ export const Constants = {
       fidc_recommendation: ["manter", "acompanhar", "reduzir", "zerar"],
       fidc_threshold_direction: ["above_is_worse", "below_is_worse"],
       fidc_threshold_scope: ["global", "per_fidc", "per_portfolio"],
-      fidc_validation_status: ["valid", "warning", "invalid"],
+      fidc_validation_status: ["valid", "warning", "invalid", "cotas_ausentes"],
     },
   },
 } as const
