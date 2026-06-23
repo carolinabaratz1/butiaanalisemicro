@@ -155,15 +155,58 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const [posFilter, setPosFilter] = useState<"all" | "with" | "without">("all");
   const [sortKey, setSortKey] = useState<SortKey>("z");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [emissorFilter, setEmissorFilter] = useState<string>(ALL_SECTORS); // CNPJ ou ALL
+  const [grupoFilter, setGrupoFilter] = useState<string>(ALL_SECTORS); // nome do grupo ou ALL
 
   const noSetor = !setorAtivo;
 
-  // Aplica filtro de rating + posição em qualquer subconjunto
+  // Base após setor (para popular dropdowns de emissor/grupo coerentes com setor)
+  const baseSetor = useMemo(
+    () => (isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
+    [enriched, setorAtivo, isAllSectors],
+  );
+
+  // Opções de Grupo Econômico (filtradas pelo setor)
+  const gruposDisponiveis = useMemo(() => {
+    const cnt = new Map<string, number>();
+    baseSetor.forEach((t) => {
+      const g = t.grupo_economico;
+      if (g) cnt.set(g, (cnt.get(g) ?? 0) + 1);
+    });
+    return Array.from(cnt.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [baseSetor]);
+
+  // Opções de Emissor (filtradas por setor + grupo)
+  const emissoresDisponiveis = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number }>();
+    baseSetor
+      .filter((t) => grupoFilter === ALL_SECTORS || t.grupo_economico === grupoFilter)
+      .forEach((t) => {
+        const k = t.emissor_cnpj ?? `__nocnpj__${t.emissor_label}`;
+        const cur = map.get(k);
+        if (cur) cur.count++;
+        else map.set(k, { nome: t.emissor_label, count: 1 });
+      });
+    return Array.from(map.entries())
+      .map(([cnpj, v]) => ({ cnpj, nome: v.nome, count: v.count }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [baseSetor, grupoFilter]);
+
+  // Aplica filtro de rating + posição + emissor + grupo em qualquer subconjunto
   const applyRating = (arr: typeof enriched) => {
     let out = arr;
     if (ratingFilter.size > 0) out = out.filter((t) => ratingFilter.has(t.rating_norm));
     if (posFilter !== "all" && hasPosition) {
       out = out.filter((t) => (posFilter === "with" ? hasPosition(t.ticker) : !hasPosition(t.ticker)));
+    }
+    if (grupoFilter !== ALL_SECTORS) {
+      out = out.filter((t) => t.grupo_economico === grupoFilter);
+    }
+    if (emissorFilter !== ALL_SECTORS) {
+      out = out.filter((t) => {
+        const k = t.emissor_cnpj ?? `__nocnpj__${t.emissor_label}`;
+        return k === emissorFilter;
+      });
     }
     return out;
   };
@@ -171,12 +214,28 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   // Pontos do scatter: setor selecionado em destaque, restante como background.
   const inSector = useMemo(
     () => applyRating(isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
-    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition],
+    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition, grupoFilter, emissorFilter],
   );
   const outSector = useMemo(
     () => (isAllSectors ? [] : enriched.filter((t) => t.setor !== setorAtivo)),
     [enriched, setorAtivo, isAllSectors],
   );
+
+  // Taxa média dos ativos atualmente filtrados (ponderada por volume quando disponível)
+  const taxaMedia = useMemo(() => {
+    if (!inSector.length) return null;
+    let sumW = 0, sumWV = 0, sumV = 0, n = 0;
+    for (const t of inSector) {
+      if (t.last_val == null) continue;
+      const w = t.total_vol_fin && t.total_vol_fin > 0 ? t.total_vol_fin : 0;
+      sumW += w;
+      sumWV += w * t.last_val;
+      sumV += t.last_val;
+      n++;
+    }
+    if (!n) return null;
+    return { simples: sumV / n, ponderada: sumW > 0 ? sumWV / sumW : sumV / n, n };
+  }, [inSector]);
 
   // Agrupa pontos do setor por rating (uma <Scatter/> por série → cor por rating).
   const sectorByRating = useMemo(() => {
