@@ -69,7 +69,7 @@ export default function FidcDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
-        .select("id, reference_month, nav_value, quota_total_nav_value, quota_validation_difference, quota_validation_difference_percentage, quota_validation_status, quota_classes_found_count, subordinated_calculation_status, is_current_version, source_file_name, created_at")
+        .select("id, reference_month, nav_value, quota_value, quota_total_nav_value, quota_validation_difference, quota_validation_difference_percentage, quota_validation_status, quota_classes_found_count, subordinated_calculation_status, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, investors_count, is_current_version, source_file_name, created_at")
         .eq("fidc_id", id)
         .eq("is_current_version", true)
         .order("reference_month", { ascending: false });
