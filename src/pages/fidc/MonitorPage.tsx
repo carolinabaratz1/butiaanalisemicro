@@ -85,7 +85,7 @@ export default function MonitorPage() {
         right={
           <div className="flex items-center gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 bg-muted/40 text-muted-foreground">
-              <AlertTriangle className="h-3 w-3" /> Informes mensais: 0/{summary.fidcCount}
+              <AlertTriangle className="h-3 w-3" /> Informes mensais: {Math.min(fidcsWithReportCount, summary.fidcCount)}/{summary.fidcCount}
             </span>
           </div>
         }
