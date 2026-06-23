@@ -51,7 +51,7 @@ export default function FidcListPage() {
                     <td className="px-3 py-2">{f.manager || "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{f.administrator || "—"}</td>
                     <td className="px-3 py-2">{f.sector || "—"}</td>
-                    <td className="px-3 py-2">{f.current_rating_label(f) /* placeholder */ ?? (f as any).rating || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">—</td>
                     <td className="px-3 py-2 text-right num">{expo > 0 ? BRL(expo, { compact: true }) : "—"}</td>
                     <td className="px-3 py-2 text-right"><NoDataInline /></td>
                     <td className="px-3 py-2 text-[11px] text-muted-foreground">{ports.map((p) => p.name).join(" · ") || "—"}</td>

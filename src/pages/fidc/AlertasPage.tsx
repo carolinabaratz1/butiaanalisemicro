@@ -1,65 +1,81 @@
 import { useState } from "react";
-import { ALERTS, fidcById, portfolioById } from "@/lib/fidc/mock-data";
-import { PCT, monthLabel } from "@/lib/fidc/format";
+import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { RiskStatusBadge } from "@/components/fidc/MetricChip";
+import { Loader2, Info } from "lucide-react";
+
+const KIND_LABEL: Record<string, string> = {
+  isin_nao_mapeado: "ISIN não mapeado",
+  carteira_sem_pl: "PL da carteira ausente",
+  carteira_sem_posicao: "Sem posição para carteira",
+  posicao_duplicada: "Posição duplicada",
+  divergencia_pct: "Divergência de %",
+};
 
 export default function AlertasPage() {
   const [sev, setSev] = useState<"all" | "warning" | "critical">("all");
-  const [status, setStatus] = useState<"all" | "new" | "in_analysis" | "resolved">("all");
-  const rows = ALERTS.filter((a) =>
-    (sev === "all" || a.severity === sev) && (status === "all" || a.status === status),
-  );
+  const { isLoading, positionAlerts, latestValDate } = useFidcMonitorData();
+
+  const rows = positionAlerts.filter((a) => sev === "all" || a.severity === sev);
 
   return (
     <div>
-      <PageHeader title="Alertas" subtitle={`${ALERTS.length} alertas gerados em ${monthLabel(ALERTS[0]?.month ?? "2025-05")}`} />
+      <PageHeader
+        title="Alertas"
+        subtitle={`${positionAlerts.length} alertas de posição em ${latestValDate ?? "—"}`}
+      />
+
+      <div className="px-6 py-3 hairline-b">
+        <div className="rounded-sm border border-border bg-muted/30 px-3 py-2 text-[11.5px] text-muted-foreground flex items-start gap-2">
+          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>
+            Esta etapa exibe apenas alertas baseados em posição (ISIN, carteira, duplicidade).
+            Alertas de métricas mensais do FIDC (atraso/DC, PDD/DC, caixa/PL, subordinação, recompras, var. PL, var. cota)
+            só serão gerados após o upload do informe mensal do FIDC.
+          </span>
+        </div>
+      </div>
+
       <div className="px-6 py-3 flex gap-2 hairline-b flex-wrap">
         <Sel label="Severidade" value={sev} onChange={(v) => setSev(v as typeof sev)} options={[
           { value: "all", label: "Todas" }, { value: "critical", label: "Crítico" }, { value: "warning", label: "Atenção" },
         ]} />
-        <Sel label="Status" value={status} onChange={(v) => setStatus(v as typeof status)} options={[
-          { value: "all", label: "Todos" }, { value: "new", label: "Novo" }, { value: "in_analysis", label: "Em análise" }, { value: "resolved", label: "Resolvido" },
-        ]} />
       </div>
+
       <div className="px-6 py-4">
         <div className="bg-card border border-border overflow-x-auto">
           <table className="w-full text-[12px]">
             <thead className="bg-surface-2 text-muted-foreground">
               <tr className="hairline-b">
                 <th className="text-left px-3 py-2 font-medium">Severidade</th>
+                <th className="text-left px-3 py-2 font-medium">Tipo</th>
                 <th className="text-left px-3 py-2 font-medium">Carteira</th>
-                <th className="text-left px-3 py-2 font-medium">FIDC</th>
-                <th className="text-left px-3 py-2 font-medium">Métrica</th>
-                <th className="text-right px-3 py-2 font-medium">Valor atual</th>
-                <th className="text-right px-3 py-2 font-medium">Limite</th>
-                <th className="text-left px-3 py-2 font-medium">Mês</th>
-                <th className="text-left px-3 py-2 font-medium">Status</th>
-                <th className="text-left px-3 py-2 font-medium">Comentário</th>
+                <th className="text-left px-3 py-2 font-medium">ISIN</th>
+                <th className="text-left px-3 py-2 font-medium">Detalhe</th>
+                <th className="text-left px-3 py-2 font-medium">Data</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((a) => {
-                const f = fidcById(a.fidcId)!;
-                const p = a.portfolioId ? portfolioById(a.portfolioId) : null;
-                return (
-                  <tr key={a.id} className="hairline-b hover:bg-surface-2/40">
-                    <td className="px-3 py-2"><RiskStatusBadge status={a.severity} /></td>
-                    <td className="px-3 py-2">{p?.name ?? "—"}</td>
-                    <td className="px-3 py-2 font-medium">{f.name}</td>
-                    <td className="px-3 py-2">{a.display}</td>
-                    <td className="px-3 py-2 text-right num">{PCT(a.currentValue)}</td>
-                    <td className="px-3 py-2 text-right num text-muted-foreground">{PCT(a.threshold)}</td>
-                    <td className="px-3 py-2">{monthLabel(a.month)}</td>
-                    <td className="px-3 py-2">
-                      <span className="text-[10.5px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-surface-3 text-muted-foreground">
-                        {a.status === "new" ? "Novo" : a.status === "in_analysis" ? "Em análise" : "Resolvido"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground italic">+ adicionar comentário</td>
-                  </tr>
-                );
-              })}
+              {isLoading && (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                  <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando…
+                </td></tr>
+              )}
+              {!isLoading && rows.length === 0 && (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                  Nenhum alerta de posição.
+                </td></tr>
+              )}
+              {rows.map((a) => (
+                <tr key={a.id} className="hairline-b hover:bg-surface-2/40">
+                  <td className="px-3 py-2"><RiskStatusBadge status={a.severity} /></td>
+                  <td className="px-3 py-2 font-medium">{KIND_LABEL[a.kind] ?? a.kind}</td>
+                  <td className="px-3 py-2">{a.portfolioName ?? "—"}</td>
+                  <td className="px-3 py-2 num text-muted-foreground">{a.isin ?? "—"}</td>
+                  <td className="px-3 py-2 text-foreground/90">{a.message}</td>
+                  <td className="px-3 py-2 num text-muted-foreground">{a.valDate ?? "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
