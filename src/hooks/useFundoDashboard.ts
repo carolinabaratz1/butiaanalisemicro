@@ -84,11 +84,13 @@ export function useFundoDashboard(fundo: string | null) {
   const rows = q.data ?? [];
 
   const agg = useMemo(() => {
+    const posVal = (r: DashboardRow) =>
+      (Number(r.amount) || 0) * (Number(r.financial_price) || 0);
     const sumBy = (key: (r: DashboardRow) => string | null | undefined) => {
       const m = new Map<string, number>();
       for (const r of rows) {
         const k = (key(r) ?? 'N/D').toString().trim() || 'N/D';
-        m.set(k, (m.get(k) ?? 0) + (Number(r.financial_price) || 0));
+        m.set(k, (m.get(k) ?? 0) + posVal(r));
       }
       return Array.from(m.entries()).map(([name, value]) => ({ name, value }));
     };
@@ -99,7 +101,7 @@ export function useFundoDashboard(fundo: string | null) {
     const ratingMap = new Map<string, number>();
     for (const r of rows) {
       const k = normalizeRating(r.rating);
-      ratingMap.set(k, (ratingMap.get(k) ?? 0) + (Number(r.financial_price) || 0));
+      ratingMap.set(k, (ratingMap.get(k) ?? 0) + posVal(r));
     }
     const byRating = RATING_ORDER
       .map(name => ({ name, value: ratingMap.get(name) ?? 0 }))
@@ -111,7 +113,7 @@ export function useFundoDashboard(fundo: string | null) {
     const durMap = new Map<string, number>();
     for (const r of rows) {
       const k = durationBucket(r.duration_du == null ? null : Number(r.duration_du));
-      durMap.set(k, (durMap.get(k) ?? 0) + (Number(r.financial_price) || 0));
+      durMap.set(k, (durMap.get(k) ?? 0) + posVal(r));
     }
     const byDuration = BUCKET_ORDER
       .map(name => ({ name, value: durMap.get(name) ?? 0 }))
@@ -125,7 +127,7 @@ export function useFundoDashboard(fundo: string | null) {
     const emiMap = new Map<string, Acc>();
     for (const r of rows) {
       const codigo = (r.codigo_emissor && r.codigo_emissor.trim()) || (r.nome_emissor ?? 'N/D');
-      const fin = Number(r.financial_price) || 0;
+      const fin = posVal(r);
       const dur = Number(r.duration_du) || 0;
       const a = emiMap.get(codigo) ?? {
         codigo,
@@ -143,7 +145,7 @@ export function useFundoDashboard(fundo: string | null) {
       emiMap.set(codigo, a);
     }
 
-    const totalPL = rows.reduce((s, r) => s + (Number(r.financial_price) || 0), 0);
+    const totalPL = rows.reduce((s, r) => s + posVal(r), 0);
 
     const byEmissor: EmissorAgg[] = Array.from(emiMap.values())
       .map(a => ({
@@ -162,7 +164,7 @@ export function useFundoDashboard(fundo: string | null) {
     const totalAtivos = new Set(rows.map(r => r.ticker).filter(Boolean)).size;
 
     const totalDurWeighted = rows.reduce(
-      (s, r) => s + (Number(r.duration_du) || 0) * (Number(r.financial_price) || 0),
+      (s, r) => s + (Number(r.duration_du) || 0) * posVal(r),
       0,
     );
     const durationMedia = totalPL > 0 ? totalDurWeighted / totalPL : 0;
