@@ -41,6 +41,9 @@ export default function FidcListPage() {
               {fidcs.map((f) => {
                 const expo = exposureForFidc(f.id);
                 const ports = portfoliosForFidc(f.id);
+                const rpt = latestReportFor(f.id);
+                const pl = Number(rpt?.nav_value ?? 0);
+                const refMonth = rpt?.reference_month ? rpt.reference_month.slice(0, 7) : null;
                 return (
                   <tr key={f.id} className="hairline-b hover:bg-surface-2/50">
                     <td className="px-3 py-2">
@@ -53,7 +56,14 @@ export default function FidcListPage() {
                     <td className="px-3 py-2">{f.sector || "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">—</td>
                     <td className="px-3 py-2 text-right num">{expo > 0 ? BRL(expo, { compact: true }) : "—"}</td>
-                    <td className="px-3 py-2 text-right"><NoDataInline /></td>
+                    <td className="px-3 py-2 text-right num">
+                      {pl > 0 ? (
+                        <span>
+                          {BRL(pl, { compact: true })}
+                          {refMonth && <span className="block text-[10.5px] text-muted-foreground">{refMonth}</span>}
+                        </span>
+                      ) : <NoDataInline />}
+                    </td>
                     <td className="px-3 py-2 text-[11px] text-muted-foreground">{ports.map((p) => p.name).join(" · ") || "—"}</td>
                   </tr>
                 );
