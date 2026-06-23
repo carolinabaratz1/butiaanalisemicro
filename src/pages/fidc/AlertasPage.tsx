@@ -10,6 +10,12 @@ const KIND_LABEL: Record<string, string> = {
   carteira_sem_posicao: "Sem posição para carteira",
   posicao_duplicada: "Posição duplicada",
   divergencia_pct: "Divergência de %",
+  informe_ausente: "Informe mensal ausente",
+  subordinacao_inconsistente: "Subordinação inconsistente",
+  pdd_alto: "PDD elevado",
+  atraso_alto: "Inadimplência elevada",
+  queda_pl: "Queda de PL",
+  queda_cota: "Queda de cota",
 };
 
 export default function AlertasPage() {
