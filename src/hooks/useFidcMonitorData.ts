@@ -2,8 +2,7 @@
 // - posicoes (carteiras Butiá → exposição em FIDC via ISIN)
 // - fidc_quota_classes (ISIN → cota/classe → FIDC)
 // - fidcs (cadastro mestre)
-// NÃO consulta fidc_monthly_reports / fidc_monthly_quota_classes —
-// métricas mensais só serão preenchidas quando o informe mensal for importado.
+// - fidc_monthly_reports (informe mensal — última versão por FIDC, e versão anterior para variações).
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
