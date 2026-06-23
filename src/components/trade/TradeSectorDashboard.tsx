@@ -123,6 +123,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           ...t,
           setor: info?.setor ?? "Sem setor",
           emissor_label: info?.nome ?? t.emissor_nome ?? "—",
+          grupo_economico: info?.grupo_economico ?? null,
           rating_norm: normRating(t.rating),
         };
       });
@@ -154,15 +155,58 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const [posFilter, setPosFilter] = useState<"all" | "with" | "without">("all");
   const [sortKey, setSortKey] = useState<SortKey>("z");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [emissorFilter, setEmissorFilter] = useState<string>(ALL_SECTORS); // CNPJ ou ALL
+  const [grupoFilter, setGrupoFilter] = useState<string>(ALL_SECTORS); // nome do grupo ou ALL
 
   const noSetor = !setorAtivo;
 
-  // Aplica filtro de rating + posição em qualquer subconjunto
+  // Base após setor (para popular dropdowns de emissor/grupo coerentes com setor)
+  const baseSetor = useMemo(
+    () => (isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
+    [enriched, setorAtivo, isAllSectors],
+  );
+
+  // Opções de Grupo Econômico (filtradas pelo setor)
+  const gruposDisponiveis = useMemo(() => {
+    const cnt = new Map<string, number>();
+    baseSetor.forEach((t) => {
+      const g = t.grupo_economico;
+      if (g) cnt.set(g, (cnt.get(g) ?? 0) + 1);
+    });
+    return Array.from(cnt.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [baseSetor]);
+
+  // Opções de Emissor (filtradas por setor + grupo)
+  const emissoresDisponiveis = useMemo(() => {
+    const map = new Map<string, { nome: string; count: number }>();
+    baseSetor
+      .filter((t) => grupoFilter === ALL_SECTORS || t.grupo_economico === grupoFilter)
+      .forEach((t) => {
+        const k = t.emissor_cnpj ?? `__nocnpj__${t.emissor_label}`;
+        const cur = map.get(k);
+        if (cur) cur.count++;
+        else map.set(k, { nome: t.emissor_label, count: 1 });
+      });
+    return Array.from(map.entries())
+      .map(([cnpj, v]) => ({ cnpj, nome: v.nome, count: v.count }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [baseSetor, grupoFilter]);
+
+  // Aplica filtro de rating + posição + emissor + grupo em qualquer subconjunto
   const applyRating = (arr: typeof enriched) => {
     let out = arr;
     if (ratingFilter.size > 0) out = out.filter((t) => ratingFilter.has(t.rating_norm));
     if (posFilter !== "all" && hasPosition) {
       out = out.filter((t) => (posFilter === "with" ? hasPosition(t.ticker) : !hasPosition(t.ticker)));
+    }
+    if (grupoFilter !== ALL_SECTORS) {
+      out = out.filter((t) => t.grupo_economico === grupoFilter);
+    }
+    if (emissorFilter !== ALL_SECTORS) {
+      out = out.filter((t) => {
+        const k = t.emissor_cnpj ?? `__nocnpj__${t.emissor_label}`;
+        return k === emissorFilter;
+      });
     }
     return out;
   };
@@ -170,12 +214,28 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   // Pontos do scatter: setor selecionado em destaque, restante como background.
   const inSector = useMemo(
     () => applyRating(isAllSectors ? enriched : enriched.filter((t) => t.setor === setorAtivo)),
-    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition],
+    [enriched, setorAtivo, isAllSectors, ratingFilter, posFilter, hasPosition, grupoFilter, emissorFilter],
   );
   const outSector = useMemo(
     () => (isAllSectors ? [] : enriched.filter((t) => t.setor !== setorAtivo)),
     [enriched, setorAtivo, isAllSectors],
   );
+
+  // Taxa média dos ativos atualmente filtrados (ponderada por volume quando disponível)
+  const taxaMedia = useMemo(() => {
+    if (!inSector.length) return null;
+    let sumW = 0, sumWV = 0, sumV = 0, n = 0;
+    for (const t of inSector) {
+      if (t.last_val == null) continue;
+      const w = t.total_vol_fin && t.total_vol_fin > 0 ? t.total_vol_fin : 0;
+      sumW += w;
+      sumWV += w * t.last_val;
+      sumV += t.last_val;
+      n++;
+    }
+    if (!n) return null;
+    return { simples: sumV / n, ponderada: sumW > 0 ? sumWV / sumW : sumV / n, n };
+  }, [inSector]);
 
   // Agrupa pontos do setor por rating (uma <Scatter/> por série → cor por rating).
   const sectorByRating = useMemo(() => {
@@ -272,7 +332,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
       return row;
     });
     return { rows, setores: setoresList };
-  }, [isAllSectors, setores, enriched, ratingFilter, history, window]);
+  }, [isAllSectors, setores, enriched, ratingFilter, history, window, posFilter, hasPosition, grupoFilter, emissorFilter]);
 
   // Quando "Todos os setores", o segundo gráfico mostra a mediana do universo inteiro.
   const allTickers = useMemo(() => new Set(inSector.map((t) => t.ticker)), [inSector]);
@@ -419,6 +479,60 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
 
         <div className="flex flex-col gap-1">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Grupo econômico
+          </span>
+          <Select
+            value={grupoFilter}
+            onValueChange={(v) => {
+              setGrupoFilter(v);
+              setEmissorFilter(ALL_SECTORS);
+              setSelectedTicker(null);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[220px] text-xs">
+              <SelectValue placeholder="Todos os grupos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SECTORS} className="text-xs font-semibold">
+                Todos os grupos <span className="text-muted-foreground font-mono ml-1">({gruposDisponiveis.reduce((a, [, n]) => a + n, 0)})</span>
+              </SelectItem>
+              {gruposDisponiveis.map(([g, n]) => (
+                <SelectItem key={g} value={g} className="text-xs">
+                  {g} <span className="text-muted-foreground font-mono ml-1">({n})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Emissor
+          </span>
+          <Select
+            value={emissorFilter}
+            onValueChange={(v) => { setEmissorFilter(v); setSelectedTicker(null); }}
+          >
+            <SelectTrigger className="h-8 w-[240px] text-xs">
+              <SelectValue placeholder="Todos os emissores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SECTORS} className="text-xs font-semibold">
+                Todos os emissores <span className="text-muted-foreground font-mono ml-1">({emissoresDisponiveis.length})</span>
+              </SelectItem>
+              {emissoresDisponiveis.map((e) => (
+                <SelectItem key={e.cnpj} value={e.cnpj} className="text-xs">
+                  {e.nome} <span className="text-muted-foreground font-mono ml-1">({e.count})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Janela histórica
           </span>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
@@ -502,6 +616,14 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: modeColor }} />
           {inSector.length} emissões
         </Badge>
+
+        {taxaMedia && (
+          <Badge variant="outline" className="font-mono text-xs gap-1.5" title={`Média simples: ${taxaMedia.simples.toFixed(3)}% · Ponderada por volume: ${taxaMedia.ponderada.toFixed(3)}%`}>
+            <span className="text-muted-foreground">Taxa média</span>
+            <span className="font-bold">{taxaMedia.ponderada.toFixed(3)}%</span>
+          </Badge>
+        )}
+
 
         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={exportTableXlsx}>
           <Download className="w-3.5 h-3.5" /> Excel
