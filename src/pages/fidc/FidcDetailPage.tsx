@@ -244,6 +244,13 @@ export default function FidcDetailPage() {
 
       <div className="px-6 pb-4">
         <div className="bg-card border border-border">
+          <div className="section-title px-4 pt-3">Histórico do fundo — evolução mensal</div>
+          <FidcHistoryCharts history={reportsHistory} />
+        </div>
+      </div>
+
+      <div className="px-6 pb-4">
+        <div className="bg-card border border-border">
           <div className="section-title px-4 pt-3">Exposição por carteira</div>
           <div className="overflow-x-auto">
             <table className="w-full mt-2 text-[12px]">
