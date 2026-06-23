@@ -37,6 +37,26 @@ export type QuotaRecord = {
   current_rating: string | null; current_rating_agency: string | null;
 };
 
+export type MonthlyReportRow = {
+  id: string;
+  fidc_id: string;
+  reference_month: string;          // YYYY-MM-DD (primeiro dia do mês)
+  nav_value: number | null;          // PL
+  quota_value: number | null;        // Valor da cota (primária / principal)
+  credit_rights_value: number | null;
+  overdue_value: number | null;
+  pdd_value: number | null;
+  cash_value: number | null;
+  repurchase_value: number | null;
+  subordinated_value: number | null;
+  quota_total_nav_value: number | null;
+  quota_validation_difference_percentage: number | null;
+  quota_validation_status: string | null;
+  subordinated_calculation_status: string | null;
+  investors_count: number | null;
+  is_current_version: boolean;
+};
+
 export type PosicaoRow = {
   id: string;
   trading_desk_share_source: string;
