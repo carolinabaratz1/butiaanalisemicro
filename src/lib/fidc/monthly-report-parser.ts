@@ -24,6 +24,32 @@ export type ChecklistRow = {
   status: "found" | "missing" | "inconsistent" | "validated";
 };
 
+export type MonthlyMetrics = {
+  navValue: number | null;
+  monthlyAverageNavValue: number | null;
+  quotaValue: number | null;
+  creditRightsValue: number | null;
+  creditRightsAValue: number | null;
+  creditRightsBValue: number | null;
+  overdueValue: number | null;
+  overdueSource: "V_VI" | "fallback_I" | null;
+  pddValue: number | null;
+  cashValue: number | null;
+  repurchaseValue: number | null;
+  assetsTotal: number | null;
+  liabilitiesTotal: number | null;
+  segmentCarteiraTotal: number | null;
+  investorsCount: number | null;
+};
+
+export type ParsedMonthSlice = {
+  iso: string;             // YYYY-MM-01
+  label: string;           // e.g. "set/2025"
+  columnIndex: number;
+  metrics: MonthlyMetrics;
+  quotaClasses: ParsedQuotaClass[];
+};
+
 export type ParsedMonthlyReport = {
   fileName: string;
   cnpj: string | null;            // 14 dígitos
@@ -31,24 +57,9 @@ export type ParsedMonthlyReport = {
   referenceMonth: string;         // YYYY-MM-01 (último mês)
   referenceLabel: string;
   availableMonths: { label: string; iso: string; columnIndex: number }[];
-  metrics: {
-    navValue: number | null;             // PL IV.a
-    monthlyAverageNavValue: number | null; // IV.b
-    quotaValue: number | null;           // primeira classe (referência)
-    creditRightsValue: number | null;    // I.2.a + I.2.b
-    creditRightsAValue: number | null;   // I.2.a
-    creditRightsBValue: number | null;   // I.2.b
-    overdueValue: number | null;         // V.b + VI.b ou fallback
-    overdueSource: "V_VI" | "fallback_I" | null;
-    pddValue: number | null;             // |I.2.a.10| + |I.2.b.10|
-    cashValue: number | null;            // I.1
-    repurchaseValue: number | null;      // VII.d.2
-    assetsTotal: number | null;          // I
-    liabilitiesTotal: number | null;     // III
-    segmentCarteiraTotal: number | null; // II
-    investorsCount: number | null;       // X.1
-  };
-  quotaClasses: ParsedQuotaClass[];
+  months: ParsedMonthSlice[];     // todos os meses do arquivo
+  metrics: MonthlyMetrics;        // do mês mais recente (compat)
+  quotaClasses: ParsedQuotaClass[]; // do mês mais recente (compat)
   checklist: ChecklistRow[];
   rawSnapshot: Record<string, unknown>;
 };
