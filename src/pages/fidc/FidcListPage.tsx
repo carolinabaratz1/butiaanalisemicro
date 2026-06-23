@@ -6,7 +6,7 @@ import { NoDataInline } from "@/components/fidc/NoDataChip";
 import { Loader2 } from "lucide-react";
 
 export default function FidcListPage() {
-  const { isLoading, fidcs, exposureForFidc, portfoliosForFidc } = useFidcMonitorData();
+  const { isLoading, fidcs, exposureForFidc, portfoliosForFidc, latestReportFor } = useFidcMonitorData();
 
   return (
     <div>
