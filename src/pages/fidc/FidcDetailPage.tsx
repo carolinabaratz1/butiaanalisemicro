@@ -8,6 +8,7 @@ import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
 import { MonthlyReportImportDialog } from "@/components/fidc/MonthlyReportImportDialog";
+import { FidcHistoryCharts } from "@/components/fidc/FidcHistoryCharts";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle, Upload, CheckCircle2 } from "lucide-react";
 
