@@ -275,11 +275,21 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
               </div>
             </div>
 
-            {/* Mês de referência */}
-            <div className="flex items-center gap-3">
-              <div className="text-[12px] text-muted-foreground">Mês de referência</div>
+            {/* Meses no arquivo */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="text-[12px] text-muted-foreground">Meses no arquivo</div>
+              <span className="text-[12px] font-medium">
+                {parsed.availableMonths.length > 0
+                  ? `${parsed.availableMonths[0].label} → ${parsed.availableMonths[parsed.availableMonths.length - 1].label}`
+                  : "—"}
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                ({parsed.availableMonths.length} meses) — todos serão importados de uma vez
+              </span>
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="h-8 w-[200px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 w-[220px]">
+                  <SelectValue placeholder="Pré-visualizar mês" />
+                </SelectTrigger>
                 <SelectContent>
                   {parsed.availableMonths.map((m) => (
                     <SelectItem key={m.iso} value={m.iso}>
@@ -288,9 +298,6 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-[11px] text-muted-foreground">
-                {parsed.availableMonths.length} meses disponíveis no arquivo
-              </span>
             </div>
 
             {/* Validação PL x Cotas */}
