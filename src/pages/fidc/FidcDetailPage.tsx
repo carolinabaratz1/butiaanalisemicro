@@ -266,11 +266,53 @@ export default function FidcDetailPage() {
       </div>
 
       <div className="px-6 pb-8">
-        <div className="bg-card border border-border p-5">
-          <div className="section-title">Histórico mensal</div>
-          <div className="mt-3 text-[12px] text-muted-foreground">
-            Métricas mensais (PL, cota, atraso/DC, caixa/PL, PDD, recompras, subordinação) serão exibidas
-            assim que o informe mensal do FIDC for importado.
+        <div className="bg-card border border-border">
+          <div className="section-title px-4 pt-3">Histórico mensal — informes importados</div>
+          <div className="overflow-x-auto">
+            <table className="w-full mt-2 text-[12px]">
+              <thead className="bg-surface-2 text-muted-foreground">
+                <tr className="hairline-b">
+                  <th className="text-left px-3 py-2 font-medium">Mês</th>
+                  <th className="text-right px-3 py-2 font-medium">PL informado</th>
+                  <th className="text-right px-3 py-2 font-medium">Soma das cotas</th>
+                  <th className="text-right px-3 py-2 font-medium">Diferença</th>
+                  <th className="text-right px-3 py-2 font-medium">% dif.</th>
+                  <th className="text-right px-3 py-2 font-medium">Cotas</th>
+                  <th className="text-left px-3 py-2 font-medium">Subordinação</th>
+                  <th className="text-left px-3 py-2 font-medium">Status</th>
+                  <th className="text-left px-3 py-2 font-medium">Arquivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportsHistory.map((r) => (
+                  <tr key={String(r.id)} className="hairline-b">
+                    <td className="px-3 py-2 font-medium">{monthLabel(String(r.reference_month).slice(0, 10))}</td>
+                    <td className="px-3 py-2 text-right num">{BRL(r.nav_value as number | null, { compact: true })}</td>
+                    <td className="px-3 py-2 text-right num">{BRL(r.quota_total_nav_value as number | null, { compact: true })}</td>
+                    <td className="px-3 py-2 text-right num">{BRL(r.quota_validation_difference as number | null, { compact: true })}</td>
+                    <td className="px-3 py-2 text-right num">
+                      {r.quota_validation_difference_percentage != null
+                        ? `${Number(r.quota_validation_difference_percentage).toFixed(3).replace(".", ",")}%`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right num">{Number(r.quota_classes_found_count ?? 0)}</td>
+                    <td className="px-3 py-2">
+                      {r.subordinated_calculation_status === "ok" ? "Confiável" :
+                       r.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                    </td>
+                    <td className="px-3 py-2"><ValidationBadge status={String(r.quota_validation_status ?? "—")} /></td>
+                    <td className="px-3 py-2 text-muted-foreground truncate max-w-[220px]" title={String(r.source_file_name ?? "")}>
+                      {String(r.source_file_name ?? "—")}
+                    </td>
+                  </tr>
+                ))}
+                {reportsHistory.length === 0 && (
+                  <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                    Nenhum informe mensal importado ainda.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
