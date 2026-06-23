@@ -227,7 +227,7 @@ export default function FidcDetailPage() {
                 <div className="text-[11px] text-muted-foreground">Subordinação</div>
                 <div className="font-medium">
                   {latestReport.subordinated_calculation_status === "ok" ? "Confiável" :
-                   latestReport.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                   (latestReport.subordinated_calculation_status === "missing" || latestReport.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
                 </div>
               </div>
             </div>
