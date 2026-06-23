@@ -102,19 +102,38 @@ const valueOf = (p: PosicaoRow): number => {
 };
 
 export function useFidcMonitorData() {
-  // 1) Última val_date geral
-  const datesQ = useQuery({
-    queryKey: ["fidc-monitor-dates"],
+  // 1) Latest val_date PER PORTFOLIO (each Butiá fund may have a different last position date)
+  const sources = FIDC_PORTFOLIOS.map((p) => p.source);
+
+  const datesPerPortfolioQ = useQuery({
+    queryKey: ["fidc-monitor-dates-per-portfolio", sources.join("|")],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_posicoes_val_dates" as any);
-      if (error) throw error;
-      return ((data as any[]) ?? [])
-        .map((r) => r.val_date_text as string)
-        .filter(Boolean);
+      const entries = await Promise.all(
+        FIDC_PORTFOLIOS.map(async (p) => {
+          const { data, error } = await supabase.rpc(
+            "get_posicoes_val_dates_by_source" as any,
+            { p_source: p.source },
+          );
+          if (error) throw error;
+          const list = ((data as any[]) ?? [])
+            .map((r) => r.val_date_text as string)
+            .filter(Boolean);
+          return [p.id, list[0] ?? null] as const;
+        }),
+      );
+      return Object.fromEntries(entries) as Record<string, string | null>;
     },
   });
 
-  const latestValDate = datesQ.data?.[0] ?? null;
+  const latestPerPortfolio = datesPerPortfolioQ.data ?? {};
+  // Global "latest" = max across portfolios (used as fallback display).
+  const latestValDate = useMemo(() => {
+    const ds = Object.values(latestPerPortfolio).filter(Boolean) as string[];
+    if (!ds.length) return null;
+    return ds
+      .map((d) => ({ d, t: parseValDate(d)?.getTime() ?? 0 }))
+      .sort((a, b) => b.t - a.t)[0].d;
+  }, [latestPerPortfolio]);
 
   // 2) Cadastro mestre (FIDCs + cotas/ISINs)
   const fidcsQ = useQuery({
@@ -135,31 +154,35 @@ export function useFidcMonitorData() {
     },
   });
 
-  // 3) Posições das 3 carteiras Butiá na data mais recente
-  const sources = FIDC_PORTFOLIOS.map((p) => p.source);
+  // 3) Posições de cada carteira na SUA data mais recente
   const posQ = useQuery({
-    queryKey: ["fidc-monitor-positions", latestValDate],
-    enabled: !!latestValDate,
+    queryKey: ["fidc-monitor-positions-per-portfolio", latestPerPortfolio],
+    enabled: Object.values(latestPerPortfolio).some(Boolean),
     queryFn: async () => {
-      let all: PosicaoRow[] = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from("posicoes")
-          .select("id, trading_desk_share_source, val_date, product_class, product, amount, isin, financial_price")
-          .in("trading_desk_share_source", sources)
-          .eq("val_date", latestValDate!)
-          .range(from, from + step - 1);
-        if (error) throw error;
-        const rows = (data ?? []) as PosicaoRow[];
-        all = all.concat(rows);
-        if (rows.length < step) break;
-        from += step;
+      const all: PosicaoRow[] = [];
+      for (const p of FIDC_PORTFOLIOS) {
+        const dt = latestPerPortfolio[p.id];
+        if (!dt) continue;
+        let from = 0;
+        const step = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from("posicoes")
+            .select("id, trading_desk_share_source, val_date, product_class, product, amount, isin, financial_price")
+            .eq("trading_desk_share_source", p.source)
+            .eq("val_date", dt)
+            .range(from, from + step - 1);
+          if (error) throw error;
+          const rows = (data ?? []) as PosicaoRow[];
+          all.push(...rows);
+          if (rows.length < step) break;
+          from += step;
+        }
       }
       return all;
     },
   });
+
 
   const isLoading = datesQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading;
   const fidcs = fidcsQ.data ?? [];
