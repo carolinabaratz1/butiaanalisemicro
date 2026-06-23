@@ -462,11 +462,13 @@ export type QuotaValidation = {
   message: string;
 };
 
-export function validateQuotas(parsed: ParsedMonthlyReport): QuotaValidation {
-  const count = parsed.quotaClasses.length;
-  const declared = parsed.metrics.navValue;
+export function validateQuotas(
+  input: ParsedMonthlyReport | { metrics: MonthlyMetrics; quotaClasses: ParsedQuotaClass[] },
+): QuotaValidation {
+  const count = input.quotaClasses.length;
+  const declared = input.metrics.navValue;
   const sum = count > 0
-    ? parsed.quotaClasses.reduce((acc, q) => acc + (q.navValue ?? 0), 0)
+    ? input.quotaClasses.reduce((acc, q) => acc + (q.navValue ?? 0), 0)
     : null;
 
   if (count === 0) {
