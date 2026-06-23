@@ -617,6 +617,14 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
           {inSector.length} emissões
         </Badge>
 
+        {taxaMedia && (
+          <Badge variant="outline" className="font-mono text-xs gap-1.5" title={`Média simples: ${taxaMedia.simples.toFixed(3)}% · Ponderada por volume: ${taxaMedia.ponderada.toFixed(3)}%`}>
+            <span className="text-muted-foreground">Taxa média</span>
+            <span className="font-bold">{taxaMedia.ponderada.toFixed(3)}%</span>
+          </Badge>
+        )}
+
+
         <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={exportTableXlsx}>
           <Download className="w-3.5 h-3.5" /> Excel
         </Button>
