@@ -85,7 +85,7 @@ export function useFundoDashboard(fundo: string | null) {
 
   const agg = useMemo(() => {
     const posVal = (r: DashboardRow) =>
-      (Number(r.amount) || 0) * posVal(r);
+      (Number(r.amount) || 0) * (Number(r.financial_price) || 0);
     const sumBy = (key: (r: DashboardRow) => string | null | undefined) => {
       const m = new Map<string, number>();
       for (const r of rows) {
