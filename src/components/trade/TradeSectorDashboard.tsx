@@ -479,6 +479,60 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
 
         <div className="flex flex-col gap-1">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Grupo econômico
+          </span>
+          <Select
+            value={grupoFilter}
+            onValueChange={(v) => {
+              setGrupoFilter(v);
+              setEmissorFilter(ALL_SECTORS);
+              setSelectedTicker(null);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[220px] text-xs">
+              <SelectValue placeholder="Todos os grupos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SECTORS} className="text-xs font-semibold">
+                Todos os grupos <span className="text-muted-foreground font-mono ml-1">({gruposDisponiveis.reduce((a, [, n]) => a + n, 0)})</span>
+              </SelectItem>
+              {gruposDisponiveis.map(([g, n]) => (
+                <SelectItem key={g} value={g} className="text-xs">
+                  {g} <span className="text-muted-foreground font-mono ml-1">({n})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Emissor
+          </span>
+          <Select
+            value={emissorFilter}
+            onValueChange={(v) => { setEmissorFilter(v); setSelectedTicker(null); }}
+          >
+            <SelectTrigger className="h-8 w-[240px] text-xs">
+              <SelectValue placeholder="Todos os emissores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SECTORS} className="text-xs font-semibold">
+                Todos os emissores <span className="text-muted-foreground font-mono ml-1">({emissoresDisponiveis.length})</span>
+              </SelectItem>
+              {emissoresDisponiveis.map((e) => (
+                <SelectItem key={e.cnpj} value={e.cnpj} className="text-xs">
+                  {e.nome} <span className="text-muted-foreground font-mono ml-1">({e.count})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+
+
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Janela histórica
           </span>
           <div className="flex gap-1 bg-muted p-1 rounded-lg">
