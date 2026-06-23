@@ -1,49 +1,44 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import {
-  PORTFOLIOS, LATEST_MONTH, REFERENCE_MONTHS,
-  positionsForPortfolio, portfolioSummary, fidcById, metricsFor, statusForFidc, opinionFor, reportFor,
-} from "@/lib/fidc/mock-data";
-import { BRL, PCT, formatCNPJ, monthLabel } from "@/lib/fidc/format";
-import { DEFAULT_THRESHOLDS, evalStatus, type RiskStatus } from "@/lib/fidc/metrics";
+import { Link, useSearchParams } from "react-router-dom";
+import { useFidcMonitorData, FIDC_PORTFOLIOS } from "@/hooks/useFidcMonitorData";
+import { BRL, PCT, formatCNPJ } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
-import { MetricChip, RiskStatusBadge, StatusDot } from "@/components/fidc/MetricChip";
 import { PageHeader } from "@/components/fidc/PageHeader";
-import { RecBadge } from "@/components/fidc/RecBadge";
-import { Search } from "lucide-react";
+import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
+import { Search, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const M = (k: string) => DEFAULT_THRESHOLDS.find((t) => t.metric === k)!;
+type PosStatus = "mapped" | "unmapped";
 
 export default function MonitorPage() {
   const [sp, setSp] = useSearchParams();
-  const portfolioId = sp.get("portfolio") ?? PORTFOLIOS[0].id;
-  const month = sp.get("month") ?? LATEST_MONTH;
-  const statusFilter = (sp.get("status") ?? "all") as "all" | RiskStatus;
+  const portfolioId = sp.get("portfolio") ?? FIDC_PORTFOLIOS[0].id;
   const q = (sp.get("q") ?? "").toLowerCase();
-
-  const summary = portfolioSummary(portfolioId);
-  const positions = positionsForPortfolio(portfolioId);
-
+  const statusFilter = (sp.get("status") ?? "all") as "all" | PosStatus;
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
 
+  const { isLoading, portfolioSummaries, latestValDate } = useFidcMonitorData();
+  const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
+
   const rows = useMemo(() => {
-    const data = positions.map((pos) => {
-      const f = fidcById(pos.fidcId)!;
-      const m = metricsFor(f.id, month);
-      const r = reportFor(f.id, month);
-      const st = statusForFidc(f.id, month);
-      const op = opinionFor(f.id, month);
-      return { fidc: f, position: pos, metrics: m, report: r, status: st, opinion: op, pctPortfolio: pos.value / summary.portfolio.nav };
-    }).filter((r) => {
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (q && !(r.fidc.name.toLowerCase().includes(q) || r.fidc.cnpj.includes(q) || r.position.isin.toLowerCase().includes(q))) return false;
+    if (!summary) return [];
+    const data = summary.positions.map((p) => ({
+      ...p,
+      posStatus: (p.fidc ? "mapped" : "unmapped") as PosStatus,
+      pctPortfolio: summary.nav > 0 ? p.value / summary.nav : 0,
+    })).filter((r) => {
+      if (statusFilter !== "all" && r.posStatus !== statusFilter) return false;
+      if (q) {
+        const hay = `${r.fidc?.name ?? ""} ${r.fidc?.cnpj ?? ""} ${r.isin} ${r.quota?.class_name ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-    const sorters: Record<string, (a: typeof data[number]) => number | string> = {
-      value: (r) => r.position.value,
-      name: (r) => r.fidc.name,
+    const sorters: Record<string, (r: typeof data[number]) => number | string> = {
+      value: (r) => r.value,
+      name: (r) => r.fidc?.name ?? "zzz",
       pct: (r) => r.pctPortfolio,
-      status: (r) => ({ critical: 3, warning: 2, missing: 1, normal: 0 }[r.status]),
+      status: (r) => (r.posStatus === "unmapped" ? 1 : 0),
     };
     const fn = sorters[sort.key] ?? sorters.value;
     return data.sort((a, b) => {
@@ -52,50 +47,67 @@ export default function MonitorPage() {
       if (va > vb) return sort.dir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [positions, month, statusFilter, q, sort, summary.portfolio.nav]);
-
-  const critCount = rows.filter((r) => r.status === "critical").length;
-  const warnCount = rows.filter((r) => r.status === "warning").length;
+  }, [summary, statusFilter, q, sort]);
 
   const setParam = (patch: Record<string, string>) => {
     const next = new URLSearchParams(sp);
-    Object.entries(patch).forEach(([k, v]) => v ? next.set(k, v) : next.delete(k));
+    Object.entries(patch).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
     setSp(next, { replace: true });
   };
 
   function toggleSort(key: string) {
-    setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
   }
+
+  if (isLoading) {
+    return (
+      <div className="px-6 py-12 text-center text-muted-foreground text-[12px]">
+        <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando posições…
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div>
+        <PageHeader title="Monitor de FIDCs" subtitle="Sem dados de posição." />
+      </div>
+    );
+  }
+
+  const unmapped = summary.unmappedCount;
 
   return (
     <div>
       <PageHeader
         title="Monitor de FIDCs"
         subtitle={`${summary.portfolio.name} · ${summary.portfolio.description}`}
-        right={<RiskStatusBadge status={summary.worst} />}
+        right={
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 bg-muted/40 text-muted-foreground">
+              <AlertTriangle className="h-3 w-3" /> Informes mensais: 0/{summary.fidcCount}
+            </span>
+          </div>
+        }
       />
 
       <div className="px-6 py-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 hairline-b">
-        <MetricCard label="PL da Carteira" value={BRL(summary.portfolio.nav, { compact: true })} />
-        <MetricCard label="Exposição em FIDCs" value={BRL(summary.exposure, { compact: true })} hint={PCT(summary.pct)} />
+        <MetricCard label="PL da Carteira" value={summary.nav > 0 ? BRL(summary.nav, { compact: true }) : <NoDataInline reason="PL não disponível para a data" />} />
+        <MetricCard label="Exposição em FIDCs" value={BRL(summary.exposure, { compact: true })} hint={summary.nav > 0 ? PCT(summary.pct) : ""} />
         <MetricCard label="Total de FIDCs" value={String(summary.fidcCount)} />
-        <MetricCard label="Em atenção" value={String(warnCount)} accent="warning" />
-        <MetricCard label="Críticos" value={String(critCount)} accent="critical" />
-        <MetricCard label="Mês de referência" value={monthLabel(month)} />
+        <MetricCard label="ISINs não mapeados" value={String(unmapped)} accent={unmapped > 0 ? "warning" : "normal"} />
+        <MetricCard label="Status do informe" value={<span className="text-[12px] font-medium">Pendente</span>} hint="Aguardando upload mensal" />
+        <MetricCard label="Data da posição" value={latestValDate ?? "—"} />
       </div>
 
       <div className="px-6 py-3 flex flex-wrap items-center gap-2 hairline-b">
         <Select label="Carteira" value={portfolioId} onChange={(v) => setParam({ portfolio: v })}
-          options={PORTFOLIOS.map((p) => ({ value: p.id, label: p.name }))} />
-        <Select label="Mês" value={month} onChange={(v) => setParam({ month: v })}
-          options={REFERENCE_MONTHS.slice().reverse().map((m) => ({ value: m, label: monthLabel(m) }))} />
-        <Select label="Status" value={statusFilter} onChange={(v) => setParam({ status: v })}
+          options={FIDC_PORTFOLIOS.map((p) => ({ value: p.id, label: p.name }))} />
+        <Select label="Mapeamento" value={statusFilter} onChange={(v) => setParam({ status: v })}
           options={[
             { value: "all", label: "Todos" },
-            { value: "critical", label: "Crítico" },
-            { value: "warning", label: "Atenção" },
-            { value: "normal", label: "Normal" },
-            { value: "missing", label: "S/ dado" },
+            { value: "mapped", label: "ISIN mapeado" },
+            { value: "unmapped", label: "ISIN não mapeado" },
           ]} />
         <div className="relative ml-auto">
           <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -116,6 +128,7 @@ export default function MonitorPage() {
               <Th onClick={() => toggleSort("name")} dir={sort.key === "name" ? sort.dir : undefined}>FIDC</Th>
               <Th>CNPJ</Th>
               <Th>ISIN</Th>
+              <Th>Cota / Classe</Th>
               <Th right onClick={() => toggleSort("value")} dir={sort.key === "value" ? sort.dir : undefined}>Exposição</Th>
               <Th right onClick={() => toggleSort("pct")} dir={sort.key === "pct" ? sort.dir : undefined}>% Cart.</Th>
               <Th right>PL FIDC</Th>
@@ -132,41 +145,48 @@ export default function MonitorPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
-              const m = r.metrics;
-              const chip = (key: string, val: number | null | undefined, fmt: (v: number) => string) => {
-                const st: RiskStatus = val == null ? "missing" : evalStatus(M(key), val);
-                return <MetricChip status={st} value={val == null ? "—" : fmt(val)} />;
-              };
+            {rows.map((r, i) => {
+              const isUnmapped = !r.fidc;
               return (
-                <tr key={r.fidc.id} className="hairline-b hover:bg-surface-2/40 group">
-                  <Td><StatusDot status={r.status} /></Td>
+                <tr key={`${r.isin}-${i}`} className="hairline-b hover:bg-surface-2/40 group">
                   <Td>
-                    <Link to={`/fidc-monitor/fidcs/${r.fidc.id}`} className="font-medium text-foreground hover:text-primary">
-                      {r.fidc.name}
-                    </Link>
-                    <div className="text-[10.5px] text-muted-foreground truncate max-w-[240px]">{r.fidc.sector} · {r.fidc.manager}</div>
+                    {isUnmapped
+                      ? <span title="ISIN não mapeado" className="inline-block h-2 w-2 rounded-full bg-risk-critical" />
+                      : <span title="Posição importada · ISIN mapeado"><CheckCircle2 className="h-3 w-3 text-risk-normal" /></span>}
                   </Td>
-                  <Td mono>{formatCNPJ(r.fidc.cnpj)}</Td>
-                  <Td mono className="text-muted-foreground">{r.position.isin}</Td>
-                  <Td right mono>{BRL(r.position.value, { compact: true })}</Td>
+                  <Td>
+                    {r.fidc
+                      ? <Link to={`/fidc-monitor/fidcs/${r.fidc.id}`} className="font-medium text-foreground hover:text-primary">
+                          {r.fidc.name}
+                        </Link>
+                      : <span className="text-risk-critical italic">ISIN não mapeado</span>}
+                    {r.fidc && (
+                      <div className="text-[10.5px] text-muted-foreground truncate max-w-[260px]">
+                        {r.fidc.sector || "—"} · {r.fidc.manager || "—"}
+                      </div>
+                    )}
+                  </Td>
+                  <Td mono>{r.fidc?.cnpj ? formatCNPJ(r.fidc.cnpj) : "—"}</Td>
+                  <Td mono className={cn("text-muted-foreground", isUnmapped && "text-risk-critical")}>{r.isin || "—"}</Td>
+                  <Td>{r.quota?.class_name || r.quota?.internal_quota_name || <span className="text-muted-foreground">—</span>}</Td>
+                  <Td right mono>{BRL(r.value, { compact: true })}</Td>
                   <Td right mono>{PCT(r.pctPortfolio)}</Td>
-                  <Td right mono>{r.report ? BRL(r.report.nav, { compact: true }) : "—"}</Td>
-                  <Td right>{chip("var_pl", m?.var_pl, (v) => PCT(v))}</Td>
-                  <Td right mono>{r.report ? r.report.quotaValue.toFixed(6).replace(".", ",") : "—"}</Td>
-                  <Td right>{chip("var_cota", m?.var_cota, (v) => PCT(v, 3))}</Td>
-                  <Td right>{chip("atraso_dc", m?.atraso_dc, (v) => PCT(v))}</Td>
-                  <Td right>{chip("caixa_pl", m?.caixa_pl, (v) => PCT(v))}</Td>
-                  <Td right>{chip("pdd_atrasos", m?.pdd_atrasos, (v) => PCT(v))}</Td>
-                  <Td right>{chip("pdd_dc", m?.pdd_dc, (v) => PCT(v))}</Td>
-                  <Td right>{chip("recompras_dc", m?.recompras_dc, (v) => PCT(v))}</Td>
-                  <Td right>{chip("subordinacao", m?.subordinacao, (v) => PCT(v))}</Td>
-                  <Td>{r.opinion ? <RecBadge rec={r.opinion.recommendation} /> : <span className="text-muted-foreground">—</span>}</Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td right><NoDataChip /></Td>
+                  <Td><NoDataInline /></Td>
                 </tr>
               );
             })}
             {!rows.length && (
-              <tr><td colSpan={17} className="py-12 text-center text-muted-foreground">Nenhum FIDC corresponde aos filtros.</td></tr>
+              <tr><td colSpan={18} className="py-12 text-center text-muted-foreground">Nenhuma posição em FIDC encontrada para esta carteira.</td></tr>
             )}
           </tbody>
         </table>
