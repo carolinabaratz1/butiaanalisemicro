@@ -25,6 +25,7 @@ import DesempenhoPage from "./pages/DesempenhoPage";
 import { TradeMonitorPage } from "./components/trade/TradeMonitorPage";
 import { UploadPage as TradeUploadPage } from "./components/trade/UploadPage";
 import FidcMonitorPage from "./pages/fidc/MonitorPage";
+import FidcDashboardCarteirasPage from "./pages/fidc/DashboardCarteirasPage";
 import FidcListPage from "./pages/fidc/FidcListPage";
 import FidcDetailPage from "./pages/fidc/FidcDetailPage";
 import FidcCadastroPage from "./pages/fidc/FidcCadastroPage";
@@ -88,7 +89,8 @@ function ProtectedRoutes() {
         <Route path="/desempenho" element={<RouteGuard path="/desempenho"><DesempenhoPage /></RouteGuard>} />
         <Route path="/trade" element={<RouteGuard path="/trade"><TradeMonitorPage /></RouteGuard>} />
         <Route path="/trade/upload" element={<RouteGuard path="/trade/upload"><TradeUploadPage /></RouteGuard>} />
-        <Route path="/fidc-monitor" element={<RouteGuard path="/fidc-monitor"><FidcLayout><FidcMonitorPage /></FidcLayout></RouteGuard>} />
+        <Route path="/fidc-monitor" element={<RouteGuard path="/fidc-monitor"><FidcLayout><FidcDashboardCarteirasPage /></FidcLayout></RouteGuard>} />
+        <Route path="/fidc-monitor/monitor" element={<RouteGuard path="/fidc-monitor"><FidcLayout><FidcMonitorPage /></FidcLayout></RouteGuard>} />
         <Route path="/fidc-monitor/fidcs" element={<RouteGuard path="/fidc-monitor/fidcs"><FidcLayout><FidcListPage /></FidcLayout></RouteGuard>} />
         <Route path="/fidc-monitor/fidcs/:id" element={<RouteGuard path="/fidc-monitor/fidcs"><FidcLayout><FidcDetailPage /></FidcLayout></RouteGuard>} />
         <Route path="/fidc-monitor/cadastro" element={<RouteGuard path="/fidc-monitor/cadastro"><FidcLayout><FidcCadastroPage /></FidcLayout></RouteGuard>} />

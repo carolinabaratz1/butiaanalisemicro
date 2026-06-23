@@ -2,7 +2,8 @@ import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { to: "/fidc-monitor", label: "Monitor", end: true },
+  { to: "/fidc-monitor", label: "Dashboard Carteiras", end: true },
+  { to: "/fidc-monitor/monitor", label: "Monitor por Carteira" },
   { to: "/fidc-monitor/fidcs", label: "FIDCs" },
   { to: "/fidc-monitor/cadastro", label: "Cadastro Mestre" },
   { to: "/fidc-monitor/pareceres", label: "Pareceres" },
