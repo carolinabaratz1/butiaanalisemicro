@@ -35,9 +35,9 @@ export default function AlertasPage() {
         <div className="rounded-sm border border-border bg-muted/30 px-3 py-2 text-[11.5px] text-muted-foreground flex items-start gap-2">
           <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
           <span>
-            Esta etapa exibe apenas alertas baseados em posição (ISIN, carteira, duplicidade).
-            Alertas de métricas mensais do FIDC (atraso/DC, PDD/DC, caixa/PL, subordinação, recompras, var. PL, var. cota)
-            só serão gerados após o upload do informe mensal do FIDC.
+            Alertas combinam dados de posição (ISIN, carteira, duplicidade) com métricas do informe mensal
+            de cada FIDC (subordinação, PDD/DC, inadimplência, queda de PL/cota). Importe o informe mensal
+            do FIDC para popular os alertas baseados em métricas.
           </span>
         </div>
       </div>
