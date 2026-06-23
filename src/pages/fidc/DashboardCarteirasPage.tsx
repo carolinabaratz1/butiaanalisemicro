@@ -244,13 +244,16 @@ export default function DashboardCarteirasPage() {
           />
           <QualityItem
             label="Informes mensais"
-            value={`0/${consolidated.fidcsMonitorados}`}
-            ok={false}
+            value={`${fidcsWithReportCount}/${consolidated.fidcsMonitorados}`}
+            ok={consolidated.fidcsMonitorados > 0 && fidcsWithReportCount === consolidated.fidcsMonitorados}
           />
           <div>
             <div className="section-title">Status</div>
-            <div className="text-[12px] mt-0.5 inline-flex items-center gap-1 text-risk-warning">
-              <AlertTriangle className="h-3 w-3" /> Pendente upload informes mensais
+            <div className={cn("text-[12px] mt-0.5 inline-flex items-center gap-1",
+              fidcsWithReportCount === consolidated.fidcsMonitorados && consolidated.fidcsMonitorados > 0 ? "text-risk-normal" : "text-risk-warning")}>
+              {fidcsWithReportCount === consolidated.fidcsMonitorados && consolidated.fidcsMonitorados > 0
+                ? <><CheckCircle2 className="h-3 w-3" /> Informes mensais completos</>
+                : <><AlertTriangle className="h-3 w-3" /> {fidcsWithReportCount > 0 ? "Informes mensais parcialmente importados" : "Pendente upload informes mensais"}</>}
             </div>
           </div>
         </div>
