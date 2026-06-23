@@ -1,14 +1,26 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { OPINIONS, fidcById } from "@/lib/fidc/mock-data";
 import { monthLabel } from "@/lib/fidc/format";
+import { BRL, PCT } from "@/lib/fidc/format";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { RecBadge } from "@/components/fidc/RecBadge";
+import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 
 export default function PareceresPage() {
   const [selected, setSelected] = useState(OPINIONS[0]?.id);
   const op = OPINIONS.find((o) => o.id === selected) ?? OPINIONS[0];
   const f = op ? fidcById(op.fidcId)! : null;
+  const { fidcs, latestReportFor, prevReportFor } = useFidcMonitorData();
+
+  // Tenta casar o FIDC do parecer com um FIDC real (do cadastro mestre) pelo nome
+  const realFidc = useMemo(() => {
+    if (!f) return null;
+    const target = f.name.toLowerCase();
+    return fidcs.find((x) => x.name?.toLowerCase().includes(target) || target.includes(x.name?.toLowerCase() ?? "")) ?? null;
+  }, [f, fidcs]);
+  const realReport = realFidc ? latestReportFor(realFidc.id) : null;
+  const realPrev = realFidc ? prevReportFor(realFidc.id) : null;
 
   if (!op || !f) {
     return (
