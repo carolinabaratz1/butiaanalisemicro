@@ -1,14 +1,26 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { OPINIONS, fidcById } from "@/lib/fidc/mock-data";
 import { monthLabel } from "@/lib/fidc/format";
+import { BRL, PCT } from "@/lib/fidc/format";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { RecBadge } from "@/components/fidc/RecBadge";
+import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 
 export default function PareceresPage() {
   const [selected, setSelected] = useState(OPINIONS[0]?.id);
   const op = OPINIONS.find((o) => o.id === selected) ?? OPINIONS[0];
   const f = op ? fidcById(op.fidcId)! : null;
+  const { fidcs, latestReportFor, prevReportFor } = useFidcMonitorData();
+
+  // Tenta casar o FIDC do parecer com um FIDC real (do cadastro mestre) pelo nome
+  const realFidc = useMemo(() => {
+    if (!f) return null;
+    const target = f.name.toLowerCase();
+    return fidcs.find((x) => x.name?.toLowerCase().includes(target) || target.includes(x.name?.toLowerCase() ?? "")) ?? null;
+  }, [f, fidcs]);
+  const realReport = realFidc ? latestReportFor(realFidc.id) : null;
+  const realPrev = realFidc ? prevReportFor(realFidc.id) : null;
 
   if (!op || !f) {
     return (
@@ -60,6 +72,47 @@ export default function PareceresPage() {
             </div>
           </div>
 
+          {/* Métricas do informe mensal (quando disponível, via cadastro real) */}
+          {realReport ? (
+            <div className="mt-4 rounded-sm border border-border bg-card">
+              <div className="px-3 py-1.5 hairline-b text-[10.5px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Métricas do informe mensal {realFidc ? `· ${realFidc.name}` : ""}</span>
+                <span className="text-foreground/80">Ref.: {String(realReport.reference_month ?? "").slice(0, 7)}</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 px-3 py-3 text-[12px]">
+                <MiniKpi label="PL"
+                  value={BRL(Number(realReport.nav_value ?? 0), { compact: true })}
+                  hint={realPrev && Number(realPrev.nav_value ?? 0) > 0
+                    ? `Var. ${PCT((Number(realReport.nav_value ?? 0) - Number(realPrev.nav_value ?? 0)) / Number(realPrev.nav_value ?? 0))}`
+                    : undefined} />
+                <MiniKpi label="Cota"
+                  value={Number(realReport.quota_value ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}
+                  hint={realPrev && Number(realPrev.quota_value ?? 0) > 0
+                    ? `Var. ${PCT((Number(realReport.quota_value ?? 0) - Number(realPrev.quota_value ?? 0)) / Number(realPrev.quota_value ?? 0))}`
+                    : undefined} />
+                <MiniKpi label="Direitos creditórios" value={BRL(Number(realReport.credit_rights_value ?? 0), { compact: true })} />
+                <MiniKpi label="Atraso/DC"
+                  value={Number(realReport.credit_rights_value ?? 0) > 0
+                    ? PCT(Number(realReport.overdue_value ?? 0) / Number(realReport.credit_rights_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="PDD/DC"
+                  value={Number(realReport.credit_rights_value ?? 0) > 0
+                    ? PCT(Math.abs(Number(realReport.pdd_value ?? 0)) / Number(realReport.credit_rights_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="Caixa/PL"
+                  value={Number(realReport.nav_value ?? 0) > 0
+                    ? PCT(Number(realReport.cash_value ?? 0) / Number(realReport.nav_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="Cotistas" value={String(realReport.investors_count ?? "—")} />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-sm border border-dashed border-border bg-muted/20 px-3 py-2 text-[11.5px] text-muted-foreground">
+              Sem informe mensal importado para este FIDC — métricas serão preenchidas após o upload.
+            </div>
+          )}
+
+
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Recomendação" defaultValue={op.recommendation} as="select" options={["Manter", "Acompanhar", "Reduzir", "Zerar"]} />
             <Field label="Responsável" defaultValue={op.author} />
@@ -102,5 +155,15 @@ function Field({ label, defaultValue, textarea, as, options, className = "" }: {
         <input defaultValue={defaultValue} className={base} />
       )}
     </label>
+  );
+}
+
+function MiniKpi({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="num font-semibold text-foreground mt-0.5">{value}</div>
+      {hint && <div className="text-[10.5px] text-muted-foreground mt-0.5">{hint}</div>}
+    </div>
   );
 }

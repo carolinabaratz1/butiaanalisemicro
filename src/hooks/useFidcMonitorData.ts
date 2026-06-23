@@ -2,8 +2,7 @@
 // - posicoes (carteiras Butiá → exposição em FIDC via ISIN)
 // - fidc_quota_classes (ISIN → cota/classe → FIDC)
 // - fidcs (cadastro mestre)
-// NÃO consulta fidc_monthly_reports / fidc_monthly_quota_classes —
-// métricas mensais só serão preenchidas quando o informe mensal for importado.
+// - fidc_monthly_reports (informe mensal — última versão por FIDC, e versão anterior para variações).
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +35,26 @@ export type QuotaRecord = {
   quota_type: string | null; seniority_level: number | null;
   benchmark: string | null; target_spread: string | null;
   current_rating: string | null; current_rating_agency: string | null;
+};
+
+export type MonthlyReportRow = {
+  id: string;
+  fidc_id: string;
+  reference_month: string;          // YYYY-MM-DD (primeiro dia do mês)
+  nav_value: number | null;          // PL
+  quota_value: number | null;        // Valor da cota (primária / principal)
+  credit_rights_value: number | null;
+  overdue_value: number | null;
+  pdd_value: number | null;
+  cash_value: number | null;
+  repurchase_value: number | null;
+  subordinated_value: number | null;
+  quota_total_nav_value: number | null;
+  quota_validation_difference_percentage: number | null;
+  quota_validation_status: string | null;
+  subordinated_calculation_status: string | null;
+  investors_count: number | null;
+  is_current_version: boolean;
 };
 
 export type PosicaoRow = {
@@ -184,10 +203,27 @@ export function useFidcMonitorData() {
   });
 
 
-  const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading;
+  // 4) Informes mensais (última versão por FIDC + versão anterior por FIDC para variações)
+  const reportsQ = useQuery({
+    queryKey: ["fidc-monthly-reports-all-monitor"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select(
+          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version",
+        )
+        .eq("is_current_version", true)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as MonthlyReportRow[];
+    },
+  });
+
+  const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading || reportsQ.isLoading;
   const fidcs = fidcsQ.data ?? [];
   const quotas = quotasQ.data ?? [];
   const positions = posQ.data ?? [];
+  const reports = reportsQ.data ?? [];
 
   const fidcById = useMemo(() => {
     const m = new Map<string, FidcRecord>();
@@ -200,6 +236,21 @@ export function useFidcMonitorData() {
     quotas.forEach((q) => m.set(q.isin, q));
     return m;
   }, [quotas]);
+
+  // Agrupa relatórios por FIDC (já ordenados desc por reference_month)
+  const reportsByFidc = useMemo(() => {
+    const m = new Map<string, MonthlyReportRow[]>();
+    reports.forEach((r) => {
+      if (!m.has(r.fidc_id)) m.set(r.fidc_id, []);
+      m.get(r.fidc_id)!.push(r);
+    });
+    return m;
+  }, [reports]);
+
+  const latestReportFor = (fidcId: string): MonthlyReportRow | null =>
+    reportsByFidc.get(fidcId)?.[0] ?? null;
+  const prevReportFor = (fidcId: string): MonthlyReportRow | null =>
+    reportsByFidc.get(fidcId)?.[1] ?? null;
 
   const portfolioSummaries: PortfolioSummary[] = useMemo(() => {
     return FIDC_PORTFOLIOS.map((portfolio) => {
@@ -258,7 +309,7 @@ export function useFidcMonitorData() {
       0,
     );
 
-  // Alertas permitidos nesta etapa (sem métricas mensais)
+  // Alertas: posição + métricas mensais (quando informe importado)
   type PositionAlert = {
     id: string;
     severity: "warning" | "critical";
@@ -267,9 +318,17 @@ export function useFidcMonitorData() {
       | "carteira_sem_pl"
       | "carteira_sem_posicao"
       | "posicao_duplicada"
-      | "divergencia_pct";
+      | "divergencia_pct"
+      | "informe_ausente"
+      | "subordinacao_inconsistente"
+      | "pdd_alto"
+      | "atraso_alto"
+      | "queda_pl"
+      | "queda_cota";
     portfolioName: string | null;
     isin: string | null;
+    fidcId?: string | null;
+    fidcName?: string | null;
     message: string;
     valDate: string | null;
   };
@@ -338,8 +397,101 @@ export function useFidcMonitorData() {
       });
     });
 
+    // Métricas mensais → alertas por FIDC monitorado (com posição em alguma carteira Butiá)
+    const monitoredFidcIds = new Set<string>();
+    portfolioSummaries.forEach((s) => s.positions.forEach((p) => p.fidcId && monitoredFidcIds.add(p.fidcId)));
+
+    monitoredFidcIds.forEach((fid) => {
+      const f = fidcById.get(fid);
+      const fname = f?.name ?? "—";
+      const latest = reportsByFidc.get(fid)?.[0] ?? null;
+      const prev = reportsByFidc.get(fid)?.[1] ?? null;
+      const refDate = latest?.reference_month ?? null;
+
+      if (!latest) {
+        alerts.push({
+          id: `a${i++}`,
+          severity: "warning",
+          kind: "informe_ausente",
+          portfolioName: null,
+          isin: null,
+          fidcId: fid,
+          fidcName: fname,
+          message: `Informe mensal do FIDC ${fname} ainda não importado.`,
+          valDate: null,
+        });
+        return;
+      }
+
+      // Subordinação inconsistente
+      const subDiffPct = Number(latest.quota_validation_difference_percentage ?? 0);
+      const subStatus = (latest.subordinated_calculation_status ?? "").toLowerCase();
+      if (subStatus === "inconsistent" || Math.abs(subDiffPct) > 0.002) {
+        alerts.push({
+          id: `a${i++}`, severity: "warning", kind: "subordinacao_inconsistente",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `Soma das cotas diverge do PL em ${(subDiffPct * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      // PDD / Direitos creditórios
+      const dc = Number(latest.credit_rights_value ?? 0);
+      const pdd = Math.abs(Number(latest.pdd_value ?? 0));
+      if (dc > 0 && pdd / dc > 0.05) {
+        alerts.push({
+          id: `a${i++}`, severity: pdd / dc > 0.1 ? "critical" : "warning", kind: "pdd_alto",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `PDD/DC em ${((pdd / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      // Atraso / Direitos creditórios
+      const overdue = Number(latest.overdue_value ?? 0);
+      if (dc > 0 && overdue / dc > 0.1) {
+        alerts.push({
+          id: `a${i++}`, severity: overdue / dc > 0.2 ? "critical" : "warning", kind: "atraso_alto",
+          portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+          message: `Inadimplência/DC em ${((overdue / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          valDate: refDate,
+        });
+      }
+
+      if (prev) {
+        const navNow = Number(latest.nav_value ?? 0);
+        const navPrev = Number(prev.nav_value ?? 0);
+        if (navPrev > 0) {
+          const v = (navNow - navPrev) / navPrev;
+          if (v < -0.1) {
+            alerts.push({
+              id: `a${i++}`, severity: v < -0.2 ? "critical" : "warning", kind: "queda_pl",
+              portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+              message: `PL do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
+              valDate: refDate,
+            });
+          }
+        }
+        const qNow = Number(latest.quota_value ?? 0);
+        const qPrev = Number(prev.quota_value ?? 0);
+        if (qPrev > 0) {
+          const v = (qNow - qPrev) / qPrev;
+          if (v < -0.02) {
+            alerts.push({
+              id: `a${i++}`, severity: v < -0.05 ? "critical" : "warning", kind: "queda_cota",
+              portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
+              message: `Cota do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
+              valDate: refDate,
+            });
+          }
+        }
+      }
+    });
+
     return alerts;
-  }, [portfolioSummaries]);
+  }, [portfolioSummaries, reportsByFidc, fidcById]);
+
+  const fidcsWithReportCount = reportsByFidc.size;
 
   return {
     isLoading,
@@ -353,5 +505,8 @@ export function useFidcMonitorData() {
     portfoliosForFidc,
     exposureForFidc,
     positionAlerts,
+    latestReportFor,
+    prevReportFor,
+    fidcsWithReportCount,
   };
 }
