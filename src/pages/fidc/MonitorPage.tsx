@@ -22,11 +22,37 @@ export default function MonitorPage() {
 
   const rows = useMemo(() => {
     if (!summary) return [];
-    const data = summary.positions.map((p) => ({
-      ...p,
-      posStatus: (p.fidc ? "mapped" : "unmapped") as PosStatus,
-      pctPortfolio: summary.nav > 0 ? p.value / summary.nav : 0,
-    })).filter((r) => {
+    const data = summary.positions.map((p) => {
+      const r = p.fidcId ? latestReportFor(p.fidcId) : null;
+      const pr = p.fidcId ? prevReportFor(p.fidcId) : null;
+      const navNow = Number(r?.nav_value ?? 0);
+      const navPrev = Number(pr?.nav_value ?? 0);
+      const qNow = Number(r?.quota_value ?? 0);
+      const qPrev = Number(pr?.quota_value ?? 0);
+      const dc = Number(r?.credit_rights_value ?? 0);
+      const overdue = Number(r?.overdue_value ?? 0);
+      const pdd = Math.abs(Number(r?.pdd_value ?? 0));
+      const cash = Number(r?.cash_value ?? 0);
+      const repurchase = Number(r?.repurchase_value ?? 0);
+      const subord = Number(r?.subordinated_value ?? 0);
+      return {
+        ...p,
+        posStatus: (p.fidc ? "mapped" : "unmapped") as PosStatus,
+        pctPortfolio: summary.nav > 0 ? p.value / summary.nav : 0,
+        report: r,
+        prevReport: pr,
+        navNow,
+        varNav: navPrev > 0 ? (navNow - navPrev) / navPrev : null,
+        quotaNow: qNow,
+        varQuota: qPrev > 0 ? (qNow - qPrev) / qPrev : null,
+        atrasoDC: dc > 0 ? overdue / dc : null,
+        caixaPL: navNow > 0 ? cash / navNow : null,
+        pddAtraso: overdue > 0 ? pdd / overdue : null,
+        pddDC: dc > 0 ? pdd / dc : null,
+        recompraDC: dc > 0 ? repurchase / dc : null,
+        subordPct: navNow > 0 ? subord / navNow : null,
+      };
+    }).filter((r) => {
       if (statusFilter !== "all" && r.posStatus !== statusFilter) return false;
       if (q) {
         const hay = `${r.fidc?.name ?? ""} ${r.fidc?.cnpj ?? ""} ${r.isin} ${r.quota?.class_name ?? ""}`.toLowerCase();
@@ -47,7 +73,23 @@ export default function MonitorPage() {
       if (va > vb) return sort.dir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [summary, statusFilter, q, sort]);
+  }, [summary, statusFilter, q, sort, latestReportFor, prevReportFor]);
+
+  const reportCoverage = useMemo(() => {
+    if (!summary) return { withReport: 0, lastRef: null as string | null };
+    const fidcIds = Array.from(new Set(summary.positions.map((p) => p.fidcId).filter(Boolean) as string[]));
+    let withReport = 0;
+    let lastRef: string | null = null;
+    fidcIds.forEach((fid) => {
+      const r = latestReportFor(fid);
+      if (r) {
+        withReport += 1;
+        const ref = r.reference_month?.slice(0, 7) ?? null;
+        if (ref && (!lastRef || ref > lastRef)) lastRef = ref;
+      }
+    });
+    return { withReport, lastRef };
+  }, [summary, latestReportFor]);
 
   const setParam = (patch: Record<string, string>) => {
     const next = new URLSearchParams(sp);
