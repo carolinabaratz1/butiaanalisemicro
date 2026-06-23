@@ -344,7 +344,7 @@ export function useFidcMonitorData() {
   return {
     isLoading,
     latestValDate,
-    availableDates: datesQ.data ?? [],
+    latestPerPortfolio,
     fidcs,
     quotas,
     fidcById: (id: string) => fidcById.get(id) ?? null,
