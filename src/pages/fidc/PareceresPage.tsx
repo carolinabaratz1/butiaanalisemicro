@@ -72,6 +72,47 @@ export default function PareceresPage() {
             </div>
           </div>
 
+          {/* Métricas do informe mensal (quando disponível, via cadastro real) */}
+          {realReport ? (
+            <div className="mt-4 rounded-sm border border-border bg-card">
+              <div className="px-3 py-1.5 hairline-b text-[10.5px] uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Métricas do informe mensal {realFidc ? `· ${realFidc.name}` : ""}</span>
+                <span className="text-foreground/80">Ref.: {String(realReport.reference_month ?? "").slice(0, 7)}</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 px-3 py-3 text-[12px]">
+                <MiniKpi label="PL"
+                  value={BRL(Number(realReport.nav_value ?? 0), { compact: true })}
+                  hint={realPrev && Number(realPrev.nav_value ?? 0) > 0
+                    ? `Var. ${PCT((Number(realReport.nav_value ?? 0) - Number(realPrev.nav_value ?? 0)) / Number(realPrev.nav_value ?? 0))}`
+                    : undefined} />
+                <MiniKpi label="Cota"
+                  value={Number(realReport.quota_value ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 })}
+                  hint={realPrev && Number(realPrev.quota_value ?? 0) > 0
+                    ? `Var. ${PCT((Number(realReport.quota_value ?? 0) - Number(realPrev.quota_value ?? 0)) / Number(realPrev.quota_value ?? 0))}`
+                    : undefined} />
+                <MiniKpi label="Direitos creditórios" value={BRL(Number(realReport.credit_rights_value ?? 0), { compact: true })} />
+                <MiniKpi label="Atraso/DC"
+                  value={Number(realReport.credit_rights_value ?? 0) > 0
+                    ? PCT(Number(realReport.overdue_value ?? 0) / Number(realReport.credit_rights_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="PDD/DC"
+                  value={Number(realReport.credit_rights_value ?? 0) > 0
+                    ? PCT(Math.abs(Number(realReport.pdd_value ?? 0)) / Number(realReport.credit_rights_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="Caixa/PL"
+                  value={Number(realReport.nav_value ?? 0) > 0
+                    ? PCT(Number(realReport.cash_value ?? 0) / Number(realReport.nav_value ?? 1))
+                    : "—"} />
+                <MiniKpi label="Cotistas" value={String(realReport.investors_count ?? "—")} />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-sm border border-dashed border-border bg-muted/20 px-3 py-2 text-[11.5px] text-muted-foreground">
+              Sem informe mensal importado para este FIDC — métricas serão preenchidas após o upload.
+            </div>
+          )}
+
+
           <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Recomendação" defaultValue={op.recommendation} as="select" options={["Manter", "Acompanhar", "Reduzir", "Zerar"]} />
             <Field label="Responsável" defaultValue={op.author} />
