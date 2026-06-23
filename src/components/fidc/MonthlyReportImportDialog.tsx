@@ -119,6 +119,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         pdd_value: parsed.metrics.pddValue,
         cash_value: parsed.metrics.cashValue,
         repurchase_value: parsed.metrics.repurchaseValue,
+        investors_count: parsed.metrics.investorsCount,
         subordinated_value: parsed.quotaClasses
           .filter((q) => q.quotaType === "Subordinada" || q.quotaType === "Mezanino")
           .reduce((a, q) => a + (q.navValue ?? 0), 0) || null,
@@ -134,7 +135,17 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         imported_by: userRes.user?.id ?? null,
         version: nextVersion,
         is_current_version: true,
-        raw_data: parsed.rawSnapshot as never,
+        raw_data: {
+          ...parsed.rawSnapshot,
+          credit_rights_a: parsed.metrics.creditRightsAValue,
+          credit_rights_b: parsed.metrics.creditRightsBValue,
+          monthly_average_nav_value: parsed.metrics.monthlyAverageNavValue,
+          total_assets: parsed.metrics.assetsTotal,
+          total_liabilities: parsed.metrics.liabilitiesTotal,
+          segment_carteira_total: parsed.metrics.segmentCarteiraTotal,
+          overdue_source: parsed.metrics.overdueSource,
+          fidc_name_in_file: parsed.fidcNameInFile,
+        } as never,
       } as never;
 
       const { data: inserted, error: insErr } = await supabase
@@ -308,6 +319,49 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
                     <AlertDescription>{validation.message}</AlertDescription>
                   </Alert>
                 )}
+              </div>
+            )}
+
+            {/* Checklist de extração */}
+            {parsed.checklist?.length > 0 && (
+              <div className="border border-border rounded-md overflow-hidden bg-card">
+                <div className="section-title px-3 pt-3">Checklist de extração</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full mt-2 text-[12px]">
+                    <thead className="bg-surface-2 text-muted-foreground">
+                      <tr className="hairline-b">
+                        <th className="text-left px-3 py-2 font-medium">Métrica</th>
+                        <th className="text-left px-3 py-2 font-medium">Seção</th>
+                        <th className="text-left px-3 py-2 font-medium">Linha encontrada</th>
+                        <th className="text-right px-3 py-2 font-medium">Valor</th>
+                        <th className="text-left px-3 py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsed.checklist.map((row, i) => {
+                        const cls = row.status === "found" || row.status === "validated"
+                          ? "text-emerald-600"
+                          : row.status === "missing" ? "text-amber-600" : "text-red-600";
+                        const valStr = row.value == null
+                          ? "—"
+                          : typeof row.value === "number"
+                            ? (Math.abs(row.value) >= 1000 ? BRL(row.value, { compact: true }) : row.value.toLocaleString("pt-BR"))
+                            : String(row.value);
+                        return (
+                          <tr key={i} className="hairline-b">
+                            <td className="px-3 py-1.5">{row.metric}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground">{row.section}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[260px]" title={row.foundLabel ?? ""}>
+                              {row.foundLabel ?? "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-right num">{valStr}</td>
+                            <td className={`px-3 py-1.5 text-[11px] ${cls}`}>{row.status}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

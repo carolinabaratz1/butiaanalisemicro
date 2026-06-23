@@ -1,6 +1,6 @@
 // Parser do Informe Mensal de FIDC (CVM/Quantum).
-// O arquivo NÃO tem ISIN: identificação por CNPJ no header e cotas/classes
-// extraídas da seção final "X - Outras Informações" (coluna A).
+// O arquivo NÃO tem ISIN — identificação por CNPJ no cabeçalho e cotas/classes
+// extraídas da seção "X - Outras Informações" via âncoras textuais.
 import * as XLSX from "xlsx";
 
 export type RawMatrix = (string | number | Date | null)[][];
@@ -9,32 +9,47 @@ export type ParsedQuotaClass = {
   className: string;
   classNameNormalized: string;
   quotaType: string | null;       // "Sênior" | "Subordinada" | "Mezanino" | "Única" | null
-  seniorityLevel: number | null;  // 1 = Sênior, 2 = Mezanino, 3 = Subordinada
+  seniorityLevel: number | null;  // 1 sênior, 2 mezanino, 3 subordinada
   navValue: number | null;
   quotaValue: number | null;
   numberOfQuotas: number | null;
   rating: string | null;
 };
 
+export type ChecklistRow = {
+  metric: string;
+  section: string;
+  foundLabel: string | null;
+  value: number | string | null;
+  status: "found" | "missing" | "inconsistent" | "validated";
+};
+
 export type ParsedMonthlyReport = {
   fileName: string;
   cnpj: string | null;            // 14 dígitos
   fidcNameInFile: string | null;
-  referenceMonth: string;         // YYYY-MM-01 (último mês da planilha)
-  referenceLabel: string;         // "Maio/2026"
+  referenceMonth: string;         // YYYY-MM-01 (último mês)
+  referenceLabel: string;
   availableMonths: { label: string; iso: string; columnIndex: number }[];
   metrics: {
-    navValue: number | null;             // PL informado (IV.a)
-    quotaValue: number | null;           // primeira cota (média ponderada)
+    navValue: number | null;             // PL IV.a
+    monthlyAverageNavValue: number | null; // IV.b
+    quotaValue: number | null;           // primeira classe (referência)
     creditRightsValue: number | null;    // I.2.a + I.2.b
-    overdueValue: number | null;         // a.3) Créditos Existentes Inadimplentes
-    pddValue: number | null;             // a.10) Provisão
-    cashValue: number | null;            // I.1 Disponibilidades
-    repurchaseValue: number | null;      // IX d.2) Recompras Valor
-    assetsTotal: number | null;          // I - Ativo
-    liabilitiesTotal: number | null;     // III - Passivo
+    creditRightsAValue: number | null;   // I.2.a
+    creditRightsBValue: number | null;   // I.2.b
+    overdueValue: number | null;         // V.b + VI.b ou fallback
+    overdueSource: "V_VI" | "fallback_I" | null;
+    pddValue: number | null;             // |I.2.a.10| + |I.2.b.10|
+    cashValue: number | null;            // I.1
+    repurchaseValue: number | null;      // VII.d.2
+    assetsTotal: number | null;          // I
+    liabilitiesTotal: number | null;     // III
+    segmentCarteiraTotal: number | null; // II
+    investorsCount: number | null;       // X.1
   };
   quotaClasses: ParsedQuotaClass[];
+  checklist: ChecklistRow[];
   rawSnapshot: Record<string, unknown>;
 };
 
@@ -46,11 +61,11 @@ const MONTH_PT: Record<string, number> = {
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
 
-function cleanCNPJ(v: string | null | undefined): string | null {
+const cleanCNPJ = (v: string | null | undefined): string | null => {
   if (!v) return null;
-  const digits = String(v).replace(/\D/g, "");
-  return digits.length === 14 ? digits : null;
-}
+  const d = String(v).replace(/\D/g, "");
+  return d.length === 14 ? d : null;
+};
 
 function parseMonthLabel(label: string): string | null {
   const m = String(label).trim().match(/^([A-Za-zçÇãÃéÉ]+)\/(\d{4})$/);
@@ -63,45 +78,52 @@ function parseMonthLabel(label: string): string | null {
 function asNumber(v: unknown): number | null {
   if (v == null || v === "" || typeof v === "boolean") return null;
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const s = String(v).trim();
-  if (s === "") return null;
-  const n = Number(s.replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : null;
+  let s = String(v).trim();
+  if (!s) return null;
+  // remove R$ e espaços
+  s = s.replace(/R\$\s*/gi, "").replace(/\s+/g, "");
+  // negativo entre parênteses
+  const neg = /^\(.*\)$/.test(s);
+  if (neg) s = s.slice(1, -1);
+  // formato BR: pontos como milhar, vírgula como decimal
+  if (/,/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+  return neg ? -n : n;
 }
 
-// Indentation count = leading spaces in coluna A. Usada para detectar hierarquia das classes.
-function indent(label: string): number {
-  const m = label.match(/^(\s*)/);
-  return m ? m[1].length : 0;
-}
+const indent = (s: string): number => (s.match(/^(\s*)/)?.[1].length ?? 0);
 
 function detectQuotaType(label: string): { quotaType: string; seniority: number } | null {
   const n = norm(label);
-  if (n.includes("classe senior") || n.includes("senior")) return { quotaType: "Sênior", seniority: 1 };
-  if (n.includes("mezanino")) return { quotaType: "Mezanino", seniority: 2 };
-  if (n.includes("subordinad")) return { quotaType: "Subordinada", seniority: 3 };
-  if (n.startsWith("classe unica") || n === "unica") return { quotaType: "Única", seniority: 1 };
+  if (/\bmezanino\b/.test(n)) return { quotaType: "Mezanino", seniority: 2 };
+  if (/\bsubordinad/.test(n)) return { quotaType: "Subordinada", seniority: 3 };
+  if (/\bsenior\b/.test(n))   return { quotaType: "Sênior", seniority: 1 };
+  if (/\bunica\b/.test(n))    return { quotaType: "Única", seniority: 1 };
   return null;
 }
 
-function findRowByLabel(matrix: RawMatrix, target: string): number {
+function findRowStartsWith(matrix: RawMatrix, target: string, from = 0, to = -1): number {
   const t = norm(target);
-  for (let i = 0; i < matrix.length; i++) {
-    const v = matrix[i]?.[0];
-    if (v != null && norm(String(v)) === t) return i;
-  }
-  return -1;
-}
-
-function findRowStartsWith(matrix: RawMatrix, target: string): number {
-  const t = norm(target);
-  for (let i = 0; i < matrix.length; i++) {
+  const end = to < 0 ? matrix.length : to;
+  for (let i = from; i < end; i++) {
     const v = matrix[i]?.[0];
     if (v != null && norm(String(v)).startsWith(t)) return i;
   }
   return -1;
 }
 
+function findRowContains(matrix: RawMatrix, target: string, from = 0, to = -1): number {
+  const t = norm(target);
+  const end = to < 0 ? matrix.length : to;
+  for (let i = from; i < end; i++) {
+    const v = matrix[i]?.[0];
+    if (v != null && norm(String(v)).includes(t)) return i;
+  }
+  return -1;
+}
+
+// ---------- Parser principal ----------
 export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyReport> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
@@ -109,21 +131,30 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
   if (!sheetName) throw new Error("Planilha vazia.");
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json<RawMatrix[number]>(sheet, {
-    header: 1,
-    defval: null,
-    raw: true,
+    header: 1, defval: null, raw: true,
   }) as RawMatrix;
-
   if (!matrix.length) throw new Error("Planilha sem dados.");
 
-  // Header: A1 = "NOME\nCNPJ"; colunas seguintes = meses
+  // Header: A1 normalmente é "NOME\nCNPJ"; colunas subsequentes = meses
   const headerRow = matrix[0] ?? [];
   const a1 = headerRow[0] != null ? String(headerRow[0]) : "";
-  const cnpjMatch = a1.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/);
-  const cnpj = cleanCNPJ(cnpjMatch?.[0] ?? null);
-  const fidcNameInFile =
-    a1.split(/\r?\n/)[0]?.trim() || sheetName.trim() || null;
 
+  // CNPJ: A1 OU procurar rótulo "CNPJ do Fundo" em qualquer linha
+  let cnpj = cleanCNPJ(a1.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/)?.[0] ?? null);
+  if (!cnpj) {
+    const cnpjRow = findRowContains(matrix, "cnpj do fundo");
+    if (cnpjRow >= 0) {
+      const row = matrix[cnpjRow] ?? [];
+      for (let c = 0; c < row.length; c++) {
+        const m = String(row[c] ?? "").match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/);
+        if (m) { cnpj = cleanCNPJ(m[0]); break; }
+      }
+    }
+  }
+
+  const fidcNameInFile = a1.split(/\r?\n/)[0]?.trim() || sheetName.trim() || null;
+
+  // Meses no cabeçalho
   const months: { label: string; iso: string; columnIndex: number }[] = [];
   for (let c = 1; c < headerRow.length; c++) {
     const lbl = headerRow[c];
@@ -135,52 +166,129 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
 
   const last = months[months.length - 1];
   const col = last.columnIndex;
-
   const valueAt = (rowIdx: number): number | null =>
     rowIdx >= 0 ? asNumber(matrix[rowIdx]?.[col]) : null;
+  const labelAt = (rowIdx: number): string | null =>
+    rowIdx >= 0 ? String(matrix[rowIdx]?.[0] ?? "").trim() : null;
 
-  // Métricas consolidadas — labels exatos do informe CVM/Quantum
-  const rAtivo = findRowStartsWith(matrix, "I - Ativo");
-  const rDisp = findRowStartsWith(matrix, "1 - Disponibilidades".trim()); // pode ter indentação
-  const rDispIndented = findRowStartsWith(matrix, "   1 - Disponibilidades");
-  const rDcA = findRowStartsWith(matrix, "      a) Direitos Creditórios com Aquisição Substancial");
-  const rDcB = findRowStartsWith(matrix, "      b) Direitos Creditórios sem Aquisição Substancial");
-  const rOverdueA = findRowStartsWith(matrix, "         a.3) Créditos Existentes Inadimplentes");
-  const rPddA = findRowStartsWith(matrix, "         a.10) Provisão");
-  const rPassivo = findRowStartsWith(matrix, "III - Passivo");
-  const rPL = findRowStartsWith(matrix, "   a) Valor do Patrimônio Líquido");
-  const rRecompraValor = findRowStartsWith(matrix, "      d.2) Valor");
+  // ---- Âncoras seccionais ----
+  const rAtivo     = findRowStartsWith(matrix, "I - Ativo");
+  const rCarteira  = findRowStartsWith(matrix, "II - Carteira por Segmento");
+  const rPassivo   = findRowStartsWith(matrix, "III - Passivo");
+  const rPL        = findRowStartsWith(matrix, "IV - Patrimônio Líquido");
+  const rV         = findRowStartsWith(matrix, "V - Comportamento da Carteira de Direitos Cred");
+  const rVI        = findRowStartsWith(matrix, "VI - Comportamento da Carteira de Direitos Cred");
+  const rVII       = findRowStartsWith(matrix, "VII - Negócios com Direitos Creditórios");
+  const rIX        = findRowStartsWith(matrix, "IX - Taxas Praticadas");
+  const rX         = findRowStartsWith(matrix, "X - Outras Informações");
 
+  // ---- I.1 Caixa / Disponibilidades (dentro de I antes de I.2) ----
+  const rDisp = findRowStartsWith(matrix, "1 - Disponibilidades",
+    rAtivo >= 0 ? rAtivo : 0,
+    rCarteira > 0 ? rCarteira : (rPassivo > 0 ? rPassivo : -1));
+
+  // ---- I.2.a e I.2.b ----
+  const rDcA = findRowContains(matrix, "a) direitos creditorios com aquisicao substancial",
+    rAtivo >= 0 ? rAtivo : 0, rPassivo > 0 ? rPassivo : -1);
+  const rDcB = findRowContains(matrix, "b) direitos creditorios sem aquisicao substancial",
+    rAtivo >= 0 ? rAtivo : 0, rPassivo > 0 ? rPassivo : -1);
+
+  // ---- I.2.a.10 e I.2.b.10 Provisão (PDD) ----
+  const rPddA = rDcA >= 0 ? findRowContains(matrix, "a.10) provisao",
+    rDcA, rDcB > 0 ? rDcB + 30 : rPassivo > 0 ? rPassivo : -1) : -1;
+  const rPddB = rDcB >= 0 ? findRowContains(matrix, "b.10) provisao",
+    rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
+
+  // ---- Atrasos fallback: I.2.a.3, I.2.b.3, I.2.a.2.1, I.2.b.2.1 ----
+  const rA3 = rDcA >= 0 ? findRowContains(matrix, "a.3) creditos existentes inadimplentes",
+    rDcA, rDcB > 0 ? rDcB : (rPassivo > 0 ? rPassivo : -1)) : -1;
+  const rB3 = rDcB >= 0 ? findRowContains(matrix, "b.3) creditos existentes inadimplentes",
+    rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
+  const rA21 = rDcA >= 0 ? findRowContains(matrix, "a.2.1) valor total das parcelas inadimplentes",
+    rDcA, rDcB > 0 ? rDcB : (rPassivo > 0 ? rPassivo : -1)) : -1;
+  const rB21 = rDcB >= 0 ? findRowContains(matrix, "b.2.1) valor total das parcelas inadimplentes",
+    rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
+
+  // ---- V.b e VI.b Inadimplentes ----
+  const rVb = rV >= 0 ? findRowStartsWith(matrix, "b) Inadimplentes",
+    rV, rVI > 0 ? rVI : (rVII > 0 ? rVII : -1)) : -1;
+  const rVIb = rVI >= 0 ? findRowStartsWith(matrix, "b) Inadimplentes",
+    rVI, rVII > 0 ? rVII : (rIX > 0 ? rIX : -1)) : -1;
+
+  // ---- VII.d.2 Recompras Valor ----
+  const rRecD = rVII >= 0 ? findRowContains(matrix, "d) recompras",
+    rVII, rIX > 0 ? rIX : (rX > 0 ? rX : -1)) : -1;
+  const rRecD2 = rRecD >= 0 ? findRowContains(matrix, "d.2) valor",
+    rRecD, rRecD + 10) : -1;
+
+  // ---- IV.a e IV.b ----
+  const rPLa = rPL >= 0 ? findRowContains(matrix, "a) valor do patrimonio liquido",
+    rPL, rV > 0 ? rV : -1) : -1;
+  const rPLb = rPL >= 0 ? findRowContains(matrix, "b) valor do patrimonio liquido medio",
+    rPL, rV > 0 ? rV : -1) : -1;
+
+  // ---- X.1 Número de Cotistas (opcional, pode não existir no Quantum) ----
+  const rInvestors = rX >= 0 ? findRowContains(matrix, "numero de cotistas",
+    rX, Math.min(matrix.length, rX + 60)) : -1;
+
+  // ---- Métricas ----
   const dcA = valueAt(rDcA);
   const dcB = valueAt(rDcB);
-  const creditRightsValue =
-    dcA != null || dcB != null ? (dcA ?? 0) + (dcB ?? 0) : null;
+  const creditRightsValue = dcA != null || dcB != null ? (dcA ?? 0) + (dcB ?? 0) : null;
+
+  const pddA = valueAt(rPddA);
+  const pddB = valueAt(rPddB);
+  const pddValue = pddA != null || pddB != null
+    ? Math.abs(pddA ?? 0) + Math.abs(pddB ?? 0)
+    : null;
+
+  // Atraso: preferir V.b + VI.b
+  let overdueValue: number | null = null;
+  let overdueSource: "V_VI" | "fallback_I" | null = null;
+  const vbVal = valueAt(rVb);
+  const vibVal = valueAt(rVIb);
+  if (vbVal != null || vibVal != null) {
+    overdueValue = (vbVal ?? 0) + (vibVal ?? 0);
+    overdueSource = "V_VI";
+  } else {
+    const a3 = valueAt(rA3); const b3 = valueAt(rB3);
+    const a21 = valueAt(rA21); const b21 = valueAt(rB21);
+    if ([a3, b3, a21, b21].some((x) => x != null)) {
+      overdueValue = (a3 ?? 0) + (b3 ?? 0) + (a21 ?? 0) + (b21 ?? 0);
+      overdueSource = "fallback_I";
+    }
+  }
+
+  const investorsRaw = valueAt(rInvestors);
+  const investorsCount = investorsRaw != null ? Math.round(investorsRaw) : null;
 
   const metrics = {
-    navValue: valueAt(rPL),
-    quotaValue: null as number | null, // preenchido depois com a 1ª classe (média ponderada)
+    navValue: valueAt(rPLa),
+    monthlyAverageNavValue: valueAt(rPLb),
+    quotaValue: null as number | null,
     creditRightsValue,
-    overdueValue: valueAt(rOverdueA),
-    pddValue: valueAt(rPddA),
-    cashValue: valueAt(rDispIndented >= 0 ? rDispIndented : rDisp),
-    repurchaseValue: valueAt(rRecompraValor),
+    creditRightsAValue: dcA,
+    creditRightsBValue: dcB,
+    overdueValue,
+    overdueSource,
+    pddValue,
+    cashValue: valueAt(rDisp),
+    repurchaseValue: valueAt(rRecD2),
     assetsTotal: valueAt(rAtivo),
     liabilitiesTotal: valueAt(rPassivo),
+    segmentCarteiraTotal: valueAt(rCarteira),
+    investorsCount,
   };
 
-  // ---- Parser de cotas/classes a partir de "X - Outras Informações" ----
-  const rX = findRowStartsWith(matrix, "X - Outras Informações");
-  const classes: ParsedQuotaClass[] = [];
-
+  // ---- Cotas/classes a partir de X ----
+  const quotaClasses: ParsedQuotaClass[] = [];
   if (rX >= 0) {
     let currentType: { quotaType: string; seniority: number } | null = null;
     let currentClass: ParsedQuotaClass | null = null;
+    let awaitingName = false;
 
     const pushCurrent = () => {
-      if (currentClass) {
-        classes.push(currentClass);
-        currentClass = null;
-      }
+      if (currentClass) { quotaClasses.push(currentClass); currentClass = null; }
     };
 
     for (let i = rX + 1; i < matrix.length; i++) {
@@ -191,51 +299,129 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
       const n = norm(raw);
       const ind = indent(raw);
 
-      // Linhas de rodapé/disclaimer
-      if (/^(as informa|os valores|fonte:|^\s*$)/i.test(raw.trim())) continue;
+      // Disclaimer / rodapé → encerra
+      if (n.startsWith("as informacoes") || n.startsWith("os valores") || n.startsWith("fonte:")) break;
+      // Outra seção romana (defensivo)
+      if (/^x[iv]+\s*-\s/.test(n)) break;
 
-      // Cabeçalho do tipo (Classe Sênior, Classe Subordinada júnior, Classe Mezanino, Classe Única)
+      // Cabeçalho de tipo (Classe Sênior / Subordinada / Mezanino / Única)
+      // Ex.: "      Classe Sênior" (ind=6, sem dígitos)
       const t = detectQuotaType(raw);
-      if (t && ind <= 8 && !n.includes("fidc") && !/\d/.test(raw)) {
+      if (t && ind <= 8 && !/\d/.test(raw)) {
         pushCurrent();
         currentType = t;
+        awaitingName = true;
         continue;
       }
 
-      // Linhas filhas da classe atual
-      const isField = ["cota", "patrimônio líquido", "patrimonio liquido", "quantidade de cotas", "amortização", "amortizacao", "rating"]
-        .includes(n);
+      // Campos da classe (Cota / PL / Quantidade de Cotas / Rating)
+      const isCotaField        = n === "cota" || n.startsWith("cota ");
+      const isPLField          = n.startsWith("patrimonio liquido");
+      const isQtdField         = n.startsWith("quantidade de cotas");
+      const isRatingField      = n === "rating" || n.startsWith("rating ");
+      const isAmortField       = n.startsWith("amortizacao");
+      const isField = isCotaField || isPLField || isQtdField || isRatingField || isAmortField;
 
       if (isField && currentClass) {
+        if (isAmortField) continue;
         const v = asNumber(row[col]);
-        if (n === "cota") currentClass.quotaValue = v;
-        else if (n === "patrimônio líquido" || n === "patrimonio liquido") currentClass.navValue = v;
-        else if (n === "quantidade de cotas") currentClass.numberOfQuotas = v;
-        else if (n === "rating") currentClass.rating = row[col] != null ? String(row[col]).trim() : null;
+        if (isCotaField) currentClass.quotaValue = v;
+        else if (isPLField) currentClass.navValue = v;
+        else if (isQtdField) currentClass.numberOfQuotas = v;
+        else if (isRatingField) currentClass.rating = row[col] != null ? String(row[col]).trim() : null;
         continue;
       }
 
-      // Nome da classe (linha mais indentada que o cabeçalho do tipo, com texto sem caractere "%" e não é campo)
-      if (currentType && !isField && ind >= 6) {
+      // Nome da classe (apenas se estamos aguardando)
+      if (awaitingName && currentType && !isField && ind >= 6) {
         pushCurrent();
-        const t2 = detectQuotaType(raw);
+        const sub = detectQuotaType(raw) ?? currentType;
         currentClass = {
           className: raw.trim(),
           classNameNormalized: norm(raw),
-          quotaType: (t2 ?? currentType).quotaType,
-          seniorityLevel: (t2 ?? currentType).seniority,
+          quotaType: sub.quotaType,
+          seniorityLevel: sub.seniority,
           navValue: null,
           quotaValue: null,
           numberOfQuotas: null,
           rating: null,
         };
+        awaitingName = false;
+        continue;
+      }
+
+      // Se não conhecemos tipo ainda, tenta detectar pelo próprio nome (formato CVM puro)
+      if (!currentType && !isField && ind >= 4) {
+        const tt = detectQuotaType(raw);
+        if (tt) {
+          pushCurrent();
+          currentClass = {
+            className: raw.trim(),
+            classNameNormalized: norm(raw),
+            quotaType: tt.quotaType,
+            seniorityLevel: tt.seniority,
+            navValue: null, quotaValue: null, numberOfQuotas: null, rating: null,
+          };
+        }
       }
     }
     pushCurrent();
   }
 
-  if (classes.length > 0 && classes[0].quotaValue != null) {
-    metrics.quotaValue = classes[0].quotaValue;
+  if (quotaClasses.length > 0 && quotaClasses[0].quotaValue != null) {
+    metrics.quotaValue = quotaClasses[0].quotaValue;
+  }
+
+  // ---- Checklist ----
+  const declared = metrics.navValue;
+  const sumQuotas = quotaClasses.length > 0
+    ? quotaClasses.reduce((a, q) => a + (q.navValue ?? 0), 0)
+    : null;
+
+  const mkStatus = (v: unknown): ChecklistRow["status"] =>
+    v == null ? "missing" : "found";
+
+  const checklist: ChecklistRow[] = [
+    { metric: "CNPJ", section: "Cabeçalho", foundLabel: cnpj ? null : "—", value: cnpj, status: cnpj ? "found" : "missing" },
+    { metric: "Competência", section: "Cabeçalho", foundLabel: last.label, value: last.label, status: "found" },
+    { metric: "PL (IV.a)", section: "IV - PL", foundLabel: labelAt(rPLa), value: declared, status: mkStatus(declared) },
+    { metric: "Ativo total (I)", section: "I - Ativo", foundLabel: labelAt(rAtivo), value: metrics.assetsTotal, status: mkStatus(metrics.assetsTotal) },
+    { metric: "Passivo total (III)", section: "III - Passivo", foundLabel: labelAt(rPassivo), value: metrics.liabilitiesTotal, status: mkStatus(metrics.liabilitiesTotal) },
+    { metric: "Caixa (I.1)", section: "I - Ativo", foundLabel: labelAt(rDisp), value: metrics.cashValue, status: mkStatus(metrics.cashValue) },
+    { metric: "Direitos Cred. I.2.a", section: "I.2", foundLabel: labelAt(rDcA), value: dcA, status: mkStatus(dcA) },
+    { metric: "Direitos Cred. I.2.b", section: "I.2", foundLabel: labelAt(rDcB), value: dcB, status: mkStatus(dcB) },
+    { metric: "Direitos Cred. total (a+b)", section: "I.2", foundLabel: "Calc.", value: creditRightsValue, status: mkStatus(creditRightsValue) },
+    { metric: "PDD (|a.10|+|b.10|)", section: "I.2", foundLabel: rPddA >= 0 || rPddB >= 0 ? "Provisão a/b" : null, value: pddValue, status: mkStatus(pddValue) },
+    { metric: "Atrasos", section: overdueSource === "V_VI" ? "V.b + VI.b" : overdueSource === "fallback_I" ? "Fallback I.2" : "—", foundLabel: overdueSource, value: overdueValue, status: mkStatus(overdueValue) },
+    { metric: "Recompras (VII.d.2)", section: "VII", foundLabel: labelAt(rRecD2), value: metrics.repurchaseValue, status: mkStatus(metrics.repurchaseValue) },
+    { metric: "Investidores (X.1)", section: "X", foundLabel: labelAt(rInvestors), value: metrics.investorsCount, status: mkStatus(metrics.investorsCount) },
+    { metric: "Cotas/classes", section: "X", foundLabel: null, value: quotaClasses.length, status: quotaClasses.length > 0 ? "found" : "missing" },
+    { metric: "Soma PL cotas", section: "X", foundLabel: null, value: sumQuotas, status: mkStatus(sumQuotas) },
+  ];
+
+  // Validação contábil
+  if (metrics.assetsTotal != null && metrics.liabilitiesTotal != null && declared != null) {
+    const diff = Math.abs((metrics.assetsTotal - metrics.liabilitiesTotal) - declared);
+    const ok = diff / Math.max(Math.abs(declared), 1) < 0.005;
+    checklist.push({
+      metric: "Ativo − Passivo ≈ PL",
+      section: "Validação",
+      foundLabel: null,
+      value: diff,
+      status: ok ? "validated" : "inconsistent",
+    });
+  }
+  // Validação II ≈ I.2.a + I.2.b
+  if (metrics.segmentCarteiraTotal != null && creditRightsValue != null) {
+    const diff = Math.abs(metrics.segmentCarteiraTotal - creditRightsValue);
+    const ok = diff / Math.max(Math.abs(creditRightsValue), 1) < 0.005;
+    checklist.push({
+      metric: "II ≈ I.2.a + I.2.b",
+      section: "Validação",
+      foundLabel: null,
+      value: diff,
+      status: ok ? "validated" : "inconsistent",
+    });
   }
 
   return {
@@ -246,28 +432,33 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
     referenceLabel: last.label,
     availableMonths: months,
     metrics,
-    quotaClasses: classes,
+    quotaClasses,
+    checklist,
     rawSnapshot: {
       sheetName,
       monthCount: months.length,
       assetsTotal: metrics.assetsTotal,
       liabilitiesTotal: metrics.liabilitiesTotal,
+      segmentCarteiraTotal: metrics.segmentCarteiraTotal,
+      monthlyAverageNavValue: metrics.monthlyAverageNavValue,
+      creditRightsAValue: metrics.creditRightsAValue,
+      creditRightsBValue: metrics.creditRightsBValue,
+      overdueSource: metrics.overdueSource,
     },
   };
 }
 
 // ---------- Validação PL × Cotas ----------
-
 export type QuotaValidationStatus = "valid" | "warning" | "invalid" | "cotas_ausentes";
 
 export type QuotaValidation = {
   status: QuotaValidationStatus;
-  declaredNav: number | null;     // PL informado (IV.a)
-  quotasNavSum: number | null;    // soma do PL das cotas/classes
+  declaredNav: number | null;
+  quotasNavSum: number | null;
   differenceAbs: number | null;
-  differencePct: number | null;   // 0..1
+  differencePct: number | null;
   quotaClassesFoundCount: number;
-  subordinatedStatus: "ok" | "unreliable" | "missing";
+  subordinatedStatus: "ok" | "unreliable" | "missing" | "invalid" | "quota_data_missing";
   subordinatedNotes: string | null;
   message: string;
 };
@@ -287,7 +478,7 @@ export function validateQuotas(parsed: ParsedMonthlyReport): QuotaValidation {
       differenceAbs: null,
       differencePct: null,
       quotaClassesFoundCount: 0,
-      subordinatedStatus: "missing",
+      subordinatedStatus: "quota_data_missing",
       subordinatedNotes: "Cotas/classes não encontradas no informe mensal.",
       message:
         "Cotas/classes não encontradas no informe mensal. Não é possível validar PL por cotas nem calcular subordinação com confiança.",
@@ -312,13 +503,13 @@ export function validateQuotas(parsed: ParsedMonthlyReport): QuotaValidation {
   const pct = Math.abs(diff) / Math.abs(declared);
 
   let status: QuotaValidationStatus = "valid";
-  let subStatus: "ok" | "unreliable" | "missing" = "ok";
+  let subStatus: QuotaValidation["subordinatedStatus"] = "ok";
   let subNotes: string | null = null;
   let message = "PL total bate com a soma das cotas/classes.";
 
   if (pct > 0.002) {
     status = "invalid";
-    subStatus = "unreliable";
+    subStatus = "invalid";
     subNotes = "Diferença > 0,20% entre PL informado e soma das cotas.";
     message = "PL total do FIDC difere da soma do PL das cotas/classes. A métrica de subordinação pode estar incorreta.";
   } else if (pct > 0.0005) {
@@ -329,20 +520,13 @@ export function validateQuotas(parsed: ParsedMonthlyReport): QuotaValidation {
   }
 
   return {
-    status,
-    declaredNav: declared,
-    quotasNavSum: sum,
-    differenceAbs: diff,
-    differencePct: pct,
-    quotaClassesFoundCount: count,
-    subordinatedStatus: subStatus,
-    subordinatedNotes: subNotes,
-    message,
+    status, declaredNav: declared, quotasNavSum: sum,
+    differenceAbs: diff, differencePct: pct, quotaClassesFoundCount: count,
+    subordinatedStatus: subStatus, subordinatedNotes: subNotes, message,
   };
 }
 
 // ---------- Matching contra Cadastro Mestre ----------
-
 export type MasterQuota = {
   id: string;
   isin: string | null;
@@ -360,30 +544,20 @@ export type QuotaMatch = {
 };
 
 export function matchQuotaClasses(
-  parsed: ParsedQuotaClass[],
-  master: MasterQuota[],
+  parsed: ParsedQuotaClass[], master: MasterQuota[],
 ): QuotaMatch[] {
   return parsed.map((p) => {
-    // 1) Nome exato (class_name / internal / cvm)
     const exact = master.find((m) =>
       [m.class_name, m.internal_quota_name, m.cvm_quota_name]
         .filter(Boolean)
         .some((name) => norm(String(name)) === p.classNameNormalized),
     );
-    if (exact) {
-      return { parsed: p, matchedId: exact.id, matchingStatus: "matched_by_name" };
-    }
-    // 2) Match por tipo/senioridade quando só existe 1 classe daquele tipo
+    if (exact) return { parsed: p, matchedId: exact.id, matchingStatus: "matched_by_name" };
     if (p.quotaType) {
       const byType = master.filter((m) => m.quota_type === p.quotaType);
-      if (byType.length === 1) {
-        return { parsed: p, matchedId: byType[0].id, matchingStatus: "matched_by_name" };
-      }
-      if (byType.length > 1) {
-        return { parsed: p, matchedId: null, matchingStatus: "manual_match_required" };
-      }
+      if (byType.length === 1) return { parsed: p, matchedId: byType[0].id, matchingStatus: "matched_by_name" };
+      if (byType.length > 1) return { parsed: p, matchedId: null, matchingStatus: "manual_match_required" };
     }
-    // 3) Sem ISIN nenhum no cadastro
     if (master.every((m) => !m.isin)) {
       return { parsed: p, matchedId: null, matchingStatus: "no_isin_available" };
     }

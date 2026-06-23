@@ -43,6 +43,26 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
+  const { data: prevReport } = useQuery({
+    queryKey: ["fidc-monthly-reports", id, "prev", latestReport?.reference_month ?? null],
+    queryFn: async () => {
+      const ref = latestReport?.reference_month as string | undefined;
+      if (!ref) return null;
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select("nav_value, quota_value, reference_month")
+        .eq("fidc_id", id)
+        .eq("is_current_version", true)
+        .lt("reference_month", ref)
+        .order("reference_month", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Record<string, unknown> | null;
+    },
+    enabled: !!id && !!latestReport?.reference_month,
+  });
+
   const { data: reportsHistory = [] } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "history"],
     queryFn: async () => {
@@ -121,17 +141,54 @@ export default function FidcDetailPage() {
 
       <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} />
-        <MetricCard label="PL" value={<NoDataInline />} />
-        <MetricCard label="Cota" value={<NoDataInline />} />
-        <MetricCard label="Direitos Creditórios" value={<NoDataInline />} />
-        <MetricCard label="Atraso/DC" value={<NoDataInline />} />
-        <MetricCard label="PDD/DC" value={<NoDataInline />} />
-        <MetricCard label="PDD/Atrasos" value={<NoDataInline />} />
-        <MetricCard label="Caixa/PL" value={<NoDataInline />} />
-        <MetricCard label="Recompras/DC" value={<NoDataInline />} />
-        <MetricCard label="Subordinação" value={<NoDataInline />} />
-        <MetricCard label="Var. mensal PL" value={<NoDataInline />} />
-        <MetricCard label="Investidores" value={<NoDataInline />} />
+        {(() => {
+          const r = latestReport ?? null;
+          const num = (k: string): number | null => {
+            const v = r?.[k];
+            return v == null ? null : Number(v);
+          };
+          const subStatus = String(r?.subordinated_calculation_status ?? "");
+          const subOk = subStatus === "ok";
+          const nav = num("nav_value");
+          const cota = num("quota_value");
+          const dc = num("credit_rights_value");
+          const overdue = num("overdue_value");
+          const pdd = num("pdd_value");
+          const cash = num("cash_value");
+          const rep = num("repurchase_value");
+          const subVal = num("subordinated_value");
+          const inv = num("investors_count");
+          const prevNav = prevReport ? Number(prevReport.nav_value ?? NaN) : NaN;
+          const varPl = Number.isFinite(prevNav) && prevNav > 0 && nav != null
+            ? (nav / prevNav - 1) : null;
+
+          const ratio = (a: number | null, b: number | null) =>
+            a != null && b != null && b !== 0 ? a / b : null;
+
+          const sub = subOk && subVal != null && nav ? subVal / nav : null;
+          const cell = (v: string | null) => v == null ? <NoDataInline /> : <>{v}</>;
+
+          return (
+            <>
+              <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} />
+              <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} />
+              <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} />
+              <MetricCard label="Atraso/DC" value={cell(ratio(overdue, dc) != null ? PCT(ratio(overdue, dc)) : null)} />
+              <MetricCard label="PDD/DC" value={cell(ratio(pdd, dc) != null ? PCT(ratio(pdd, dc)) : null)} />
+              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(pdd / overdue) : null)} />
+              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)) : null)} />
+              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)) : null)} />
+              <MetricCard
+                label="Subordinação"
+                value={subOk
+                  ? cell(sub != null ? PCT(sub) : null)
+                  : <span title="Soma das cotas diferente do PL total. Subordinação não confiável." className="text-amber-600 text-[13px]">Inconsistente</span>}
+              />
+              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} />
+              <MetricCard label="Investidores" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} />
+            </>
+          );
+        })()}
       </div>
 
       {latestReport && (
@@ -170,7 +227,7 @@ export default function FidcDetailPage() {
                 <div className="text-[11px] text-muted-foreground">Subordinação</div>
                 <div className="font-medium">
                   {latestReport.subordinated_calculation_status === "ok" ? "Confiável" :
-                   latestReport.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                   (latestReport.subordinated_calculation_status === "missing" || latestReport.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
                 </div>
               </div>
             </div>
@@ -298,7 +355,7 @@ export default function FidcDetailPage() {
                     <td className="px-3 py-2 text-right num">{Number(r.quota_classes_found_count ?? 0)}</td>
                     <td className="px-3 py-2">
                       {r.subordinated_calculation_status === "ok" ? "Confiável" :
-                       r.subordinated_calculation_status === "missing" ? "N/D" : "Inconsistente"}
+                       (r.subordinated_calculation_status === "missing" || r.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
                     </td>
                     <td className="px-3 py-2"><ValidationBadge status={String(r.quota_validation_status ?? "—")} /></td>
                     <td className="px-3 py-2 text-muted-foreground truncate max-w-[220px]" title={String(r.source_file_name ?? "")}>
