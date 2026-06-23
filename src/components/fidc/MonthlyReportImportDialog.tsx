@@ -444,7 +444,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
             onClick={() => importMutation.mutate()}
             disabled={!canImport || importMutation.isPending}
           >
-            {importMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</> : "Importar"}
+            {importMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importando…</> : `Importar ${parsed?.months.length ?? 0} meses`}
           </Button>
         </DialogFooter>
       </DialogContent>
