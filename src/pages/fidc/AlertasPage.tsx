@@ -55,6 +55,7 @@ export default function AlertasPage() {
               <tr className="hairline-b">
                 <th className="text-left px-3 py-2 font-medium">Severidade</th>
                 <th className="text-left px-3 py-2 font-medium">Tipo</th>
+                <th className="text-left px-3 py-2 font-medium">FIDC</th>
                 <th className="text-left px-3 py-2 font-medium">Carteira</th>
                 <th className="text-left px-3 py-2 font-medium">ISIN</th>
                 <th className="text-left px-3 py-2 font-medium">Detalhe</th>
@@ -63,19 +64,20 @@ export default function AlertasPage() {
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
                   <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando…
                 </td></tr>
               )}
               {!isLoading && rows.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
-                  Nenhum alerta de posição.
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                  Nenhum alerta no momento.
                 </td></tr>
               )}
               {rows.map((a) => (
                 <tr key={a.id} className="hairline-b hover:bg-surface-2/40">
                   <td className="px-3 py-2"><RiskStatusBadge status={a.severity} /></td>
                   <td className="px-3 py-2 font-medium">{KIND_LABEL[a.kind] ?? a.kind}</td>
+                  <td className="px-3 py-2">{a.fidcName ?? "—"}</td>
                   <td className="px-3 py-2">{a.portfolioName ?? "—"}</td>
                   <td className="px-3 py-2 num text-muted-foreground">{a.isin ?? "—"}</td>
                   <td className="px-3 py-2 text-foreground/90">{a.message}</td>
