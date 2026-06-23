@@ -332,7 +332,7 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
       return row;
     });
     return { rows, setores: setoresList };
-  }, [isAllSectors, setores, enriched, ratingFilter, history, window]);
+  }, [isAllSectors, setores, enriched, ratingFilter, history, window, posFilter, hasPosition, grupoFilter, emissorFilter]);
 
   // Quando "Todos os setores", o segundo gráfico mostra a mediana do universo inteiro.
   const allTickers = useMemo(() => new Set(inSector.map((t) => t.ticker)), [inSector]);
