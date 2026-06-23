@@ -183,10 +183,27 @@ export function useFidcMonitorData() {
   });
 
 
-  const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading;
+  // 4) Informes mensais (última versão por FIDC + versão anterior por FIDC para variações)
+  const reportsQ = useQuery({
+    queryKey: ["fidc-monthly-reports-all-monitor"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fidc_monthly_reports")
+        .select(
+          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version",
+        )
+        .eq("is_current_version", true)
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as MonthlyReportRow[];
+    },
+  });
+
+  const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading || reportsQ.isLoading;
   const fidcs = fidcsQ.data ?? [];
   const quotas = quotasQ.data ?? [];
   const positions = posQ.data ?? [];
+  const reports = reportsQ.data ?? [];
 
   const fidcById = useMemo(() => {
     const m = new Map<string, FidcRecord>();
@@ -199,6 +216,21 @@ export function useFidcMonitorData() {
     quotas.forEach((q) => m.set(q.isin, q));
     return m;
   }, [quotas]);
+
+  // Agrupa relatórios por FIDC (já ordenados desc por reference_month)
+  const reportsByFidc = useMemo(() => {
+    const m = new Map<string, MonthlyReportRow[]>();
+    reports.forEach((r) => {
+      if (!m.has(r.fidc_id)) m.set(r.fidc_id, []);
+      m.get(r.fidc_id)!.push(r);
+    });
+    return m;
+  }, [reports]);
+
+  const latestReportFor = (fidcId: string): MonthlyReportRow | null =>
+    reportsByFidc.get(fidcId)?.[0] ?? null;
+  const prevReportFor = (fidcId: string): MonthlyReportRow | null =>
+    reportsByFidc.get(fidcId)?.[1] ?? null;
 
   const portfolioSummaries: PortfolioSummary[] = useMemo(() => {
     return FIDC_PORTFOLIOS.map((portfolio) => {
