@@ -127,7 +127,7 @@ export function useFundoDashboard(fundo: string | null) {
     const emiMap = new Map<string, Acc>();
     for (const r of rows) {
       const codigo = (r.codigo_emissor && r.codigo_emissor.trim()) || (r.nome_emissor ?? 'N/D');
-      const fin = Number(r.financial_price) || 0;
+      const fin = posVal(r);
       const dur = Number(r.duration_du) || 0;
       const a = emiMap.get(codigo) ?? {
         codigo,
