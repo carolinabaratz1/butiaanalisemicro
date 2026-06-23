@@ -184,7 +184,7 @@ export function useFidcMonitorData() {
   });
 
 
-  const isLoading = datesQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading;
+  const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading;
   const fidcs = fidcsQ.data ?? [];
   const quotas = quotasQ.data ?? [];
   const positions = posQ.data ?? [];
