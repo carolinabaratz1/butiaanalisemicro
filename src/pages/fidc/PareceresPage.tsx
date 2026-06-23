@@ -157,3 +157,13 @@ function Field({ label, defaultValue, textarea, as, options, className = "" }: {
     </label>
   );
 }
+
+function MiniKpi({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
+  return (
+    <div>
+      <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="num font-semibold text-foreground mt-0.5">{value}</div>
+      {hint && <div className="text-[10.5px] text-muted-foreground mt-0.5">{hint}</div>}
+    </div>
+  );
+}
