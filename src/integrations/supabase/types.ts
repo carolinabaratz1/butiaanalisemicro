@@ -14,6 +14,115 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_rules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          critical_threshold: number | null
+          direction: Database["public"]["Enums"]["fidc_threshold_direction"]
+          display_name: string
+          fidc_id: string | null
+          id: string
+          is_active: boolean
+          metric_name: string
+          portfolio_source: string | null
+          scope: Database["public"]["Enums"]["fidc_threshold_scope"]
+          updated_at: string
+          warning_threshold: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          critical_threshold?: number | null
+          direction: Database["public"]["Enums"]["fidc_threshold_direction"]
+          display_name: string
+          fidc_id?: string | null
+          id?: string
+          is_active?: boolean
+          metric_name: string
+          portfolio_source?: string | null
+          scope?: Database["public"]["Enums"]["fidc_threshold_scope"]
+          updated_at?: string
+          warning_threshold?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          critical_threshold?: number | null
+          direction?: Database["public"]["Enums"]["fidc_threshold_direction"]
+          display_name?: string
+          fidc_id?: string | null
+          id?: string
+          is_active?: boolean
+          metric_name?: string
+          portfolio_source?: string | null
+          scope?: Database["public"]["Enums"]["fidc_threshold_scope"]
+          updated_at?: string
+          warning_threshold?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_rules_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alerts: {
+        Row: {
+          comment: string | null
+          created_at: string
+          current_value: number | null
+          fidc_id: string
+          id: string
+          metric_name: string
+          portfolio_source: string | null
+          reference_month: string | null
+          severity: Database["public"]["Enums"]["fidc_alert_severity"]
+          status: Database["public"]["Enums"]["fidc_alert_status"]
+          threshold_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          current_value?: number | null
+          fidc_id: string
+          id?: string
+          metric_name: string
+          portfolio_source?: string | null
+          reference_month?: string | null
+          severity: Database["public"]["Enums"]["fidc_alert_severity"]
+          status?: Database["public"]["Enums"]["fidc_alert_status"]
+          threshold_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          current_value?: number | null
+          fidc_id?: string
+          id?: string
+          metric_name?: string
+          portfolio_source?: string | null
+          reference_month?: string | null
+          severity?: Database["public"]["Enums"]["fidc_alert_severity"]
+          status?: Database["public"]["Enums"]["fidc_alert_status"]
+          threshold_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       allocation_limits: {
         Row: {
           categoria: string
@@ -505,6 +614,62 @@ export type Database = {
           },
         ]
       }
+      credit_opinions: {
+        Row: {
+          attention_points: string | null
+          author_id: string | null
+          created_at: string
+          fidc_id: string
+          id: string
+          main_risks: string | null
+          positive_points: string | null
+          recent_evolution: string | null
+          recommendation: Database["public"]["Enums"]["fidc_recommendation"]
+          recommendation_reason: string | null
+          reference_month: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          attention_points?: string | null
+          author_id?: string | null
+          created_at?: string
+          fidc_id: string
+          id?: string
+          main_risks?: string | null
+          positive_points?: string | null
+          recent_evolution?: string | null
+          recommendation: Database["public"]["Enums"]["fidc_recommendation"]
+          recommendation_reason?: string | null
+          reference_month: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attention_points?: string | null
+          author_id?: string | null
+          created_at?: string
+          fidc_id?: string
+          id?: string
+          main_risks?: string | null
+          positive_points?: string | null
+          recent_evolution?: string | null
+          recommendation?: Database["public"]["Enums"]["fidc_recommendation"]
+          recommendation_reason?: string | null
+          reference_month?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_opinions_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emissoes: {
         Row: {
           cnpj_emissor: string
@@ -612,6 +777,364 @@ export type Database = {
           isin?: string
           updated_at?: string
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      fidc_monthly_quota_classes: {
+        Row: {
+          class_name: string | null
+          created_at: string
+          fidc_monthly_report_id: string
+          fidc_quota_class_id: string | null
+          id: string
+          isin: string | null
+          matching_status: string | null
+          nav_value: number | null
+          number_of_quotas: number | null
+          quota_type: string | null
+          quota_value: number | null
+          rating: string | null
+          seniority_level: number | null
+        }
+        Insert: {
+          class_name?: string | null
+          created_at?: string
+          fidc_monthly_report_id: string
+          fidc_quota_class_id?: string | null
+          id?: string
+          isin?: string | null
+          matching_status?: string | null
+          nav_value?: number | null
+          number_of_quotas?: number | null
+          quota_type?: string | null
+          quota_value?: number | null
+          rating?: string | null
+          seniority_level?: number | null
+        }
+        Update: {
+          class_name?: string | null
+          created_at?: string
+          fidc_monthly_report_id?: string
+          fidc_quota_class_id?: string | null
+          id?: string
+          isin?: string | null
+          matching_status?: string | null
+          nav_value?: number | null
+          number_of_quotas?: number | null
+          quota_type?: string | null
+          quota_value?: number | null
+          rating?: string | null
+          seniority_level?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_monthly_quota_classes_fidc_monthly_report_id_fkey"
+            columns: ["fidc_monthly_report_id"]
+            isOneToOne: false
+            referencedRelation: "fidc_monthly_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fidc_monthly_quota_classes_fidc_quota_class_id_fkey"
+            columns: ["fidc_quota_class_id"]
+            isOneToOne: false
+            referencedRelation: "fidc_quota_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_monthly_reports: {
+        Row: {
+          cash_value: number | null
+          created_at: string
+          credit_rights_value: number | null
+          fidc_id: string
+          id: string
+          investors_count: number | null
+          is_current_version: boolean
+          nav_value: number | null
+          overdue_value: number | null
+          pdd_value: number | null
+          quota_total_nav_value: number | null
+          quota_validation_difference: number | null
+          quota_validation_difference_percentage: number | null
+          quota_validation_status:
+            | Database["public"]["Enums"]["fidc_validation_status"]
+            | null
+          quota_value: number | null
+          raw_data: Json | null
+          reference_month: string
+          repurchase_value: number | null
+          subordinated_value: number | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          cash_value?: number | null
+          created_at?: string
+          credit_rights_value?: number | null
+          fidc_id: string
+          id?: string
+          investors_count?: number | null
+          is_current_version?: boolean
+          nav_value?: number | null
+          overdue_value?: number | null
+          pdd_value?: number | null
+          quota_total_nav_value?: number | null
+          quota_validation_difference?: number | null
+          quota_validation_difference_percentage?: number | null
+          quota_validation_status?:
+            | Database["public"]["Enums"]["fidc_validation_status"]
+            | null
+          quota_value?: number | null
+          raw_data?: Json | null
+          reference_month: string
+          repurchase_value?: number | null
+          subordinated_value?: number | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          cash_value?: number | null
+          created_at?: string
+          credit_rights_value?: number | null
+          fidc_id?: string
+          id?: string
+          investors_count?: number | null
+          is_current_version?: boolean
+          nav_value?: number | null
+          overdue_value?: number | null
+          pdd_value?: number | null
+          quota_total_nav_value?: number | null
+          quota_validation_difference?: number | null
+          quota_validation_difference_percentage?: number | null
+          quota_validation_status?:
+            | Database["public"]["Enums"]["fidc_validation_status"]
+            | null
+          quota_value?: number | null
+          raw_data?: Json | null
+          reference_month?: string
+          repurchase_value?: number | null
+          subordinated_value?: number | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_monthly_reports_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_quota_classes: {
+        Row: {
+          amortization_type: string | null
+          benchmark: string | null
+          class_name: string | null
+          created_at: string
+          current_rating: string | null
+          current_rating_agency: string | null
+          current_rating_date: string | null
+          cvm_quota_name: string | null
+          fidc_id: string
+          id: string
+          internal_quota_name: string | null
+          is_active: boolean
+          isin: string
+          notes: string | null
+          quota_type: string | null
+          remuneration_description: string | null
+          seniority_level: number | null
+          series_name: string | null
+          target_spread: string | null
+          updated_at: string
+        }
+        Insert: {
+          amortization_type?: string | null
+          benchmark?: string | null
+          class_name?: string | null
+          created_at?: string
+          current_rating?: string | null
+          current_rating_agency?: string | null
+          current_rating_date?: string | null
+          cvm_quota_name?: string | null
+          fidc_id: string
+          id?: string
+          internal_quota_name?: string | null
+          is_active?: boolean
+          isin: string
+          notes?: string | null
+          quota_type?: string | null
+          remuneration_description?: string | null
+          seniority_level?: number | null
+          series_name?: string | null
+          target_spread?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amortization_type?: string | null
+          benchmark?: string | null
+          class_name?: string | null
+          created_at?: string
+          current_rating?: string | null
+          current_rating_agency?: string | null
+          current_rating_date?: string | null
+          cvm_quota_name?: string | null
+          fidc_id?: string
+          id?: string
+          internal_quota_name?: string | null
+          is_active?: boolean
+          isin?: string
+          notes?: string | null
+          quota_type?: string | null
+          remuneration_description?: string | null
+          seniority_level?: number | null
+          series_name?: string | null
+          target_spread?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_quota_classes_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_rating_history: {
+        Row: {
+          created_at: string
+          fidc_id: string
+          fidc_quota_class_id: string | null
+          id: string
+          notes: string | null
+          rating: string | null
+          rating_agency: string | null
+          rating_date: string | null
+          rating_outlook: string | null
+          report_date: string | null
+          report_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          fidc_id: string
+          fidc_quota_class_id?: string | null
+          id?: string
+          notes?: string | null
+          rating?: string | null
+          rating_agency?: string | null
+          rating_date?: string | null
+          rating_outlook?: string | null
+          report_date?: string | null
+          report_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          fidc_id?: string
+          fidc_quota_class_id?: string | null
+          id?: string
+          notes?: string | null
+          rating?: string | null
+          rating_agency?: string | null
+          rating_date?: string | null
+          rating_outlook?: string | null
+          report_date?: string | null
+          report_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_rating_history_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fidc_rating_history_fidc_quota_class_id_fkey"
+            columns: ["fidc_quota_class_id"]
+            isOneToOne: false
+            referencedRelation: "fidc_quota_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidcs: {
+        Row: {
+          administrator: string | null
+          auditor: string | null
+          cnpj: string
+          collection_agent: string | null
+          condominium_type: string | null
+          created_at: string
+          custodian: string | null
+          fidc_type: string | null
+          id: string
+          legal_name: string | null
+          main_assignor: string | null
+          main_originator: string | null
+          manager: string | null
+          maturity_date: string | null
+          name: string
+          notes: string | null
+          sector: string | null
+          specialized_consultant: string | null
+          start_date: string | null
+          status: string
+          strategy: string | null
+          updated_at: string
+        }
+        Insert: {
+          administrator?: string | null
+          auditor?: string | null
+          cnpj: string
+          collection_agent?: string | null
+          condominium_type?: string | null
+          created_at?: string
+          custodian?: string | null
+          fidc_type?: string | null
+          id?: string
+          legal_name?: string | null
+          main_assignor?: string | null
+          main_originator?: string | null
+          manager?: string | null
+          maturity_date?: string | null
+          name: string
+          notes?: string | null
+          sector?: string | null
+          specialized_consultant?: string | null
+          start_date?: string | null
+          status?: string
+          strategy?: string | null
+          updated_at?: string
+        }
+        Update: {
+          administrator?: string | null
+          auditor?: string | null
+          cnpj?: string
+          collection_agent?: string | null
+          condominium_type?: string | null
+          created_at?: string
+          custodian?: string | null
+          fidc_type?: string | null
+          id?: string
+          legal_name?: string | null
+          main_assignor?: string | null
+          main_originator?: string | null
+          manager?: string | null
+          maturity_date?: string | null
+          name?: string
+          notes?: string | null
+          sector?: string | null
+          specialized_consultant?: string | null
+          start_date?: string | null
+          status?: string
+          strategy?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1193,6 +1716,8 @@ export type Database = {
         Args: { p_indexador: string; p_taxa_emissao: string }
         Returns: string
       }
+      fidc_can_write: { Args: { _user_id: string }; Returns: boolean }
+      fidc_can_write_opinion: { Args: { _user_id: string }; Returns: boolean }
       get_active_analysts: {
         Args: never
         Returns: {
@@ -1293,6 +1818,12 @@ export type Database = {
         | "Risco e Compliance"
         | "Consulta"
         | "Coordenação/Especialista"
+      fidc_alert_severity: "normal" | "warning" | "critical"
+      fidc_alert_status: "new" | "in_analysis" | "resolved"
+      fidc_recommendation: "manter" | "acompanhar" | "reduzir" | "zerar"
+      fidc_threshold_direction: "above_is_worse" | "below_is_worse"
+      fidc_threshold_scope: "global" | "per_fidc" | "per_portfolio"
+      fidc_validation_status: "valid" | "warning" | "invalid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1427,6 +1958,12 @@ export const Constants = {
         "Consulta",
         "Coordenação/Especialista",
       ],
+      fidc_alert_severity: ["normal", "warning", "critical"],
+      fidc_alert_status: ["new", "in_analysis", "resolved"],
+      fidc_recommendation: ["manter", "acompanhar", "reduzir", "zerar"],
+      fidc_threshold_direction: ["above_is_worse", "below_is_worse"],
+      fidc_threshold_scope: ["global", "per_fidc", "per_portfolio"],
+      fidc_validation_status: ["valid", "warning", "invalid"],
     },
   },
 } as const
