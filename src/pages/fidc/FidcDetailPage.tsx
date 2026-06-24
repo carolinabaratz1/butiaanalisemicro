@@ -135,6 +135,21 @@ export default function FidcDetailPage() {
     document.body.classList.remove("print-summary");
   }, []);
 
+  const refMonthEarly = latestReport?.reference_month ? String(latestReport.reference_month).slice(0, 10) : null;
+
+  // Buscar recomendação atual (deve ser chamado antes de qualquer early return)
+  const recQ = useQuery({
+    queryKey: ["fidc-rec-latest", id, refMonthEarly],
+    queryFn: async () => {
+      if (!refMonthEarly) return null;
+      const { data } = await supabase
+        .from("credit_opinions").select("recommendation")
+        .eq("fidc_id", id).eq("reference_month", refMonthEarly).maybeSingle();
+      return (data as { recommendation?: string } | null)?.recommendation ?? null;
+    },
+    enabled: !!refMonthEarly,
+  });
+
   if (isLoading) {
     return <div className="px-6 py-12 text-center text-muted-foreground text-[12px]">
       <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> Carregando…
@@ -155,23 +170,12 @@ export default function FidcDetailPage() {
   const informeStatus = informeStatusOf(latestReport);
   const creditStatus = creditStatusOf(latestReport);
   const navTotal = latestReport ? Number(latestReport.nav_value ?? 0) : 0;
-  const refMonth = latestReport?.reference_month ? String(latestReport.reference_month).slice(0, 10) : null;
+  const refMonth = refMonthEarly;
 
-  // Buscar recomendação atual
-  const recQ = useQuery({
-    queryKey: ["fidc-rec-latest", id, refMonth],
-    queryFn: async () => {
-      if (!refMonth) return null;
-      const { data } = await supabase
-        .from("credit_opinions").select("recommendation")
-        .eq("fidc_id", id).eq("reference_month", refMonth).maybeSingle();
-      return (data as { recommendation?: string } | null)?.recommendation ?? null;
-    },
-    enabled: !!refMonth,
-  });
   const recCurrent = recQ.data
     ? { manter: "Manter", acompanhar: "Acompanhar", reduzir: "Reduzir", zerar: "Zerar" }[recQ.data as string] ?? "N/D"
     : "N/D";
+
 
   function doPrint(mode: "full" | "summary") {
     document.body.classList.toggle("print-summary", mode === "summary");
