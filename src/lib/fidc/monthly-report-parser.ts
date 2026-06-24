@@ -14,7 +14,13 @@ export type ParsedQuotaClass = {
   quotaValue: number | null;
   numberOfQuotas: number | null;
   rating: string | null;
+  monthlyYieldPct: number | null;     // rentabilidade no mês (% decimal: 0.012 = 1,2%)
+  subscriptionValue: number | null;   // captação / subscrição no mês
+  redemptionValue: number | null;     // resgate no mês
+  amortizationValue: number | null;   // amortização no mês
 };
+
+export type BreakdownItem = { bucket: string; value: number };
 
 export type ChecklistRow = {
   metric: string;
@@ -33,13 +39,27 @@ export type MonthlyMetrics = {
   creditRightsBValue: number | null;
   overdueValue: number | null;
   overdueSource: "V_VI" | "fallback_I" | null;
+  overdue30dValue: number | null;
+  overdue60dValue: number | null;
+  overdue90dValue: number | null;
+  overdue120dValue: number | null;
   pddValue: number | null;
   cashValue: number | null;
   repurchaseValue: number | null;
+  acquisitionsValue: number | null;
+  substitutionsValue: number | null;
+  disposalsValue: number | null;
+  guaranteesValue: number | null;
+  scrStatus: string | null;
+  scrValue: number | null;
   assetsTotal: number | null;
   liabilitiesTotal: number | null;
   segmentCarteiraTotal: number | null;
   investorsCount: number | null;
+  segmentBreakdown: BreakdownItem[];
+  maturityBreakdown: BreakdownItem[];
+  overdueBreakdown: BreakdownItem[];
+  assignorsBreakdown: BreakdownItem[];
 };
 
 export type ParsedMonthSlice = {
