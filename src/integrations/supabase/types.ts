@@ -782,6 +782,7 @@ export type Database = {
       }
       fidc_monthly_quota_classes: {
         Row: {
+          amortization_value: number | null
           class_name: string | null
           created_at: string
           fidc_monthly_report_id: string
@@ -789,14 +790,18 @@ export type Database = {
           id: string
           isin: string | null
           matching_status: string | null
+          monthly_yield_pct: number | null
           nav_value: number | null
           number_of_quotas: number | null
           quota_type: string | null
           quota_value: number | null
           rating: string | null
+          redemption_value: number | null
           seniority_level: number | null
+          subscription_value: number | null
         }
         Insert: {
+          amortization_value?: number | null
           class_name?: string | null
           created_at?: string
           fidc_monthly_report_id: string
@@ -804,14 +809,18 @@ export type Database = {
           id?: string
           isin?: string | null
           matching_status?: string | null
+          monthly_yield_pct?: number | null
           nav_value?: number | null
           number_of_quotas?: number | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
+          redemption_value?: number | null
           seniority_level?: number | null
+          subscription_value?: number | null
         }
         Update: {
+          amortization_value?: number | null
           class_name?: string | null
           created_at?: string
           fidc_monthly_report_id?: string
@@ -819,12 +828,15 @@ export type Database = {
           id?: string
           isin?: string | null
           matching_status?: string | null
+          monthly_yield_pct?: number | null
           nav_value?: number | null
           number_of_quotas?: number | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
+          redemption_value?: number | null
           seniority_level?: number | null
+          subscription_value?: number | null
         }
         Relationships: [
           {
@@ -845,15 +857,26 @@ export type Database = {
       }
       fidc_monthly_reports: {
         Row: {
+          acquisitions_value: number | null
+          assignors_breakdown: Json | null
           cash_value: number | null
           created_at: string
           credit_rights_value: number | null
+          disposals_value: number | null
           fidc_id: string
+          guarantees_pct_dc: number | null
+          guarantees_value: number | null
           id: string
           imported_by: string | null
           investors_count: number | null
           is_current_version: boolean
+          maturity_breakdown: Json | null
           nav_value: number | null
+          overdue_120d_value: number | null
+          overdue_30d_value: number | null
+          overdue_60d_value: number | null
+          overdue_90d_value: number | null
+          overdue_breakdown: Json | null
           overdue_value: number | null
           pdd_value: number | null
           quota_classes_found_count: number | null
@@ -867,23 +890,38 @@ export type Database = {
           raw_data: Json | null
           reference_month: string
           repurchase_value: number | null
+          scr_status: string | null
+          scr_value: number | null
+          segment_breakdown: Json | null
           source_file_name: string | null
           subordinated_calculation_notes: string | null
           subordinated_calculation_status: string | null
           subordinated_value: number | null
+          substitutions_value: number | null
           updated_at: string
           version: number
         }
         Insert: {
+          acquisitions_value?: number | null
+          assignors_breakdown?: Json | null
           cash_value?: number | null
           created_at?: string
           credit_rights_value?: number | null
+          disposals_value?: number | null
           fidc_id: string
+          guarantees_pct_dc?: number | null
+          guarantees_value?: number | null
           id?: string
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
+          maturity_breakdown?: Json | null
           nav_value?: number | null
+          overdue_120d_value?: number | null
+          overdue_30d_value?: number | null
+          overdue_60d_value?: number | null
+          overdue_90d_value?: number | null
+          overdue_breakdown?: Json | null
           overdue_value?: number | null
           pdd_value?: number | null
           quota_classes_found_count?: number | null
@@ -897,23 +935,38 @@ export type Database = {
           raw_data?: Json | null
           reference_month: string
           repurchase_value?: number | null
+          scr_status?: string | null
+          scr_value?: number | null
+          segment_breakdown?: Json | null
           source_file_name?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null
+          substitutions_value?: number | null
           updated_at?: string
           version?: number
         }
         Update: {
+          acquisitions_value?: number | null
+          assignors_breakdown?: Json | null
           cash_value?: number | null
           created_at?: string
           credit_rights_value?: number | null
+          disposals_value?: number | null
           fidc_id?: string
+          guarantees_pct_dc?: number | null
+          guarantees_value?: number | null
           id?: string
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
+          maturity_breakdown?: Json | null
           nav_value?: number | null
+          overdue_120d_value?: number | null
+          overdue_30d_value?: number | null
+          overdue_60d_value?: number | null
+          overdue_90d_value?: number | null
+          overdue_breakdown?: Json | null
           overdue_value?: number | null
           pdd_value?: number | null
           quota_classes_found_count?: number | null
@@ -927,10 +980,14 @@ export type Database = {
           raw_data?: Json | null
           reference_month?: string
           repurchase_value?: number | null
+          scr_status?: string | null
+          scr_value?: number | null
+          segment_breakdown?: Json | null
           source_file_name?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null
+          substitutions_value?: number | null
           updated_at?: string
           version?: number
         }

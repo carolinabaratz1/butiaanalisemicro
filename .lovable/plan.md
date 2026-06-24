@@ -1,112 +1,68 @@
+## Lâmina institucional de crédito — Página individual do FIDC
 
-# Dashboard do Fundo — nova aba em PosicoesPage
+Reestruturar `src/pages/fidc/FidcDetailPage.tsx` em uma lâmina institucional, sem mexer em sidebar, upload de posições, cadastro mestre, nem botão de importar informe.
 
-Adiciona uma terceira aba ao `Tabs` existente sem tocar em "Tabela" nem em "Painel Analítico". Toda a lógica nova vive em arquivos novos.
+---
 
-## Ajustes ao spec (campos que não existem no schema atual)
+### Fase 1 — Backend: enriquecer o informe mensal
 
-Validei o schema antes de planejar. Alguns campos do SELECT proposto precisam de ajuste — descrição abaixo, pedindo confirmação se quiser tratar diferente:
+O parser atual extrai apenas o **somatório** de atrasos e não capta inadimplência por faixa, carteira por segmento, prazos de vencimento, garantias, SCR ou rentabilidade/captação/resgate/amortização por cota. Para alimentar a lâmina, vou:
 
-1. `posicoes.ticker` — **não existe**. Vou trazer o `ticker` via `emissoes.ticker` (join por ISIN).
-2. `posicoes.vencimento` — **não existe**. Vou usar `emissoes.venc_date` (campo `date`) como `vencimento`.
-3. `empresas.nome_fantasia` — **não existe**. Empresas tem `nome`. Vou usar `emp.nome AS nome_emissor`.
-4. Não há filtro por `val_date` no spec. `posicoes` guarda múltiplas datas; sem filtro o financeiro soma todas. Vou usar a **última `val_date` daquele fundo** (`MAX(val_date)` por `trading_desk_share_source`) para evitar duplicação. Se preferir somar tudo, removo o filtro.
+**1.1 — Migration** em `fidc_monthly_reports` adicionando colunas (todas nullable):
+- `overdue_30d_value`, `overdue_60d_value`, `overdue_90d_value`, `overdue_120d_value`
+- `segment_breakdown jsonb` — `[{ segment, value, pct_dc }]` (seção II)
+- `maturity_breakdown jsonb` — `[{ bucket, value, pct_dc }]` (V.a + VI.a)
+- `overdue_breakdown jsonb` — `[{ bucket, value, pct_dc }]` (V.b + VI.b)
+- `assignors_breakdown jsonb` — cedentes relevantes (I.2.a.11 / I.2.b.11)
+- `guarantees_value`, `guarantees_pct_dc` (seção 7)
+- `scr_status text`, `scr_value numeric` (seção 8)
 
-## Tarefa 1 — Migration: RPC `get_posicoes_dashboard_fundo`
+**1.2 — Migration** em `fidc_monthly_quota_classes` adicionando:
+- `monthly_yield_pct`, `subscription_value`, `redemption_value`, `amortization_value`
 
-`SECURITY DEFINER`, `STABLE`, `SET search_path = public`, `GRANT EXECUTE` para `authenticated`.
+**1.3 — Parser** (`monthly-report-parser.ts`):
+- Extrair V.b.1/V.b.2/V.b.3/V.b.4 + VI.b.1..4 (faixas de atraso)
+- Extrair seção II por segmento (linhas com indent abaixo do header)
+- Extrair V.a + VI.a (prazo de vencimento, buckets 30/60/90/120/150/180/360/720/1080/>1080)
+- Extrair "d) recompras", "a) aquisições", "b) substituições", "c) alienações" da seção VII
+- Extrair garantias (rótulo "7) garantias") e SCR (rótulo "8) ... SCR")
+- Para cada cota: ler "rentabilidade", "captacao", "resgate", "amortizacao", "valor da subscrição/aplicação"
+- Persistir os novos campos via `MonthlyReportImportDialog` no upsert
 
-```sql
-CREATE OR REPLACE FUNCTION public.get_posicoes_dashboard_fundo(p_fundo text)
-RETURNS TABLE (
-  ticker text, isin text, product_class text,
-  financial_price numeric, amount numeric, duration_du numeric,
-  vencimento date, fundo text, rating text,
-  indexador text, sub_indexador text,
-  setor text, grupo_economico text,
-  nome_emissor text, codigo_emissor text
-) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  WITH last_dt AS (
-    SELECT MAX(val_date) AS v FROM posicoes WHERE trading_desk_share_source = p_fundo
-  )
-  SELECT
-    em.ticker, p.isin, p.product_class,
-    p.financial_price, p.amount, p.duration_du,
-    em.venc_date AS vencimento,
-    p.trading_desk_share_source AS fundo,
-    COALESCE(ta.rating, emp.rating) AS rating,
-    COALESCE(ta.indexador, 'Outros') AS indexador,
-    COALESCE(ta.sub_indexador, 'Outros') AS sub_indexador,
-    emp.setor, emp.grupo_economico,
-    emp.nome AS nome_emissor, emp.codigo_emissor
-  FROM posicoes p
-  LEFT JOIN emissoes em      ON em.isin = p.isin
-  LEFT JOIN trade_ativos ta  ON ta.ticker = em.ticker
-  LEFT JOIN empresas emp     ON emp.cnpj = em.cnpj_emissor
-  WHERE p.trading_desk_share_source = p_fundo
-    AND p.financial_price > 0
-    AND p.val_date = (SELECT v FROM last_dt);
-$$;
+### Fase 2 — Frontend: lâmina
 
-GRANT EXECUTE ON FUNCTION public.get_posicoes_dashboard_fundo(text) TO authenticated;
-```
+Refatorar `FidcDetailPage.tsx` em **componentes** dentro de `src/components/fidc/laminate/`:
+- `LaminateHeader.tsx` — header executivo com status (informe/crédito/recomendação) e 2 botões (Importar Informe, Exportar PDF). Recomendação vem de `credit_opinions` (última do FIDC). Status do informe derivado de `quota_validation_status` + idade do informe. Status de crédito derivado dos limites de alertas (mesma lógica do `useFidcMonitorData`).
+- `RiskSummary.tsx` — texto base por template (não-IA) usando placeholders das métricas do mês.
+- `ButiaPositionTable.tsx` — adiciona colunas “% do PL do FIDC” e “% da carteira”.
+- `KeyMetricsGrid.tsx` — cards com PL, Var. PL, Cota, Rent. mensal cota, DC, DC/PL, Caixa/PL, Atraso/DC, 30d/60d/90d/120d/DC, PDD/DC, PDD/Atrasos, Recompras/DC, Subordinação, Cotistas, Aquisições/DC. `NoDataChip` para faltantes.
+- `LaminateCharts.tsx` — reorganiza `FidcHistoryCharts` em 10 painéis (PL+Var, Cota+Rent, DC+DC/PL, Inadimplência por faixa, Atraso/DC vs PDD/DC, PDD/Atrasos, Caixa/PL + Recompras/DC, Subordinação (com flag inconsistente), Cotistas, Fluxo VII).
+- `CreditPortfolio.tsx` — 6 sub-blocos: Segmento (pizza), Prazo de vencimento (barras), Inadimplência por faixa (tabela), Cedentes relevantes (tabela), Garantias (cards), SCR (chip status). Cada um exibe “Sem dados no informe” se vazio.
+- `QuotasAndValidation.tsx` — cards de PL informado, soma cotas, dif. absoluta/%, status, subordinação. **Tabela nova** “Cotas/classes importadas do informe” usando `fidc_monthly_quota_classes` (Classe, Tipo, Qtd cotas, Valor cota, PL classe, % PL, Rent. mês, Captação, Resgate, Amortização, Status matching). Mantém a tabela atual “Cotas/classes cadastradas”.
+- `QualityChecks.tsx` — 4 validações (contábil A−P≈PL, DC vs II, PL×cotas, métricas ausentes) com status OK/Atenção/Crítico.
+- `AlertsPanel.tsx` — separa em 3 colunas: Crédito, Qualidade, Posição. Limites usam os mesmos thresholds já presentes em `useFidcMonitorData` (e novos para 30/60/90/120d).
+- `CreditOpinionPanel.tsx` — busca `credit_opinions` para `(fidc_id, latest reference_month)`. Mostra recomendação, resumo, motivo, pontos +/−, riscos, responsável, data. Botões “Editar Parecer” (link para `/fidc-monitor/pareceres?fidc=...`) e “Usar dados do informe no resumo” (preenche textarea via template e salva via upsert).
 
-## Tarefa 2 — `src/hooks/useFundoDashboard.ts`
+### Fase 3 — Exportação PDF
 
-- Recebe `fundo: string | null`; `useQuery` desabilitado quando null.
-- `supabase.rpc('get_posicoes_dashboard_fundo', { p_fundo: fundo })`.
-- Retorna `{ data, isLoading, error }` onde `data` já vem com todas as agregações memoizadas:
-  - `byTipo`, `byIndexador` — soma de `financial_price` agrupada.
-  - `byRating` — agrupada e reordenada na sequência fixa `AAA, AA+, AA, AA-, A+, A, A-, BBB+, BBB, BBB-, <BBB, S/R` (rating nulo/vazio → `S/R`; ratings fora da lista caem em `<BBB`).
-  - `bySetor`, `byGrupo` — top 10 desc.
-  - `byDuration` — buckets `0–1a` (≤252), `1–3a` (253–756), `3–5a` (757–1260), `5–7a` (1261–1764), `>7a` (>1764).
-  - `byEmissor` — soma por `codigo_emissor` (fallback `nome_emissor` quando código vazio) com `{ codigo, nome, rating, setor, grupo, financeiro, pctPL, duration (média ponderada), produtos (set→string) }`, desc.
-  - `totalPL` — soma de `financial_price`.
-  - `totalAtivos` — `new Set(ticker)`.size (ignora null).
-  - `durationMedia` — Σ(duration_du · financial_price) / Σ financial_price.
-  - `spreadMedio` — `null` por ora.
-  - `topConcentracao` — `{ nome, pct }` do maior emissor.
-  - `qualidadeMedia` — rating mais frequente ponderado por financeiro (usado no KPI 5).
+- Adiciona `src/styles/fidc-print.css` importado em `FidcDetailPage`:
+  - `@media print`: oculta `[data-app-sidebar]`, header global, botões marcados `data-print="hide"`; força fundo branco; `page-break-inside: avoid` em cards; `@page { size: A4; margin: 14mm }`.
+  - Adiciona `data-print-section` em cada bloco e cabeçalho com logo Butiá visível só na impressão.
+- Botão “Exportar Lâmina PDF” = `window.print()`. Menu dropdown com “Completo” (default) e “Resumido” (adiciona classe `print-summary` que oculta seções de Carteira de Crédito e Histórico secundário).
+- Não adiciona dependências; usa o diálogo nativo de impressão do navegador (salvar como PDF).
 
-## Tarefa 3 — `src/components/posicoes/FundoDashboard.tsx`
+### Critério de aceite
 
-- Estado local: `const [fundo, setFundo] = useState<string|null>(null)` — **independente** do filtro global.
-- Header: `Select` (shadcn) populado por `useFundos()`, label "Selecione o fundo", placeholder "Escolha um fundo para visualizar o dashboard".
-- Estado vazio (`!fundo`): `Card` central com ícone (`BarChart3` lucide) + texto.
-- Estado loading: `Skeleton`s nos cards e gráficos.
-- Seção 1 — 5 `Card`s em `grid grid-cols-5 gap-3` (responsivo `md:grid-cols-2 xl:grid-cols-5`):
-  - PL Total (R$ M, 1 casa), Nº Ativos, Duration Médio (`d.u.`), Maior Concentração (`nome · pct%`), Qualidade Média (rating).
-- Seção 2 — `grid grid-cols-2 gap-4` com 6 `Card`s, cada um com título + `ResponsiveContainer` (height 260) de Recharts:
-  - [0,0] Tipo de Ativo — donut `PieChart` (`innerRadius={55}`), legenda inline.
-  - [0,1] Indexador — donut idem.
-  - [1,0] Rating — `BarChart layout="vertical"`.
-  - [1,1] Setor TOP 10 — `BarChart layout="vertical"`.
-  - [2,0] Duration — `BarChart` vertical simples (buckets no eixo X).
-  - [2,1] Grupo Econômico TOP 10 — `BarChart layout="vertical"`.
-  - Cores via tokens (`hsl(var(--primary))`, `--chart-1..5` se existirem; senão paleta derivada de `--primary`).
-  - Tooltip custom mostra `R$ X,XM` + `XX,X%` do total.
-- Seção 3 — `Table` shadcn (size sm, zebrada via `[&_tr:nth-child(even)]:bg-muted/30`), `max-h-[400px] overflow-auto`:
-  - Cols: Emissor | Grupo | Setor | Rating | Financeiro (R$) | % do PL | Duration (d.u.) | Produto.
-  - Ordenada por financeiro desc; sem paginação.
+Todos os itens da especificação do usuário ficam atendidos. Métricas inexistentes aparecem como `N/D` via `NoDataChip` com tooltip — nunca zero. Subordinação só é exibida como métrica confiável quando `subordinated_calculation_status === 'ok'`; caso contrário aparece como "Inconsistente" e fica de fora dos alertas de crédito.
 
-## Tarefa 4 — Integração em `PosicoesPage.tsx`
+### Ordem de execução
 
-Mudanças cirúrgicas (apenas 3 trechos):
+1. Migration (Fase 1.1 + 1.2) — uma única chamada `supabase--migration`.
+2. Após aprovação: parser + dialog + componentes + print CSS, em paralelo onde possível.
+3. Smoke test: rebuild + abrir a página de um FIDC com informe importado.
 
-1. Import: `import { FundoDashboard } from '@/components/posicoes/FundoDashboard';`
-2. `TabsList` (linha 725-728): adicionar `<TabsTrigger value="dashboard" ...>Dashboard do Fundo</TabsTrigger>` após o trigger existente.
-3. Após o `TabsContent value="analitico"` (linha 1078): adicionar
-   ```tsx
-   <TabsContent value="dashboard" className="mt-3">
-     <FundoDashboard />
-   </TabsContent>
-   ```
+### Fora de escopo (confirmado)
 
-Nada mais é alterado. Abas "tabela" e "analitico", filtros globais e hooks existentes permanecem intactos.
-
-## Arquivos
-
-- **novos**: `supabase/migrations/<ts>_get_posicoes_dashboard_fundo.sql`, `src/hooks/useFundoDashboard.ts`, `src/components/posicoes/FundoDashboard.tsx`.
-- **editado**: `src/pages/PosicoesPage.tsx` (3 inserções).
-
-Confirma os 4 ajustes do schema (especialmente o filtro por última `val_date`)? Posso seguir com qualquer alternativa que você indicar.
+- Sidebar, upload de posições, cadastro mestre — não tocados.
+- IA generativa no resumo de risco — usa apenas template.
+- Backend de geração de PDF server-side — apenas print do navegador.
