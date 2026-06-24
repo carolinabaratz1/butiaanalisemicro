@@ -5,6 +5,7 @@ import { BRL, PCT } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataInline } from "@/components/fidc/NoDataChip";
+import { CompositionSection } from "@/components/fidc/CompositionSection";
 import { Loader2, AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
