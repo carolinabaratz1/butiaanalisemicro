@@ -133,17 +133,34 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         const nextVersion = ((prev?.[0] as { version?: number } | undefined)?.version ?? 0) + 1;
 
         const sliceMatches = matchQuotaClasses(slice.quotaClasses, master);
+        const m = slice.metrics;
+        const dcForPct = m.creditRightsValue && m.creditRightsValue > 0 ? m.creditRightsValue : null;
         const payload = {
           fidc_id: fidcId,
           reference_month: month,
-          nav_value: slice.metrics.navValue,
-          quota_value: slice.metrics.quotaValue ?? slice.quotaClasses[0]?.quotaValue ?? null,
-          credit_rights_value: slice.metrics.creditRightsValue,
-          overdue_value: slice.metrics.overdueValue,
-          pdd_value: slice.metrics.pddValue,
-          cash_value: slice.metrics.cashValue,
-          repurchase_value: slice.metrics.repurchaseValue,
-          investors_count: slice.metrics.investorsCount,
+          nav_value: m.navValue,
+          quota_value: m.quotaValue ?? slice.quotaClasses[0]?.quotaValue ?? null,
+          credit_rights_value: m.creditRightsValue,
+          overdue_value: m.overdueValue,
+          overdue_30d_value: m.overdue30dValue,
+          overdue_60d_value: m.overdue60dValue,
+          overdue_90d_value: m.overdue90dValue,
+          overdue_120d_value: m.overdue120dValue,
+          pdd_value: m.pddValue,
+          cash_value: m.cashValue,
+          repurchase_value: m.repurchaseValue,
+          acquisitions_value: m.acquisitionsValue,
+          substitutions_value: m.substitutionsValue,
+          disposals_value: m.disposalsValue,
+          guarantees_value: m.guaranteesValue,
+          guarantees_pct_dc: m.guaranteesValue != null && dcForPct ? m.guaranteesValue / dcForPct : null,
+          scr_status: m.scrStatus,
+          scr_value: m.scrValue,
+          segment_breakdown: m.segmentBreakdown.length ? m.segmentBreakdown : null,
+          maturity_breakdown: m.maturityBreakdown.length ? m.maturityBreakdown : null,
+          overdue_breakdown: m.overdueBreakdown.length ? m.overdueBreakdown : null,
+          assignors_breakdown: m.assignorsBreakdown.length ? m.assignorsBreakdown : null,
+          investors_count: m.investorsCount,
           subordinated_value: slice.quotaClasses
             .filter((q) => q.quotaType === "Subordinada" || q.quotaType === "Mezanino")
             .reduce((a, q) => a + (q.navValue ?? 0), 0) || null,
@@ -160,13 +177,13 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
           version: nextVersion,
           is_current_version: true,
           raw_data: {
-            assetsTotal: slice.metrics.assetsTotal,
-            liabilitiesTotal: slice.metrics.liabilitiesTotal,
-            segmentCarteiraTotal: slice.metrics.segmentCarteiraTotal,
-            monthlyAverageNavValue: slice.metrics.monthlyAverageNavValue,
-            creditRightsAValue: slice.metrics.creditRightsAValue,
-            creditRightsBValue: slice.metrics.creditRightsBValue,
-            overdueSource: slice.metrics.overdueSource,
+            assetsTotal: m.assetsTotal,
+            liabilitiesTotal: m.liabilitiesTotal,
+            segmentCarteiraTotal: m.segmentCarteiraTotal,
+            monthlyAverageNavValue: m.monthlyAverageNavValue,
+            creditRightsAValue: m.creditRightsAValue,
+            creditRightsBValue: m.creditRightsBValue,
+            overdueSource: m.overdueSource,
             fidc_name_in_file: parsed.fidcNameInFile,
             month_label: slice.label,
           } as never,
@@ -181,18 +198,22 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         const reportId = (inserted as { id: string }).id;
 
         if (sliceMatches.length > 0) {
-          const rows = sliceMatches.map((m) => ({
+          const rows = sliceMatches.map((mq) => ({
             fidc_monthly_report_id: reportId,
-            fidc_quota_class_id: m.matchedId,
+            fidc_quota_class_id: mq.matchedId,
             isin: null,
-            class_name: m.parsed.className,
-            quota_type: m.parsed.quotaType,
-            nav_value: m.parsed.navValue,
-            quota_value: m.parsed.quotaValue,
-            number_of_quotas: m.parsed.numberOfQuotas,
-            seniority_level: m.parsed.seniorityLevel,
-            rating: m.parsed.rating,
-            matching_status: m.matchingStatus,
+            class_name: mq.parsed.className,
+            quota_type: mq.parsed.quotaType,
+            nav_value: mq.parsed.navValue,
+            quota_value: mq.parsed.quotaValue,
+            number_of_quotas: mq.parsed.numberOfQuotas,
+            seniority_level: mq.parsed.seniorityLevel,
+            rating: mq.parsed.rating,
+            monthly_yield_pct: mq.parsed.monthlyYieldPct,
+            subscription_value: mq.parsed.subscriptionValue,
+            redemption_value: mq.parsed.redemptionValue,
+            amortization_value: mq.parsed.amortizationValue,
+            matching_status: mq.matchingStatus,
           }));
           const { error } = await supabase
             .from("fidc_monthly_quota_classes")
@@ -201,6 +222,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
         }
         imported++;
       }
+
 
       return { imported, skipped };
     },

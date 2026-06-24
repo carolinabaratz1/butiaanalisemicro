@@ -1,0 +1,49 @@
+/* Print CSS for FIDC Lâmina export. Activated via window.print().
+   Hides global chrome, forces white background, and keeps sections together. */
+@media print {
+  @page { size: A4; margin: 14mm 12mm; }
+
+  html, body, #root {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Global app chrome — hide sidebar, top nav, action buttons */
+  [data-app-sidebar],
+  aside[data-sidebar],
+  aside.bg-sidebar,
+  [data-print="hide"],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Force cards & tables to flow cleanly */
+  .laminate section,
+  .laminate [data-print-section],
+  .laminate table,
+  .laminate .card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Ensure charts render — Recharts uses SVG which prints fine */
+  .recharts-wrapper { overflow: visible !important; }
+  .recharts-surface { overflow: visible !important; }
+
+  /* Tighter padding for paper */
+  .laminate { padding: 0 !important; }
+  .laminate .px-6 { padding-left: 0 !important; padding-right: 0 !important; }
+  .laminate .py-4 { padding-top: 6px !important; padding-bottom: 6px !important; }
+
+  /* Show print-only logo */
+  .print-only { display: block !important; }
+  .screen-only { display: none !important; }
+
+  /* Resumed PDF: hide marked sections */
+  body.print-summary [data-print-summary="hide"] {
+    display: none !important;
+  }
+}
+
+/* Hide print-only blocks on screen */
+.print-only { display: none; }

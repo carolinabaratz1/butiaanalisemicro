@@ -1,20 +1,80 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Navigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 import { BRL, PCT, formatCNPJ, monthLabel } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
-import { PageHeader } from "@/components/fidc/PageHeader";
-import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
+import { NoDataInline } from "@/components/fidc/NoDataChip";
 import { MonthlyReportImportDialog } from "@/components/fidc/MonthlyReportImportDialog";
-import { FidcHistoryCharts } from "@/components/fidc/FidcHistoryCharts";
+import { LaminateCharts } from "@/components/fidc/laminate/LaminateCharts";
+import { CreditPortfolio } from "@/components/fidc/laminate/CreditPortfolio";
+import { QuotasSection } from "@/components/fidc/laminate/QuotasSection";
+import { AlertsPanel } from "@/components/fidc/laminate/AlertsPanel";
+import { CreditOpinionPanel } from "@/components/fidc/laminate/CreditOpinionPanel";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertTriangle, Upload, CheckCircle2 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { Loader2, AlertTriangle, Upload, CheckCircle2, Printer, ChevronDown } from "lucide-react";
+import "@/styles/fidc-print.css";
+
+// Status helpers
+type InformeStatus = "Pendente" | "Importado" | "Parcial" | "Com alerta" | "Crítico";
+type CreditStatus = "Normal" | "Atenção" | "Crítico" | "N/D";
+
+function informeStatusOf(r: Record<string, unknown> | null): InformeStatus {
+  if (!r) return "Pendente";
+  const v = String(r.quota_validation_status ?? "");
+  if (v === "invalid" || v === "cotas_ausentes") return "Crítico";
+  if (v === "warning") return "Com alerta";
+  if (v === "valid") return "Importado";
+  return "Parcial";
+}
+
+function creditStatusOf(r: Record<string, unknown> | null): CreditStatus {
+  if (!r) return "N/D";
+  const dc = Number(r.credit_rights_value ?? 0);
+  const overdue = Number(r.overdue_value ?? 0);
+  const pdd = Math.abs(Number(r.pdd_value ?? 0));
+  if (dc <= 0) return "N/D";
+  const atraso = overdue / dc;
+  const pddDc = pdd / dc;
+  if (atraso > 0.2 || pddDc > 0.1) return "Crítico";
+  if (atraso > 0.1 || pddDc > 0.05) return "Atenção";
+  return "Normal";
+}
+
+function StatusChip({ label, value, kind }: { label: string; value: string; kind: "informe" | "credit" | "rec" }) {
+  const palette: Record<string, string> = {
+    Normal: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    Importado: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    Manter: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+    Atenção: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    "Com alerta": "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    Parcial: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    Acompanhar: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+    Crítico: "bg-red-500/15 text-red-700 border-red-500/30",
+    Reduzir: "bg-orange-500/15 text-orange-700 border-orange-500/30",
+    Zerar: "bg-red-500/15 text-red-700 border-red-500/30",
+    Pendente: "bg-muted text-muted-foreground border-border",
+    "N/D": "bg-muted text-muted-foreground border-border",
+  };
+  const cls = palette[value] ?? "bg-muted text-muted-foreground border-border";
+  return (
+    <span className="inline-flex flex-col items-start">
+      <span className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`mt-0.5 inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{value}</span>
+    </span>
+  );
+}
 
 export default function FidcDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
-  const { fidcById, portfoliosForFidc, portfolioSummaries, exposureForFidc, latestValDate, isLoading } = useFidcMonitorData();
+  const {
+    fidcById, portfoliosForFidc, portfolioSummaries, exposureForFidc,
+    latestValDate, isLoading, positionAlerts,
+  } = useFidcMonitorData();
   const [importOpen, setImportOpen] = useState(false);
 
   const { data: quotas = [] } = useQuery({
@@ -27,37 +87,30 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
-  const { data: latestReport } = useQuery({
+  const { data: latestReport = null } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "latest"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("fidc_monthly_reports")
-        .select("*")
-        .eq("fidc_id", id)
-        .eq("is_current_version", true)
-        .order("reference_month", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .from("fidc_monthly_reports").select("*")
+        .eq("fidc_id", id).eq("is_current_version", true)
+        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
       if (error) throw error;
       return data as Record<string, unknown> | null;
     },
     enabled: !!id,
   });
 
-  const { data: prevReport } = useQuery({
+  const { data: prevReport = null } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "prev", latestReport?.reference_month ?? null],
     queryFn: async () => {
       const ref = latestReport?.reference_month as string | undefined;
       if (!ref) return null;
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
-        .select("nav_value, quota_value, reference_month")
-        .eq("fidc_id", id)
-        .eq("is_current_version", true)
+        .select("nav_value, quota_value, reference_month, credit_rights_value, overdue_value, pdd_value")
+        .eq("fidc_id", id).eq("is_current_version", true)
         .lt("reference_month", ref)
-        .order("reference_month", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
       if (error) throw error;
       return data as Record<string, unknown> | null;
     },
@@ -65,19 +118,22 @@ export default function FidcDetailPage() {
   });
 
   const { data: reportsHistory = [] } = useQuery({
-    queryKey: ["fidc-monthly-reports", id, "history"],
+    queryKey: ["fidc-monthly-reports", id, "history-full"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
-        .select("id, reference_month, nav_value, quota_value, quota_total_nav_value, quota_validation_difference, quota_validation_difference_percentage, quota_validation_status, quota_classes_found_count, subordinated_calculation_status, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, investors_count, is_current_version, source_file_name, created_at")
-        .eq("fidc_id", id)
-        .eq("is_current_version", true)
+        .select("id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, overdue_30d_value, overdue_60d_value, overdue_90d_value, overdue_120d_value, pdd_value, cash_value, repurchase_value, subordinated_value, acquisitions_value, substitutions_value, disposals_value, investors_count, subordinated_calculation_status")
+        .eq("fidc_id", id).eq("is_current_version", true)
         .order("reference_month", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Array<Record<string, unknown>>;
     },
     enabled: !!id,
   });
+
+  useEffect(() => () => {
+    document.body.classList.remove("print-summary");
+  }, []);
 
   if (isLoading) {
     return <div className="px-6 py-12 text-center text-muted-foreground text-[12px]">
@@ -90,168 +146,195 @@ export default function FidcDetailPage() {
 
   const ports = portfoliosForFidc(id);
   const exposureTotal = exposureForFidc(id);
-
   const positionsByPortfolio = portfolioSummaries.map((s) => ({
     portfolio: s.portfolio,
+    summary: s,
     positions: s.positions.filter((p) => p.fidcId === id),
   })).filter((x) => x.positions.length > 0);
 
+  const informeStatus = informeStatusOf(latestReport);
+  const creditStatus = creditStatusOf(latestReport);
+  const navTotal = latestReport ? Number(latestReport.nav_value ?? 0) : 0;
+  const refMonth = latestReport?.reference_month ? String(latestReport.reference_month).slice(0, 10) : null;
+
+  // Buscar recomendação atual
+  const recQ = useQuery({
+    queryKey: ["fidc-rec-latest", id, refMonth],
+    queryFn: async () => {
+      if (!refMonth) return null;
+      const { data } = await supabase
+        .from("credit_opinions").select("recommendation")
+        .eq("fidc_id", id).eq("reference_month", refMonth).maybeSingle();
+      return (data as { recommendation?: string } | null)?.recommendation ?? null;
+    },
+    enabled: !!refMonth,
+  });
+  const recCurrent = recQ.data
+    ? { manter: "Manter", acompanhar: "Acompanhar", reduzir: "Reduzir", zerar: "Zerar" }[recQ.data as string] ?? "N/D"
+    : "N/D";
+
+  function doPrint(mode: "full" | "summary") {
+    document.body.classList.toggle("print-summary", mode === "summary");
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => document.body.classList.remove("print-summary"), 500);
+    }, 50);
+  }
+
+  // Risk summary template
+  const riskText = (() => {
+    if (!latestReport) return "Sem informe mensal importado — sem dados para resumo de risco.";
+    const r = latestReport;
+    const dc = Number(r.credit_rights_value ?? 0);
+    const nav = Number(r.nav_value ?? 0);
+    const overdue = Number(r.overdue_value ?? 0);
+    const pdd = Math.abs(Number(r.pdd_value ?? 0));
+    const cash = Number(r.cash_value ?? 0);
+    const prevNav = prevReport ? Number(prevReport.nav_value ?? NaN) : NaN;
+    const navVar = Number.isFinite(prevNav) && prevNav > 0 ? (nav - prevNav) / prevNav : null;
+    return (
+      `No mês de ${monthLabel(refMonth!)}, o FIDC apresentou PL de ${BRL(nav, { compact: true })}` +
+      (navVar != null ? ` (variação mensal de ${PCT(navVar)})` : "") +
+      `, Atraso/DC de ${dc > 0 ? PCT(overdue / dc) : "N/D"}, ` +
+      `PDD/DC de ${dc > 0 ? PCT(pdd / dc) : "N/D"} e Caixa/PL de ${nav > 0 ? PCT(cash / nav) : "N/D"}. ` +
+      `Status do informe: ${informeStatus}. Status de crédito: ${creditStatus}.`
+    );
+  })();
+
   return (
-    <div>
-      <div className="px-6 py-4 hairline-b">
+    <div className="laminate">
+      {/* Logo apenas na impressão */}
+      <div className="print-only px-0 py-2 mb-2 border-b border-border text-[10px] text-muted-foreground">
+        BUTIÁ RESEARCH PLATFORM · Lâmina de Crédito FIDC
+      </div>
+
+      {/* HEADER EXECUTIVO */}
+      <header className="px-6 py-4 hairline-b" data-print-section>
         <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-[20px] font-semibold tracking-tight">{f.name}</h1>
+              <h1 className="text-[22px] font-semibold tracking-tight">{f.name}</h1>
               {latestReport ? (
                 <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] bg-emerald-500/15 text-emerald-600">
-                  <CheckCircle2 className="h-3 w-3" /> Informe {monthLabel(String(latestReport.reference_month).slice(0, 10))}
+                  <CheckCircle2 className="h-3 w-3" /> Informe {monthLabel(refMonth!)}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] bg-muted/40 text-muted-foreground">
                   <AlertTriangle className="h-3 w-3" /> Informe mensal pendente
                 </span>
               )}
-              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-7 text-[11.5px]">
-                <Upload className="h-3.5 w-3.5 mr-1.5" /> Importar Informe Mensal
-              </Button>
             </div>
-            <div className="mt-1 text-[11.5px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+            <div className="mt-2 text-[11.5px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
               <span>CNPJ <span className="num text-foreground">{f.cnpj ? formatCNPJ(f.cnpj) : "—"}</span></span>
               {f.manager && <span>Gestor <span className="text-foreground">{f.manager}</span></span>}
               {f.administrator && <span>Administrador <span className="text-foreground">{f.administrator}</span></span>}
               {f.custodian && <span>Custodiante <span className="text-foreground">{f.custodian}</span></span>}
-              {f.main_originator && <span>Originador <span className="text-foreground">{f.main_originator}</span></span>}
-              {f.sector && <span>Setor <span className="text-foreground">{f.sector}</span></span>}
+              {f.sector && <span>Setor/ANBIMA <span className="text-foreground">{f.sector}</span></span>}
+              {f.fidc_type && <span>Tipo <span className="text-foreground">{f.fidc_type}</span></span>}
               <span>Data posição <span className="text-foreground">{latestValDate ?? "—"}</span></span>
             </div>
-          </div>
-          <div className="text-right text-[11px]">
-            <div className="section-title">Carteiras</div>
-            <div className="mt-1 space-y-0.5">
-              {ports.map((p) => (
-                <Link key={p.id} to={`/fidc-monitor?portfolio=${p.id}`} className="block text-foreground hover:text-primary">
-                  {p.name}
-                </Link>
-              ))}
-              {!ports.length && <div className="text-muted-foreground">—</div>}
+            <div className="mt-3 flex items-center gap-5 flex-wrap">
+              <StatusChip label="Status do informe" value={informeStatus} kind="informe" />
+              <StatusChip label="Status de crédito" value={creditStatus} kind="credit" />
+              <StatusChip label="Recomendação" value={recCurrent} kind="rec" />
+              <div className="text-[11px] text-muted-foreground">
+                Carteiras Butiá: <span className="text-foreground">{ports.map((p) => p.name).join(", ") || "—"}</span>
+              </div>
             </div>
           </div>
+          <div className="flex items-center gap-2" data-print="hide">
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-8 text-[11.5px]">
+              <Upload className="h-3.5 w-3.5 mr-1.5" /> Importar Informe Mensal
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 text-[11.5px]">
+                  <Printer className="h-3.5 w-3.5 mr-1.5" /> Exportar Lâmina PDF
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => doPrint("full")}>PDF completo</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => doPrint("summary")}>PDF resumido</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* RESUMO DE RISCO */}
+      <section className="px-6 py-4 hairline-b" data-print-section>
+        <div className="section-title mb-2">Resumo de Risco do Mês</div>
+        <p className="text-[13px] leading-relaxed text-foreground/90 max-w-4xl">{riskText}</p>
+      </section>
+
+      {/* INDICADORES PRINCIPAIS */}
+      <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" data-print-section>
         <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} />
         {(() => {
-          const r = latestReport ?? null;
-          const num = (k: string): number | null => {
-            const v = r?.[k];
-            return v == null ? null : Number(v);
-          };
+          const r = latestReport;
+          const n = (k: string) => r?.[k] != null ? Number(r[k]) : null;
+          const nav = n("nav_value");
+          const cota = n("quota_value");
+          const dc = n("credit_rights_value");
+          const overdue = n("overdue_value");
+          const pdd = n("pdd_value");
+          const cash = n("cash_value");
+          const rep = n("repurchase_value");
+          const acq = n("acquisitions_value");
+          const subVal = n("subordinated_value");
+          const inv = n("investors_count");
           const subStatus = String(r?.subordinated_calculation_status ?? "");
           const subOk = subStatus === "ok";
-          const nav = num("nav_value");
-          const cota = num("quota_value");
-          const dc = num("credit_rights_value");
-          const overdue = num("overdue_value");
-          const pdd = num("pdd_value");
-          const cash = num("cash_value");
-          const rep = num("repurchase_value");
-          const subVal = num("subordinated_value");
-          const inv = num("investors_count");
           const prevNav = prevReport ? Number(prevReport.nav_value ?? NaN) : NaN;
-          const varPl = Number.isFinite(prevNav) && prevNav > 0 && nav != null
-            ? (nav / prevNav - 1) : null;
-
-          const ratio = (a: number | null, b: number | null) =>
-            a != null && b != null && b !== 0 ? a / b : null;
-
+          const prevCota = prevReport ? Number(prevReport.quota_value ?? NaN) : NaN;
+          const varPl = Number.isFinite(prevNav) && prevNav > 0 && nav != null ? (nav / prevNav - 1) : null;
+          const varCota = Number.isFinite(prevCota) && prevCota > 0 && cota != null ? (cota / prevCota - 1) : null;
+          const ratio = (a: number | null, b: number | null) => a != null && b != null && b !== 0 ? a / b : null;
           const sub = subOk && subVal != null && nav ? subVal / nav : null;
           const cell = (v: string | null) => v == null ? <NoDataInline /> : <>{v}</>;
-
           return (
             <>
               <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} />
+              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} accent={varPl != null && varPl < -0.05 ? "warning" : "neutral"} />
               <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} />
+              <MetricCard label="Rent. mês cota" value={cell(varCota != null ? PCT(varCota, 2) : null)} accent={varCota != null && varCota < 0 ? "warning" : "neutral"} />
               <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} />
-              <MetricCard label="Atraso/DC" value={cell(ratio(overdue, dc) != null ? PCT(ratio(overdue, dc)) : null)} />
-              <MetricCard label="PDD/DC" value={cell(ratio(pdd, dc) != null ? PCT(ratio(pdd, dc)) : null)} />
-              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(pdd / overdue) : null)} />
-              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)) : null)} />
-              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)) : null)} />
+              <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} />
+              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} />
+              <MetricCard label="Atraso/DC" value={cell(ratio(overdue, dc) != null ? PCT(ratio(overdue, dc)!) : null)} accent={ratio(overdue, dc) != null && ratio(overdue, dc)! > 0.1 ? (ratio(overdue, dc)! > 0.2 ? "critical" : "warning") : "neutral"} />
+              <MetricCard label="≤30d/DC" value={cell(ratio(n("overdue_30d_value"), dc) != null ? PCT(ratio(n("overdue_30d_value"), dc)!) : null)} />
+              <MetricCard label="≤60d/DC" value={cell(ratio(n("overdue_60d_value"), dc) != null ? PCT(ratio(n("overdue_60d_value"), dc)!) : null)} />
+              <MetricCard label="≤90d/DC" value={cell(ratio(n("overdue_90d_value"), dc) != null ? PCT(ratio(n("overdue_90d_value"), dc)!) : null)} />
+              <MetricCard label="≤120d/DC" value={cell(ratio(n("overdue_120d_value"), dc) != null ? PCT(ratio(n("overdue_120d_value"), dc)!) : null)} />
+              <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} />
+              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} />
+              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} />
+              <MetricCard label="Aquisições/DC" value={cell(ratio(acq, dc) != null ? PCT(ratio(acq, dc)!) : null)} />
               <MetricCard
                 label="Subordinação"
                 value={subOk
                   ? cell(sub != null ? PCT(sub) : null)
-                  : <span title="Soma das cotas diferente do PL total. Subordinação não confiável." className="text-amber-600 text-[13px]">Inconsistente</span>}
+                  : <span title="Soma das cotas diferente do PL — não confiável" className="text-amber-600 text-[13px]">Inconsistente</span>}
               />
-              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} />
-              <MetricCard label="Investidores" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} />
+              <MetricCard label="Cotistas" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} />
             </>
           );
         })()}
-      </div>
+      </section>
 
-      {latestReport && (
-        <div className="px-6 pb-4">
-          <div className="bg-card border border-border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="section-title">Validação PL × Cotas — {monthLabel(String(latestReport.reference_month).slice(0, 10))}</div>
-              <ValidationBadge status={String(latestReport.quota_validation_status ?? "—")} />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-[12px]">
-              <div>
-                <div className="text-[11px] text-muted-foreground">PL informado</div>
-                <div className="num font-medium">{BRL(latestReport.nav_value as number | null, { compact: true })}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Soma das cotas</div>
-                <div className="num font-medium">{BRL(latestReport.quota_total_nav_value as number | null, { compact: true })}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Diferença</div>
-                <div className="num font-medium">{BRL(latestReport.quota_validation_difference as number | null, { compact: true })}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">% diferença</div>
-                <div className="num font-medium">
-                  {latestReport.quota_validation_difference_percentage != null
-                    ? `${(Number(latestReport.quota_validation_difference_percentage)).toFixed(3).replace(".", ",")}%`
-                    : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Cotas encontradas</div>
-                <div className="num font-medium">{Number(latestReport.quota_classes_found_count ?? 0)}</div>
-              </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground">Subordinação</div>
-                <div className="font-medium">
-                  {latestReport.subordinated_calculation_status === "ok" ? "Confiável" :
-                   (latestReport.subordinated_calculation_status === "missing" || latestReport.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
-                </div>
+      {/* POSIÇÃO BUTIÁ */}
+      <section className="px-6 py-4" data-print-section>
+        <div className="bg-card border border-border">
+          <div className="px-4 pt-3 flex items-center justify-between">
+            <div>
+              <div className="section-title">Posição Butiá</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Exposição total: <strong className="text-foreground">{BRL(exposureTotal, { compact: true })}</strong>
+                {navTotal > 0 && <> · {PCT(exposureTotal / navTotal)} do PL do FIDC</>}
               </div>
             </div>
-            {latestReport.subordinated_calculation_notes ? (
-              <div className="mt-2 text-[11.5px] text-muted-foreground">
-                {String(latestReport.subordinated_calculation_notes)}
-              </div>
-            ) : null}
           </div>
-        </div>
-      )}
-
-
-      <div className="px-6 pb-4">
-        <div className="bg-card border border-border">
-          <div className="section-title px-4 pt-3">Histórico do fundo — evolução mensal</div>
-          <FidcHistoryCharts history={reportsHistory} />
-        </div>
-      </div>
-
-      <div className="px-6 pb-4">
-        <div className="bg-card border border-border">
-          <div className="section-title px-4 pt-3">Exposição por carteira</div>
           <div className="overflow-x-auto">
             <table className="w-full mt-2 text-[12px]">
               <thead className="bg-surface-2 text-muted-foreground">
@@ -260,28 +343,29 @@ export default function FidcDetailPage() {
                   <th className="text-left px-3 py-2 font-medium">ISIN</th>
                   <th className="text-left px-3 py-2 font-medium">Classe</th>
                   <th className="text-right px-3 py-2 font-medium">Exposição</th>
-                  <th className="text-right px-3 py-2 font-medium">% Cart.</th>
+                  <th className="text-right px-3 py-2 font-medium">% Carteira</th>
+                  <th className="text-right px-3 py-2 font-medium">% PL FIDC</th>
                   <th className="text-left px-3 py-2 font-medium">Data</th>
                 </tr>
               </thead>
               <tbody>
-                {positionsByPortfolio.flatMap(({ portfolio, positions }) =>
-                  positions.map((p, i) => {
-                    const s = portfolioSummaries.find((x) => x.portfolio.id === portfolio.id)!;
-                    return (
-                      <tr key={`${portfolio.id}-${i}`} className="hairline-b">
-                        <td className="px-3 py-2 font-medium">{portfolio.name}</td>
-                        <td className="px-3 py-2 num">{p.isin}</td>
-                        <td className="px-3 py-2">{p.quota?.class_name || p.quota?.internal_quota_name || "—"}</td>
-                        <td className="px-3 py-2 text-right num">{BRL(p.value, { compact: true })}</td>
-                        <td className="px-3 py-2 text-right num">{s.nav > 0 ? PCT(p.value / s.nav) : "—"}</td>
-                        <td className="px-3 py-2 num text-muted-foreground">{p.valDate}</td>
-                      </tr>
-                    );
-                  }),
+                {positionsByPortfolio.flatMap(({ portfolio, summary, positions }) =>
+                  positions.map((p, i) => (
+                    <tr key={`${portfolio.id}-${i}`} className="hairline-b">
+                      <td className="px-3 py-2 font-medium">{portfolio.name}</td>
+                      <td className="px-3 py-2 num">{p.isin}</td>
+                      <td className="px-3 py-2">{p.quota?.class_name || p.quota?.internal_quota_name || "—"}</td>
+                      <td className="px-3 py-2 text-right num">{BRL(p.value, { compact: true })}</td>
+                      <td className="px-3 py-2 text-right num">{summary.nav > 0 ? PCT(p.value / summary.nav) : "—"}</td>
+                      <td className="px-3 py-2 text-right num text-muted-foreground">
+                        {navTotal > 0 ? PCT(p.value / navTotal) : "—"}
+                      </td>
+                      <td className="px-3 py-2 num text-muted-foreground">{p.valDate}</td>
+                    </tr>
+                  ))
                 )}
                 {positionsByPortfolio.length === 0 && (
-                  <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                  <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
                     Sem posições nesta data.
                   </td></tr>
                 )}
@@ -289,48 +373,54 @@ export default function FidcDetailPage() {
             </table>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="px-6 pb-4">
+      {/* GRÁFICOS HISTÓRICOS */}
+      <section className="px-6 pb-4" data-print-section>
         <div className="bg-card border border-border">
-          <div className="section-title px-4 pt-3">Cotas / classes cadastradas</div>
-          <div className="overflow-x-auto">
-            <table className="w-full mt-2 text-[12px]">
-              <thead className="bg-surface-2 text-muted-foreground">
-                <tr className="hairline-b">
-                  <th className="text-left px-3 py-2 font-medium">Classe</th>
-                  <th className="text-left px-3 py-2 font-medium">ISIN</th>
-                  <th className="text-left px-3 py-2 font-medium">Tipo</th>
-                  <th className="text-left px-3 py-2 font-medium">Benchmark</th>
-                  <th className="text-left px-3 py-2 font-medium">Rating</th>
-                  <th className="text-right px-3 py-2 font-medium">PL classe</th>
-                  <th className="text-right px-3 py-2 font-medium">Cota</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(quotas as any[]).map((c) => (
-                  <tr key={c.id} className="hairline-b">
-                    <td className="px-3 py-2 font-medium">{c.class_name || "—"}</td>
-                    <td className="px-3 py-2 num text-muted-foreground">{c.isin}</td>
-                    <td className="px-3 py-2">{c.quota_type || "—"}</td>
-                    <td className="px-3 py-2">{c.benchmark || "—"}</td>
-                    <td className="px-3 py-2">{c.current_rating || "—"}</td>
-                    <td className="px-3 py-2 text-right"><NoDataChip /></td>
-                    <td className="px-3 py-2 text-right"><NoDataChip /></td>
-                  </tr>
-                ))}
-                {quotas.length === 0 && (
-                  <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
-                    Nenhuma cota cadastrada.
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <div className="section-title px-4 pt-3">Evolução Histórica</div>
+          <LaminateCharts history={reportsHistory} />
         </div>
-      </div>
+      </section>
 
-      <div className="px-6 pb-8">
+      {/* CARTEIRA DE CRÉDITO */}
+      <section className="px-6 pb-4" data-print-summary="hide">
+        <CreditPortfolio
+          segments={(latestReport?.segment_breakdown as { bucket: string; value: number }[] | null) ?? null}
+          maturity={(latestReport?.maturity_breakdown as { bucket: string; value: number }[] | null) ?? null}
+          overdueByBucket={(latestReport?.overdue_breakdown as { bucket: string; value: number }[] | null) ?? null}
+          assignors={(latestReport?.assignors_breakdown as { bucket: string; value: number }[] | null) ?? null}
+          guaranteesValue={latestReport?.guarantees_value != null ? Number(latestReport.guarantees_value) : null}
+          guaranteesPctDc={latestReport?.guarantees_pct_dc != null ? Number(latestReport.guarantees_pct_dc) : null}
+          scrStatus={latestReport?.scr_status ? String(latestReport.scr_status) : null}
+          scrValue={latestReport?.scr_value != null ? Number(latestReport.scr_value) : null}
+          creditRightsValue={latestReport?.credit_rights_value != null ? Number(latestReport.credit_rights_value) : null}
+        />
+      </section>
+
+      {/* COTAS, SUBORDINAÇÃO E VALIDAÇÕES */}
+      <section className="px-6 pb-4">
+        <QuotasSection
+          reportId={latestReport ? String(latestReport.id) : null}
+          fidcId={id}
+          latestReport={latestReport}
+          masterQuotas={quotas as any}
+        />
+      </section>
+
+      {/* ALERTAS */}
+      <section className="px-6 pb-4">
+        <AlertsPanel
+          report={latestReport}
+          prevReport={prevReport}
+          positionAlerts={positionAlerts
+            .filter((a) => a.fidcId === id || (a.portfolioName && ports.some((p) => p.name === a.portfolioName)))
+            .map((a) => ({ severity: a.severity, message: a.message, kind: a.kind }))}
+        />
+      </section>
+
+      {/* HISTÓRICO MENSAL DETALHADO (apenas tela / PDF completo) */}
+      <section className="px-6 pb-4" data-print-summary="hide">
         <div className="bg-card border border-border">
           <div className="section-title px-4 pt-3">Histórico mensal — informes importados</div>
           <div className="overflow-x-auto">
@@ -338,41 +428,37 @@ export default function FidcDetailPage() {
               <thead className="bg-surface-2 text-muted-foreground">
                 <tr className="hairline-b">
                   <th className="text-left px-3 py-2 font-medium">Mês</th>
-                  <th className="text-right px-3 py-2 font-medium">PL informado</th>
-                  <th className="text-right px-3 py-2 font-medium">Soma das cotas</th>
-                  <th className="text-right px-3 py-2 font-medium">Diferença</th>
-                  <th className="text-right px-3 py-2 font-medium">% dif.</th>
-                  <th className="text-right px-3 py-2 font-medium">Cotas</th>
-                  <th className="text-left px-3 py-2 font-medium">Subordinação</th>
-                  <th className="text-left px-3 py-2 font-medium">Status</th>
-                  <th className="text-left px-3 py-2 font-medium">Arquivo</th>
+                  <th className="text-right px-3 py-2 font-medium">PL</th>
+                  <th className="text-right px-3 py-2 font-medium">Cota</th>
+                  <th className="text-right px-3 py-2 font-medium">DC</th>
+                  <th className="text-right px-3 py-2 font-medium">Atraso/DC</th>
+                  <th className="text-right px-3 py-2 font-medium">PDD/DC</th>
+                  <th className="text-right px-3 py-2 font-medium">Caixa/PL</th>
+                  <th className="text-right px-3 py-2 font-medium">Cotistas</th>
                 </tr>
               </thead>
               <tbody>
-                {reportsHistory.map((r) => (
-                  <tr key={String(r.id)} className="hairline-b">
-                    <td className="px-3 py-2 font-medium">{monthLabel(String(r.reference_month).slice(0, 10))}</td>
-                    <td className="px-3 py-2 text-right num">{BRL(r.nav_value as number | null, { compact: true })}</td>
-                    <td className="px-3 py-2 text-right num">{BRL(r.quota_total_nav_value as number | null, { compact: true })}</td>
-                    <td className="px-3 py-2 text-right num">{BRL(r.quota_validation_difference as number | null, { compact: true })}</td>
-                    <td className="px-3 py-2 text-right num">
-                      {r.quota_validation_difference_percentage != null
-                        ? `${Number(r.quota_validation_difference_percentage).toFixed(3).replace(".", ",")}%`
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right num">{Number(r.quota_classes_found_count ?? 0)}</td>
-                    <td className="px-3 py-2">
-                      {r.subordinated_calculation_status === "ok" ? "Confiável" :
-                       (r.subordinated_calculation_status === "missing" || r.subordinated_calculation_status === "quota_data_missing") ? "N/D" : "Inconsistente"}
-                    </td>
-                    <td className="px-3 py-2"><ValidationBadge status={String(r.quota_validation_status ?? "—")} /></td>
-                    <td className="px-3 py-2 text-muted-foreground truncate max-w-[220px]" title={String(r.source_file_name ?? "")}>
-                      {String(r.source_file_name ?? "—")}
-                    </td>
-                  </tr>
-                ))}
+                {reportsHistory.map((r) => {
+                  const dc = Number(r.credit_rights_value ?? 0);
+                  const nav = Number(r.nav_value ?? 0);
+                  const overdue = Number(r.overdue_value ?? 0);
+                  const pdd = Math.abs(Number(r.pdd_value ?? 0));
+                  const cash = Number(r.cash_value ?? 0);
+                  return (
+                    <tr key={String(r.id)} className="hairline-b">
+                      <td className="px-3 py-2 font-medium">{monthLabel(String(r.reference_month).slice(0, 10))}</td>
+                      <td className="px-3 py-2 text-right num">{BRL(nav, { compact: true })}</td>
+                      <td className="px-3 py-2 text-right num">{r.quota_value != null ? Number(r.quota_value).toLocaleString("pt-BR", { maximumFractionDigits: 6 }) : "—"}</td>
+                      <td className="px-3 py-2 text-right num">{BRL(dc, { compact: true })}</td>
+                      <td className="px-3 py-2 text-right num">{dc > 0 ? PCT(overdue / dc) : "—"}</td>
+                      <td className="px-3 py-2 text-right num">{dc > 0 ? PCT(pdd / dc) : "—"}</td>
+                      <td className="px-3 py-2 text-right num">{nav > 0 ? PCT(cash / nav) : "—"}</td>
+                      <td className="px-3 py-2 text-right num">{r.investors_count != null ? Number(r.investors_count).toLocaleString("pt-BR") : "—"}</td>
+                    </tr>
+                  );
+                })}
                 {reportsHistory.length === 0 && (
-                  <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                  <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
                     Nenhum informe mensal importado ainda.
                   </td></tr>
                 )}
@@ -380,7 +466,12 @@ export default function FidcDetailPage() {
             </table>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* PARECER DE CRÉDITO */}
+      <section className="px-6 pb-8">
+        <CreditOpinionPanel fidcId={id} fidcName={f.name} latestReport={latestReport} />
+      </section>
 
       <MonthlyReportImportDialog
         open={importOpen}
@@ -392,15 +483,3 @@ export default function FidcDetailPage() {
     </div>
   );
 }
-
-function ValidationBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    valid: { label: "Válido", cls: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" },
-    warning: { label: "Atenção", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30" },
-    invalid: { label: "Crítico", cls: "bg-red-500/15 text-red-600 border-red-500/30" },
-    cotas_ausentes: { label: "Cotas ausentes", cls: "bg-red-500/15 text-red-600 border-red-500/30" },
-  };
-  const v = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground border-border" };
-  return <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] ${v.cls}`}>{v.label}</span>;
-}
-
