@@ -171,8 +171,7 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
         }
         case "anbima":   add(anbimaOf(p), anbimaOf(p), p); break;
         case "cotaTipo": {
-          const fidcQuotasCount = p.fidcId ? (quotasPerFidc.get(p.fidcId)?.size ?? 0) : 0;
-          const lbl = classifyCotaTipo(p.quota?.quota_type, fidcQuotasCount);
+          const lbl = classifyCotaTipo(p);
           add(lbl, lbl, p);
           break;
         }
