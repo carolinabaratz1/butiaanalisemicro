@@ -1,0 +1,1 @@
+ALTER TABLE public.credit_opinions ADD CONSTRAINT credit_opinions_fidc_month_uniq UNIQUE (fidc_id, reference_month);
