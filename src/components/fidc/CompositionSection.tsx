@@ -43,13 +43,18 @@ const GROUPING_OPTS: { id: Grouping; label: string }[] = [
   { id: "informe",  label: "Por Status do Informe" },
 ];
 
-const classifyCotaTipo = (qt: string | null | undefined, fidcQuotasCount: number): string => {
-  const q = (qt || "").toLowerCase();
-  if (q.includes("senior") || q.includes("sênior") || /\bsr\b/.test(q)) return "Sênior";
-  if (q.includes("mezanino") || q.includes("mezzanine") || /\bmz\b/.test(q)) return "Mezanino";
-  if (q.includes("subord") || /\bsub\b/.test(q)) return "Subordinada";
-  if (fidcQuotasCount <= 1) return "Única / Monoclasse";
-  return "Não identificado";
+// Tipo de cota = Classe cadastrada em COTAS/ISIN (fidc_quota_classes.class_name).
+// Fallback para nomes internos/CVM e, por último, quota_type bruto.
+const classifyCotaTipo = (p: FidcPosition): string => {
+  const cls = (p.quota?.class_name || "").trim();
+  if (cls) return cls;
+  const internal = (p.quota?.internal_quota_name || "").trim();
+  if (internal) return internal;
+  const cvm = (p.quota?.cvm_quota_name || "").trim();
+  if (cvm) return cvm;
+  const qt = (p.quota?.quota_type || "").trim();
+  if (qt) return qt;
+  return "Não cadastrado";
 };
 
 const informeStatus = (report: MonthlyReportRow | null): { label: string; tone: "ok" | "warn" | "crit" | "muted" } => {
@@ -71,14 +76,15 @@ const ratingOf = (p: FidcPosition): string => {
   return "Sem rating";
 };
 
+// Setor / Tipo ANBIMA vindo do Cadastro Mestre (fidcs).
+// Prioriza o campo "setor" do mestre — não inventar a partir de strategy/fidc_type.
 const anbimaOf = (p: FidcPosition): string => {
   const f = p.fidc;
-  return (
-    (f?.fidc_type && f.fidc_type.trim()) ||
-    (f?.strategy && f.strategy.trim()) ||
-    (f?.sector && f.sector.trim()) ||
-    "Não classificado"
-  );
+  const s = (f?.sector || "").trim();
+  if (s) return s;
+  const t = (f?.fidc_type || "").trim();
+  if (t) return t;
+  return "Não classificado";
 };
 
 type Bucket = {
@@ -165,8 +171,7 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
         }
         case "anbima":   add(anbimaOf(p), anbimaOf(p), p); break;
         case "cotaTipo": {
-          const fidcQuotasCount = p.fidcId ? (quotasPerFidc.get(p.fidcId)?.size ?? 0) : 0;
-          const lbl = classifyCotaTipo(p.quota?.quota_type, fidcQuotasCount);
+          const lbl = classifyCotaTipo(p);
           add(lbl, lbl, p);
           break;
         }
@@ -255,13 +260,92 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
       .map((p) => p.fidcId!),
   ).size;
 
-  // Diversificação
+  // Diversificação — Nº de FIDCs conta CNPJs únicos (não ISINs).
+  // Posições sem CNPJ no mestre são contadas em "sem cadastro" e expostas na validação.
   const div = {
-    fidcs: new Set(allPositions.map((p) => p.fidcId).filter(Boolean)).size,
+    fidcs: new Set(
+      allPositions.map((p) => (p.fidc?.cnpj || "").replace(/\D/g, "")).filter((c) => c.length > 0),
+    ).size,
     gestores: new Set(allPositions.map((p) => p.fidc?.manager).filter(Boolean)).size,
     admins: new Set(allPositions.map((p) => p.fidc?.administrator).filter(Boolean)).size,
-    setores: new Set(allPositions.map((p) => anbimaOf(p))).size,
+    setores: new Set(allPositions.map((p) => p.fidc?.sector).filter(Boolean)).size,
   };
+
+  // ===== Validação dos dados exibidos =====
+  type Check = { id: string; ok: boolean; label: string; detail?: string };
+  const validation: Check[] = useMemo(() => {
+    const checks: Check[] = [];
+    const unmapped = allPositions.filter((p) => !p.fidc);
+    checks.push({
+      id: "isin-mapeado",
+      ok: unmapped.length === 0,
+      label: "Todos os ISINs em carteira estão mapeados em COTAS/ISIN",
+      detail: unmapped.length === 0
+        ? `${allPositions.length} posições conferidas.`
+        : `${unmapped.length} posição(ões) sem cota cadastrada: ${
+            Array.from(new Set(unmapped.map((p) => p.isin || "—"))).slice(0, 5).join(", ")
+          }${unmapped.length > 5 ? " …" : ""}`,
+    });
+
+    const cnpjMissing = allPositions.filter((p) => p.fidc && !(p.fidc.cnpj || "").trim());
+    checks.push({
+      id: "cnpj",
+      ok: cnpjMissing.length === 0,
+      label: "Todos os FIDCs em carteira têm CNPJ no Cadastro Mestre",
+      detail: cnpjMissing.length === 0
+        ? `${div.fidcs} CNPJ(s) distinto(s) usados na contagem de diversificação.`
+        : `${cnpjMissing.length} posição(ões) com FIDC sem CNPJ: ${
+            Array.from(new Set(cnpjMissing.map((p) => p.fidc?.name || "—"))).slice(0, 5).join(", ")
+          }`,
+    });
+
+    const classMissing = allPositions.filter((p) => p.fidc && !(p.quota?.class_name || "").trim());
+    checks.push({
+      id: "classe",
+      ok: classMissing.length === 0,
+      label: "Todas as cotas têm Classe preenchida em COTAS/ISIN",
+      detail: classMissing.length === 0
+        ? "Classificação por Tipo de Cota usa o campo Classe."
+        : `${classMissing.length} cota(s) sem Classe: ${
+            Array.from(new Set(classMissing.map((p) => `${p.fidc?.name} · ${p.isin}`))).slice(0, 4).join(" | ")
+          }`,
+    });
+
+    const sectorMissing = allPositions.filter((p) => p.fidc && !(p.fidc.sector || "").trim());
+    checks.push({
+      id: "setor",
+      ok: sectorMissing.length === 0,
+      label: "Todos os FIDCs têm Setor no Cadastro Mestre",
+      detail: sectorMissing.length === 0
+        ? "Agrupamento por Tipo ANBIMA / Setor usa o campo Setor do mestre."
+        : `${sectorMissing.length} posição(ões) sem setor: ${
+            Array.from(new Set(sectorMissing.map((p) => p.fidc?.name || "—"))).slice(0, 5).join(", ")
+          }`,
+    });
+
+    const cnpjsPorIsin = new Map<string, Set<string>>();
+    allPositions.forEach((p) => {
+      const isin = p.isin || "";
+      const cnpj = (p.fidc?.cnpj || "").replace(/\D/g, "");
+      if (!isin || !cnpj) return;
+      if (!cnpjsPorIsin.has(isin)) cnpjsPorIsin.set(isin, new Set());
+      cnpjsPorIsin.get(isin)!.add(cnpj);
+    });
+    const isinAmbiguos = Array.from(cnpjsPorIsin.entries()).filter(([, s]) => s.size > 1);
+    checks.push({
+      id: "isin-unico-cnpj",
+      ok: isinAmbiguos.length === 0,
+      label: "Cada ISIN aponta para um único CNPJ de FIDC",
+      detail: isinAmbiguos.length === 0
+        ? "Sem ISIN duplicado entre FIDCs diferentes."
+        : `${isinAmbiguos.length} ISIN(s) ambíguo(s): ${isinAmbiguos.slice(0, 3).map(([i]) => i).join(", ")}`,
+    });
+
+    return checks;
+  }, [allPositions, div.fidcs]);
+
+  const validationOkCount = validation.filter((c) => c.ok).length;
+
 
   return (
     <div className="px-6 pb-6">
@@ -455,12 +539,42 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
           title="Diversificação"
           primary={`${div.fidcs} FIDCs`}
           subRows={[
+            { label: "Contagem por", value: "CNPJ único" },
             { label: "Gestores", value: String(div.gestores) },
             { label: "Administradores", value: String(div.admins) },
-            { label: "Setores / Tipos", value: String(div.setores) },
+            { label: "Setores (mestre)", value: String(div.setores) },
           ]}
         />
       </div>
+
+      {/* Validação dos dados — checagens contra Cadastro Mestre / COTAS-ISIN */}
+      <div className="mt-3 bg-card border border-border p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Validação dos dados — Cadastro Mestre & COTAS/ISIN
+          </div>
+          <div className={cn(
+            "text-[11px] num",
+            validationOkCount === validation.length ? "text-risk-normal" : "text-risk-warning",
+          )}>
+            {validationOkCount}/{validation.length} checagens OK
+          </div>
+        </div>
+        <ul className="space-y-1.5">
+          {validation.map((c) => (
+            <li key={c.id} className="flex items-start gap-2 text-[12px]">
+              {c.ok
+                ? <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-risk-normal shrink-0" />
+                : <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-risk-warning shrink-0" />}
+              <div className="flex-1">
+                <div className="text-foreground">{c.label}</div>
+                {c.detail && <div className="text-[11px] text-muted-foreground">{c.detail}</div>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
 
       {/* Composição por carteira */}
       <div className="mt-4">
@@ -526,7 +640,7 @@ function SpotCard({ title, primary, subRows = [], tone, link }: {
       <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground mb-1">{title}</div>
       <div className={cn("text-[15px] font-semibold truncate",
         tone === "warn" && "text-risk-warning",
-        tone === "crit" && "text-risk-danger",
+        tone === "crit" && "text-risk-critical",
       )}>
         {primary}
       </div>
@@ -568,8 +682,7 @@ function PortfolioCompositionCard({ summary, grouping, quotasPerFidc, latestRepo
       }
       case "anbima":   add(anbimaOf(p), anbimaOf(p), p.value); break;
       case "cotaTipo": {
-        const cnt = p.fidcId ? (quotasPerFidc.get(p.fidcId)?.size ?? 0) : 0;
-        const lbl = classifyCotaTipo(p.quota?.quota_type, cnt);
+        const lbl = classifyCotaTipo(p);
         add(lbl, lbl, p.value); break;
       }
       case "gestor":   add(p.fidc?.manager || "Não informado", p.fidc?.manager || "Não informado", p.value); break;
