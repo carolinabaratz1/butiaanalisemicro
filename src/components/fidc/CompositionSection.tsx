@@ -419,9 +419,10 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
                   <Legend
                     verticalAlign="bottom" height={36}
                     wrapperStyle={{ fontSize: 10 }}
-                    formatter={(_v, e: any) => {
-                      const item = chartData[e?.payload?.index ?? 0];
-                      if (!item) return _v;
+                    formatter={(value, e: any) => {
+                      const name = e?.payload?.name ?? value;
+                      const item = chartData.find((d) => d.name === name);
+                      if (!item) return String(name);
                       return `${item.name} · ${PCT(item.value / (totalDisplay || 1), 1)}`;
                     }}
                   />
