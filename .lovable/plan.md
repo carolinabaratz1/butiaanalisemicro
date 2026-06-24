@@ -1,68 +1,148 @@
-## Lâmina institucional de crédito — Página individual do FIDC
+# Parser do Informe Mensal FIDC — extração por âncoras e de/para
 
-Reestruturar `src/pages/fidc/FidcDetailPage.tsx` em uma lâmina institucional, sem mexer em sidebar, upload de posições, cadastro mestre, nem botão de importar informe.
+Objetivo: reduzir drasticamente os N/D na lâmina individual do FIDC, lendo o informe **por seção e por rótulo textual normalizado**, nunca por linha fixa. Sem mexer em upload de posições, Cadastro Mestre, sidebar; sem IA; sem nova migration (todos os novos campos ficam dentro do `raw_data` JSON).
 
 ---
 
-### Fase 1 — Backend: enriquecer o informe mensal
+## Fase 1 — Reescrita de `src/lib/fidc/monthly-report-parser.ts`
 
-O parser atual extrai apenas o **somatório** de atrasos e não capta inadimplência por faixa, carteira por segmento, prazos de vencimento, garantias, SCR ou rentabilidade/captação/resgate/amortização por cota. Para alimentar a lâmina, vou:
+### 1.1 Mapa de seções (âncoras textuais)
 
-**1.1 — Migration** em `fidc_monthly_reports` adicionando colunas (todas nullable):
-- `overdue_30d_value`, `overdue_60d_value`, `overdue_90d_value`, `overdue_120d_value`
-- `segment_breakdown jsonb` — `[{ segment, value, pct_dc }]` (seção II)
-- `maturity_breakdown jsonb` — `[{ bucket, value, pct_dc }]` (V.a + VI.a)
-- `overdue_breakdown jsonb` — `[{ bucket, value, pct_dc }]` (V.b + VI.b)
-- `assignors_breakdown jsonb` — cedentes relevantes (I.2.a.11 / I.2.b.11)
-- `guarantees_value`, `guarantees_pct_dc` (seção 7)
-- `scr_status text`, `scr_value numeric` (seção 8)
+Ancorar uma vez por arquivo. Cada âncora delimita janela `[from, to)` para buscas internas — nada é por número de linha.
 
-**1.2 — Migration** em `fidc_monthly_quota_classes` adicionando:
-- `monthly_yield_pct`, `subscription_value`, `redemption_value`, `amortization_value`
+```
+I  - Ativo
+  1 - Disponibilidades                    → caixa estrito
+  2 - Carteira
+    a) DC com aquisição substancial
+       a.2.1) Valor Total Parcelas Inadimplentes
+       a.3)   Créditos Existentes Inadimplentes
+       a.10)  Provisão para Redução
+       a.11)  (cedentes)
+    b) DC sem aquisição substancial
+       b.2.1, b.3, b.10, b.11 (idem)
+    c) Valores Mobiliários
+    d) Títulos Públicos Federais
+    e) CDB
+    f) Compromissadas
+    g) Outros Ativos RF
+    h) Cotas de FIDCs
+    i) Warrants
+II - Carteira por Segmento                → segment_breakdown
+III - Passivo
+IV - Patrimônio Líquido
+   a) Valor do PL                          → nav_value
+   b) Valor do PL Médio                    → raw.monthly_average_nav_value
+V  - Comportamento DC com aquisição
+   a) Por Prazo de Vencimento (a.1..a.10)
+   b) Inadimplentes (b.1..b.10) [entre X e Y dias / acima de 1080]
+VI - Comportamento DC sem aquisição
+   a) Por Prazo (mesmo padrão)
+   b) Inadimplentes (mesmo padrão)
+VII - Negócios no mês
+   a) Aquisições  (a.1 qtd, a.2 valor)
+   b) Alienações  (b.1 qtd, b.2 valor, b.3 contábil)
+   c) Substituições (c.1, c.2, c.3)
+   d) Recompras    (d.1, d.2, d.3)
+IX - Taxas
+X  - Outras Informações
+   1) Nº de Cotistas                       → investors_count
+   2) Descrição da Série/Classe            → cotas (campos: Cota, PL, Quantidade, Rating)
+   3) Rentabilidade Apurada no Mês         → monthlyYieldPct por classe
+   4) Captações, Resgates e Amortizações   → subs/red/amort por classe
+   7) Garantias (7.1 valor, 7.2 %)
+   8) SCR (8.1 / 8.2 / "Não possui informação apresentada")
+```
 
-**1.3 — Parser** (`monthly-report-parser.ts`):
-- Extrair V.b.1/V.b.2/V.b.3/V.b.4 + VI.b.1..4 (faixas de atraso)
-- Extrair seção II por segmento (linhas com indent abaixo do header)
-- Extrair V.a + VI.a (prazo de vencimento, buckets 30/60/90/120/150/180/360/720/1080/>1080)
-- Extrair "d) recompras", "a) aquisições", "b) substituições", "c) alienações" da seção VII
-- Extrair garantias (rótulo "7) garantias") e SCR (rótulo "8) ... SCR")
-- Para cada cota: ler "rentabilidade", "captacao", "resgate", "amortizacao", "valor da subscrição/aplicação"
-- Persistir os novos campos via `MonthlyReportImportDialog` no upsert
+### 1.2 Normalização e parsing numérico
 
-### Fase 2 — Frontend: lâmina
+Reaproveitar `norm()`, `asNumber()`. Adicionar `pickRightmostNumber(row, col)` que, se a célula da coluna do mês estiver vazia, pega o último valor numérico não-nulo à direita da linha — defesa contra colunas mescladas. Manter detecção de `(neg)` e `R$ x.xxx,xx`.
 
-Refatorar `FidcDetailPage.tsx` em **componentes** dentro de `src/components/fidc/laminate/`:
-- `LaminateHeader.tsx` — header executivo com status (informe/crédito/recomendação) e 2 botões (Importar Informe, Exportar PDF). Recomendação vem de `credit_opinions` (última do FIDC). Status do informe derivado de `quota_validation_status` + idade do informe. Status de crédito derivado dos limites de alertas (mesma lógica do `useFidcMonitorData`).
-- `RiskSummary.tsx` — texto base por template (não-IA) usando placeholders das métricas do mês.
-- `ButiaPositionTable.tsx` — adiciona colunas “% do PL do FIDC” e “% da carteira”.
-- `KeyMetricsGrid.tsx` — cards com PL, Var. PL, Cota, Rent. mensal cota, DC, DC/PL, Caixa/PL, Atraso/DC, 30d/60d/90d/120d/DC, PDD/DC, PDD/Atrasos, Recompras/DC, Subordinação, Cotistas, Aquisições/DC. `NoDataChip` para faltantes.
-- `LaminateCharts.tsx` — reorganiza `FidcHistoryCharts` em 10 painéis (PL+Var, Cota+Rent, DC+DC/PL, Inadimplência por faixa, Atraso/DC vs PDD/DC, PDD/Atrasos, Caixa/PL + Recompras/DC, Subordinação (com flag inconsistente), Cotistas, Fluxo VII).
-- `CreditPortfolio.tsx` — 6 sub-blocos: Segmento (pizza), Prazo de vencimento (barras), Inadimplência por faixa (tabela), Cedentes relevantes (tabela), Garantias (cards), SCR (chip status). Cada um exibe “Sem dados no informe” se vazio.
-- `QuotasAndValidation.tsx` — cards de PL informado, soma cotas, dif. absoluta/%, status, subordinação. **Tabela nova** “Cotas/classes importadas do informe” usando `fidc_monthly_quota_classes` (Classe, Tipo, Qtd cotas, Valor cota, PL classe, % PL, Rent. mês, Captação, Resgate, Amortização, Status matching). Mantém a tabela atual “Cotas/classes cadastradas”.
-- `QualityChecks.tsx` — 4 validações (contábil A−P≈PL, DC vs II, PL×cotas, métricas ausentes) com status OK/Atenção/Crítico.
-- `AlertsPanel.tsx` — separa em 3 colunas: Crédito, Qualidade, Posição. Limites usam os mesmos thresholds já presentes em `useFidcMonitorData` (e novos para 30/60/90/120d).
-- `CreditOpinionPanel.tsx` — busca `credit_opinions` para `(fidc_id, latest reference_month)`. Mostra recomendação, resumo, motivo, pontos +/−, riscos, responsável, data. Botões “Editar Parecer” (link para `/fidc-monitor/pareceres?fidc=...`) e “Usar dados do informe no resumo” (preenche textarea via template e salva via upsert).
+### 1.3 Novas extrações (vão para `MonthlyMetrics` ou `raw_data`)
 
-### Fase 3 — Exportação PDF
+**Coluna do banco já existente** (sem migration):
+- `cash_value` ← **Caixa Ampliado** = I.1 + I.2.c..i (soma de presentes).
+- `overdue_30/60/90/120d_value` ← V.b.1..4 + VI.b.1..4 usando rótulos "entre 1 e 30", "entre 31 e 60", "entre 61 e 90", "entre 91 e 120".
+- `overdue_value` ← preferencial V.b + VI.b (totais de "b) Inadimplentes").
+- `repurchase_value` ← VII.d.2.
+- `acquisitions_value` ← VII.a.2.
+- `substitutions_value` ← VII.c.2.
+- `disposals_value` ← VII.b.2.
+- `guarantees_value` ← 7.1; `guarantees_pct_dc` calculado.
+- `scr_status` / `scr_value` ← seção 8.
+- `segment_breakdown` ← filhos diretos de II (apenas com valor ≠ 0).
+- `maturity_breakdown` ← V.a + VI.a buckets `Até 30`, `31 a 60`, …, `Acima de 1080`.
+- `overdue_breakdown` ← V.b + VI.b buckets 30/60/90/120/150/180/360/720/1080/+1080.
+- `assignors_breakdown` ← filhos de a.11 + b.11.
+- `investors_count` ← X.1.
 
-- Adiciona `src/styles/fidc-print.css` importado em `FidcDetailPage`:
-  - `@media print`: oculta `[data-app-sidebar]`, header global, botões marcados `data-print="hide"`; força fundo branco; `page-break-inside: avoid` em cards; `@page { size: A4; margin: 14mm }`.
-  - Adiciona `data-print-section` em cada bloco e cabeçalho com logo Butiá visível só na impressão.
-- Botão “Exportar Lâmina PDF” = `window.print()`. Menu dropdown com “Completo” (default) e “Resumido” (adiciona classe `print-summary` que oculta seções de Carteira de Crédito e Histórico secundário).
-- Não adiciona dependências; usa o diálogo nativo de impressão do navegador (salvar como PDF).
+**Campos novos em `raw_data`** (sem migration):
+- `cash_strict_value` ← I.1.
+- `cash_ampliado_components` ← objeto com `{ disponibilidades, valoresMobiliarios, tpf, cdb, compromissadas, outrosRF, cotasFIDC, warrants }`.
+- `total_assets`, `total_liabilities`.
+- `delinquency_30_plus_value`, `delinquency_60_plus_value`, `delinquency_90_plus_value` (e seus `_ratio`).
+- `maturity_buckets` (mesmo conteúdo de `maturity_breakdown`, formato `{ bucket, value }`).
+- `portfolio_by_segment` (idem).
+- `monthly_credit_rights_transactions` = `{ acquisitions:{qty,value}, disposals:{qty,value,book}, substitutions:{qty,value,book}, repurchases:{qty,value,book} }`.
+- `quota_monthly_returns` = lista `{ class_name, monthly_return }` da seção X.3.
+- `quota_flows` = lista `{ class_name, captacao_valor, captacao_qtd, resgate_valor, resgate_qtd, resgate_pendente_valor, resgate_pendente_qtd, amort_valor_cota, amort_valor_total }` da seção X.4.
+- `guarantees` = `{ valor: 7.1, pct_dc: 7.2 }`.
+- `scr` = `{ status, valor_devedores: 8.1, valor_operacoes: 8.2 }`.
 
-### Critério de aceite
+### 1.4 Cotas/classes (seção X.2)
 
-Todos os itens da especificação do usuário ficam atendidos. Métricas inexistentes aparecem como `N/D` via `NoDataChip` com tooltip — nunca zero. Subordinação só é exibida como métrica confiável quando `subordinated_calculation_status === 'ok'`; caso contrário aparece como "Inconsistente" e fica de fora dos alertas de crédito.
+Mantém leitura iterativa atual, mas:
+- Janela limitada a `[anchor("2) Descricao"), anchor("3) Rentabilidade"))`.
+- Após o parsing das classes, ler X.3 e fazer match por `norm(className)` para preencher `monthlyYieldPct`.
+- Idem X.4 para `subscriptionValue` / `redemptionValue` / `amortizationValue`.
+- `seniority_level` classificado por regex: `senior|sr` → senior; `mezanino|mz` → mezzanine; `subordinad|sub` → subordinated; `unica|monoclasse` → unique; senão `unknown`.
 
-### Ordem de execução
+### 1.5 Checklist expandido
 
-1. Migration (Fase 1.1 + 1.2) — uma única chamada `supabase--migration`.
-2. Após aprovação: parser + dialog + componentes + print CSS, em paralelo onde possível.
-3. Smoke test: rebuild + abrir a página de um FIDC com informe importado.
+Adicionar linhas: PL Médio, Caixa Estrito, Caixa Ampliado, Inadimplência 30/60/90/120, Garantias, SCR, Aquisições, Alienações, Substituições, com `section` apontando a âncora usada e `foundLabel` com o rótulo localizado.
 
-### Fora de escopo (confirmado)
+### 1.6 Validações
 
-- Sidebar, upload de posições, cadastro mestre — não tocados.
-- IA generativa no resumo de risco — usa apenas template.
-- Backend de geração de PDF server-side — apenas print do navegador.
+Mantém atual (Ativo−Passivo≈PL, II≈I.2.a+b, PL×cotas). Adiciona:
+- "Caixa Ampliado ≥ Caixa Estrito" — se não, `inconsistent`.
+- "Soma V.b ≈ overdue_value" — se diferença > 1%, `inconsistent`.
+
+---
+
+## Fase 2 — Consumo na lâmina
+
+Sem alterar a estrutura visual. Pequenos ajustes:
+
+- `FidcDetailPage.tsx` → card **Caixa/PL** continua usando `cash_value` (que agora é Ampliado). Tooltip do card explica "Caixa Ampliado = Disp. + Valores Mob. + TPF + CDB + Compromissadas + Outros RF + Cotas FIDC + Warrants".
+- `LaminateCharts.tsx` → painel **Inadimplência por Faixa**: adicionar séries `30+`, `60+`, `90+` lidas de `raw_data.delinquency_*_plus_ratio` quando presentes (mantém 30/60/90/120 individuais).
+- `CreditPortfolio.tsx` → bloco **Garantias** lê `raw_data.guarantees`; bloco **SCR** lê `raw_data.scr`; bloco **Fluxo de negócios** lê `raw_data.monthly_credit_rights_transactions` quando disponível (fallback nas colunas dedicadas).
+- `QuotasSection.tsx` → tabela "Cotas importadas" mostra colunas `Rent. mês`, `Captação`, `Resgate`, `Amortização` quando vierem.
+- Onde uma métrica resultar `null`, manter `NoDataInline` com `title="Não localizado no informe (seção <âncora>)"`.
+
+## Fase 3 — Smoke test
+
+Após edits, abrir uma página de FIDC com informe já importado e verificar console + render. Re-importar 1 mês para popular os novos campos do `raw_data` (avisar o usuário).
+
+---
+
+## Critérios de aceite (do usuário)
+
+- Caixa/PL usa Caixa Ampliado.
+- DC = I.2.a + I.2.b.
+- PL = IV.a.
+- PDD = |I.2.a.10| + |I.2.b.10|.
+- Atraso = V.b + VI.b (fallback I).
+- Inad. 30/60/90/120 = V.b.1-4 + VI.b.1-4.
+- Recompras = VII.d.2.
+- Cotistas = X.1.
+- Cotas = X.2.
+- Rent. = X.3.
+- Captação/Resgate/Amort = X.4.
+- Garantias = 7).
+- SCR = 8).
+- Nenhuma métrica ausente vira zero indevido — vira `N/D` com tooltip.
+- Checklist mostra a seção e o rótulo encontrado.
+
+## Fora de escopo
+
+- Upload de posições; Cadastro Mestre; sidebar; IA; nova migration.
