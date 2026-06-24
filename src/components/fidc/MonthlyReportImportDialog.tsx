@@ -186,6 +186,7 @@ export function MonthlyReportImportDialog({ open, onOpenChange, fidcId, fidcName
             overdueSource: m.overdueSource,
             fidc_name_in_file: parsed.fidcNameInFile,
             month_label: slice.label,
+            ...(m.rawExtras ?? {}),
           } as never,
         } as never;
 
