@@ -242,6 +242,65 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
   const rInvestors = rX >= 0 ? findRowContains(matrix, "numero de cotistas",
     rX, Math.min(matrix.length, rX + 60)) : -1;
 
+  // ---- Novos anchors (inadimplência por faixa, fluxo VII, garantias, SCR) ----
+  // V.b sub-faixas (1) ate 30, 2) 31-60, 3) 61-90, 4) 91-120
+  const findChildBucket = (parentRow: number, parentEnd: number, key: string): number =>
+    parentRow >= 0 ? findRowContains(matrix, key, parentRow + 1, parentEnd > 0 ? parentEnd : -1) : -1;
+  const vEnd = rVI > 0 ? rVI : (rVII > 0 ? rVII : -1);
+  const viEnd = rVII > 0 ? rVII : (rIX > 0 ? rIX : -1);
+  const rVb30  = findChildBucket(rVb, vEnd, "1) ate 30");
+  const rVb60  = findChildBucket(rVb, vEnd, "2) acima de 30");
+  const rVb90  = findChildBucket(rVb, vEnd, "3) acima de 60");
+  const rVb120 = findChildBucket(rVb, vEnd, "4) acima de 90");
+  const rVIb30  = findChildBucket(rVIb, viEnd, "1) ate 30");
+  const rVIb60  = findChildBucket(rVIb, viEnd, "2) acima de 30");
+  const rVIb90  = findChildBucket(rVIb, viEnd, "3) acima de 60");
+  const rVIb120 = findChildBucket(rVIb, viEnd, "4) acima de 90");
+
+  // VII fluxo: a) aquisicoes, b) substituicoes, c) alienacoes, d) recompras (já existe)
+  const viiEnd = rIX > 0 ? rIX : (rX > 0 ? rX : -1);
+  const rAcqA  = rVII >= 0 ? findRowContains(matrix, "a) aquisicoes", rVII, viiEnd) : -1;
+  const rAcqA2 = rAcqA >= 0 ? findRowContains(matrix, "a.2) valor", rAcqA, rAcqA + 10) : -1;
+  const rSubB  = rVII >= 0 ? findRowContains(matrix, "b) substituicoes", rVII, viiEnd) : -1;
+  const rSubB2 = rSubB >= 0 ? findRowContains(matrix, "b.2) valor", rSubB, rSubB + 10) : -1;
+  const rDisC  = rVII >= 0 ? findRowContains(matrix, "c) alienacoes", rVII, viiEnd) : -1;
+  const rDisC2 = rDisC >= 0 ? findRowContains(matrix, "c.2) valor", rDisC, rDisC + 10) : -1;
+
+  // Garantias (seção 7) e SCR (seção 8) — geralmente dentro de X
+  const xEnd = matrix.length;
+  const rGuar = rX >= 0 ? findRowContains(matrix, "7) garantias", rX, xEnd) : -1;
+  const rSCR  = rX >= 0 ? findRowContains(matrix, "scr", rX, xEnd) : -1;
+
+  // Helper: enumera filhos de uma seção (indent maior que o pai, até a próxima seção/indent menor)
+  function enumerateChildren(parentRow: number, parentEnd: number, minIndent = 1): { row: number; label: string }[] {
+    if (parentRow < 0) return [];
+    const out: { row: number; label: string }[] = [];
+    const end = parentEnd > 0 ? parentEnd : matrix.length;
+    const parentInd = indent(String(matrix[parentRow]?.[0] ?? ""));
+    for (let i = parentRow + 1; i < end; i++) {
+      const lbl = matrix[i]?.[0];
+      if (lbl == null || String(lbl).trim() === "") continue;
+      const raw = String(lbl);
+      const ind = indent(raw);
+      if (ind <= parentInd) break;
+      if (ind - parentInd >= minIndent) out.push({ row: i, label: raw.trim() });
+    }
+    return out;
+  }
+
+  // Carteira por segmento (II) — pega filhos diretos
+  const segmentChildren = enumerateChildren(rCarteira, rPassivo);
+  // Prazo de vencimento (V.a + VI.a)
+  const rVa  = rV  >= 0 ? findRowStartsWith(matrix, "a) Por Prazo de Vencimento", rV,  vEnd)  : -1;
+  const rVIa = rVI >= 0 ? findRowStartsWith(matrix, "a) Por Prazo de Vencimento", rVI, viEnd) : -1;
+  const maturityVa  = enumerateChildren(rVa,  rVb  > 0 ? rVb  : vEnd);
+  const maturityVIa = enumerateChildren(rVIa, rVIb > 0 ? rVIb : viEnd);
+  // Cedentes relevantes — sob rDcA / rDcB (a.11 / b.11)
+  const rA11 = rDcA >= 0 ? findRowContains(matrix, "a.11)", rDcA, rDcB > 0 ? rDcB : rPassivo) : -1;
+  const rB11 = rDcB >= 0 ? findRowContains(matrix, "b.11)", rDcB, rPassivo > 0 ? rPassivo : -1) : -1;
+  const assignorsA = enumerateChildren(rA11, rDcB > 0 ? rDcB : rPassivo);
+  const assignorsB = enumerateChildren(rB11, rPassivo);
+
   const labelAt = (rowIdx: number): string | null =>
     rowIdx >= 0 ? String(matrix[rowIdx]?.[0] ?? "").trim() : null;
 
@@ -269,7 +328,56 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
         overdueSource = "fallback_I";
       }
     }
+
+    const bucketSum = (a: number, b: number): number | null => {
+      const va = v(a); const vb = v(b);
+      if (va == null && vb == null) return null;
+      return (va ?? 0) + (vb ?? 0);
+    };
+    const overdue30  = bucketSum(rVb30,  rVIb30);
+    const overdue60  = bucketSum(rVb60,  rVIb60);
+    const overdue90  = bucketSum(rVb90,  rVIb90);
+    const overdue120 = bucketSum(rVb120, rVIb120);
+
     const investorsRaw = v(rInvestors);
+
+    const buildBreakdown = (children: { row: number; label: string }[]): BreakdownItem[] =>
+      children
+        .map((c) => ({ bucket: c.label, value: asNumber(matrix[c.row]?.[col]) }))
+        .filter((b): b is BreakdownItem => b.value != null && b.value !== 0);
+
+    // Maturity: somar V.a + VI.a por bucket label
+    const maturityMap = new Map<string, number>();
+    for (const src of [maturityVa, maturityVIa]) {
+      for (const c of src) {
+        const val = asNumber(matrix[c.row]?.[col]);
+        if (val == null) continue;
+        const key = c.label.replace(/^\d+\)\s*/, "").trim();
+        maturityMap.set(key, (maturityMap.get(key) ?? 0) + val);
+      }
+    }
+    const maturityBreakdown: BreakdownItem[] = Array.from(maturityMap.entries())
+      .map(([bucket, value]) => ({ bucket, value }))
+      .filter((b) => b.value !== 0);
+
+    // Overdue breakdown (V.b + VI.b sub-faixas)
+    const overdueBuckets: BreakdownItem[] = [];
+    if (overdue30  != null) overdueBuckets.push({ bucket: "Até 30 dias",       value: overdue30  });
+    if (overdue60  != null) overdueBuckets.push({ bucket: "31 a 60 dias",       value: overdue60  });
+    if (overdue90  != null) overdueBuckets.push({ bucket: "61 a 90 dias",       value: overdue90  });
+    if (overdue120 != null) overdueBuckets.push({ bucket: "91 a 120 dias",      value: overdue120 });
+
+    const assignors = [...assignorsA, ...assignorsB]
+      .map((c) => ({ bucket: c.label, value: asNumber(matrix[c.row]?.[col]) }))
+      .filter((b): b is BreakdownItem => b.value != null);
+
+    const guaranteesValue = rGuar >= 0 ? asNumber(matrix[rGuar]?.[col]) : null;
+    const scrRaw = rSCR >= 0 ? matrix[rSCR]?.[col] : null;
+    const scrValue = scrRaw != null ? asNumber(scrRaw) : null;
+    const scrStatus = rSCR >= 0
+      ? (scrValue != null ? "Informado" : (scrRaw != null ? String(scrRaw).trim() : "N/D"))
+      : null;
+
     return {
       navValue: v(rPLa),
       monthlyAverageNavValue: v(rPLb),
@@ -279,15 +387,30 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
       creditRightsBValue: dcB,
       overdueValue,
       overdueSource,
+      overdue30dValue: overdue30,
+      overdue60dValue: overdue60,
+      overdue90dValue: overdue90,
+      overdue120dValue: overdue120,
       pddValue,
       cashValue: v(rDisp),
       repurchaseValue: v(rRecD2),
+      acquisitionsValue: v(rAcqA2),
+      substitutionsValue: v(rSubB2),
+      disposalsValue: v(rDisC2),
+      guaranteesValue,
+      scrStatus,
+      scrValue,
       assetsTotal: v(rAtivo),
       liabilitiesTotal: v(rPassivo),
       segmentCarteiraTotal: v(rCarteira),
       investorsCount: investorsRaw != null ? Math.round(investorsRaw) : null,
+      segmentBreakdown: buildBreakdown(segmentChildren),
+      maturityBreakdown,
+      overdueBreakdown: overdueBuckets,
+      assignorsBreakdown: assignors,
     };
   };
+
 
   // Builder de cotas/classes por coluna
   const quotasForColumn = (col: number): ParsedQuotaClass[] => {
