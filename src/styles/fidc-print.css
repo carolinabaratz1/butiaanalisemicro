@@ -11,6 +11,7 @@
   /* Global app chrome — hide sidebar, top nav, action buttons */
   [data-app-sidebar],
   aside[data-sidebar],
+  aside.bg-sidebar,
   [data-print="hide"],
   .no-print {
     display: none !important;
