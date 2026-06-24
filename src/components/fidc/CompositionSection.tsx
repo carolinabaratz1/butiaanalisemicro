@@ -260,13 +260,92 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
       .map((p) => p.fidcId!),
   ).size;
 
-  // Diversificação
+  // Diversificação — Nº de FIDCs conta CNPJs únicos (não ISINs).
+  // Posições sem CNPJ no mestre são contadas em "sem cadastro" e expostas na validação.
   const div = {
-    fidcs: new Set(allPositions.map((p) => p.fidcId).filter(Boolean)).size,
+    fidcs: new Set(
+      allPositions.map((p) => (p.fidc?.cnpj || "").replace(/\D/g, "")).filter((c) => c.length > 0),
+    ).size,
     gestores: new Set(allPositions.map((p) => p.fidc?.manager).filter(Boolean)).size,
     admins: new Set(allPositions.map((p) => p.fidc?.administrator).filter(Boolean)).size,
-    setores: new Set(allPositions.map((p) => anbimaOf(p))).size,
+    setores: new Set(allPositions.map((p) => p.fidc?.sector).filter(Boolean)).size,
   };
+
+  // ===== Validação dos dados exibidos =====
+  type Check = { id: string; ok: boolean; label: string; detail?: string };
+  const validation: Check[] = useMemo(() => {
+    const checks: Check[] = [];
+    const unmapped = allPositions.filter((p) => !p.fidc);
+    checks.push({
+      id: "isin-mapeado",
+      ok: unmapped.length === 0,
+      label: "Todos os ISINs em carteira estão mapeados em COTAS/ISIN",
+      detail: unmapped.length === 0
+        ? `${allPositions.length} posições conferidas.`
+        : `${unmapped.length} posição(ões) sem cota cadastrada: ${
+            Array.from(new Set(unmapped.map((p) => p.isin || "—"))).slice(0, 5).join(", ")
+          }${unmapped.length > 5 ? " …" : ""}`,
+    });
+
+    const cnpjMissing = allPositions.filter((p) => p.fidc && !(p.fidc.cnpj || "").trim());
+    checks.push({
+      id: "cnpj",
+      ok: cnpjMissing.length === 0,
+      label: "Todos os FIDCs em carteira têm CNPJ no Cadastro Mestre",
+      detail: cnpjMissing.length === 0
+        ? `${div.fidcs} CNPJ(s) distinto(s) usados na contagem de diversificação.`
+        : `${cnpjMissing.length} posição(ões) com FIDC sem CNPJ: ${
+            Array.from(new Set(cnpjMissing.map((p) => p.fidc?.name || "—"))).slice(0, 5).join(", ")
+          }`,
+    });
+
+    const classMissing = allPositions.filter((p) => p.fidc && !(p.quota?.class_name || "").trim());
+    checks.push({
+      id: "classe",
+      ok: classMissing.length === 0,
+      label: "Todas as cotas têm Classe preenchida em COTAS/ISIN",
+      detail: classMissing.length === 0
+        ? "Classificação por Tipo de Cota usa o campo Classe."
+        : `${classMissing.length} cota(s) sem Classe: ${
+            Array.from(new Set(classMissing.map((p) => `${p.fidc?.name} · ${p.isin}`))).slice(0, 4).join(" | ")
+          }`,
+    });
+
+    const sectorMissing = allPositions.filter((p) => p.fidc && !(p.fidc.sector || "").trim());
+    checks.push({
+      id: "setor",
+      ok: sectorMissing.length === 0,
+      label: "Todos os FIDCs têm Setor no Cadastro Mestre",
+      detail: sectorMissing.length === 0
+        ? "Agrupamento por Tipo ANBIMA / Setor usa o campo Setor do mestre."
+        : `${sectorMissing.length} posição(ões) sem setor: ${
+            Array.from(new Set(sectorMissing.map((p) => p.fidc?.name || "—"))).slice(0, 5).join(", ")
+          }`,
+    });
+
+    const cnpjsPorIsin = new Map<string, Set<string>>();
+    allPositions.forEach((p) => {
+      const isin = p.isin || "";
+      const cnpj = (p.fidc?.cnpj || "").replace(/\D/g, "");
+      if (!isin || !cnpj) return;
+      if (!cnpjsPorIsin.has(isin)) cnpjsPorIsin.set(isin, new Set());
+      cnpjsPorIsin.get(isin)!.add(cnpj);
+    });
+    const isinAmbiguos = Array.from(cnpjsPorIsin.entries()).filter(([, s]) => s.size > 1);
+    checks.push({
+      id: "isin-unico-cnpj",
+      ok: isinAmbiguos.length === 0,
+      label: "Cada ISIN aponta para um único CNPJ de FIDC",
+      detail: isinAmbiguos.length === 0
+        ? "Sem ISIN duplicado entre FIDCs diferentes."
+        : `${isinAmbiguos.length} ISIN(s) ambíguo(s): ${isinAmbiguos.slice(0, 3).map(([i]) => i).join(", ")}`,
+    });
+
+    return checks;
+  }, [allPositions, div.fidcs]);
+
+  const validationOkCount = validation.filter((c) => c.ok).length;
+
 
   return (
     <div className="px-6 pb-6">
