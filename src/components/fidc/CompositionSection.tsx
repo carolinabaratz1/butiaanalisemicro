@@ -43,13 +43,18 @@ const GROUPING_OPTS: { id: Grouping; label: string }[] = [
   { id: "informe",  label: "Por Status do Informe" },
 ];
 
-const classifyCotaTipo = (qt: string | null | undefined, fidcQuotasCount: number): string => {
-  const q = (qt || "").toLowerCase();
-  if (q.includes("senior") || q.includes("sênior") || /\bsr\b/.test(q)) return "Sênior";
-  if (q.includes("mezanino") || q.includes("mezzanine") || /\bmz\b/.test(q)) return "Mezanino";
-  if (q.includes("subord") || /\bsub\b/.test(q)) return "Subordinada";
-  if (fidcQuotasCount <= 1) return "Única / Monoclasse";
-  return "Não identificado";
+// Tipo de cota = Classe cadastrada em COTAS/ISIN (fidc_quota_classes.class_name).
+// Fallback para nomes internos/CVM e, por último, quota_type bruto.
+const classifyCotaTipo = (p: FidcPosition): string => {
+  const cls = (p.quota?.class_name || "").trim();
+  if (cls) return cls;
+  const internal = (p.quota?.internal_quota_name || "").trim();
+  if (internal) return internal;
+  const cvm = (p.quota?.cvm_quota_name || "").trim();
+  if (cvm) return cvm;
+  const qt = (p.quota?.quota_type || "").trim();
+  if (qt) return qt;
+  return "Não cadastrado";
 };
 
 const informeStatus = (report: MonthlyReportRow | null): { label: string; tone: "ok" | "warn" | "crit" | "muted" } => {
@@ -71,14 +76,15 @@ const ratingOf = (p: FidcPosition): string => {
   return "Sem rating";
 };
 
+// Setor / Tipo ANBIMA vindo do Cadastro Mestre (fidcs).
+// Prioriza o campo "setor" do mestre — não inventar a partir de strategy/fidc_type.
 const anbimaOf = (p: FidcPosition): string => {
   const f = p.fidc;
-  return (
-    (f?.fidc_type && f.fidc_type.trim()) ||
-    (f?.strategy && f.strategy.trim()) ||
-    (f?.sector && f.sector.trim()) ||
-    "Não classificado"
-  );
+  const s = (f?.sector || "").trim();
+  if (s) return s;
+  const t = (f?.fidc_type || "").trim();
+  if (t) return t;
+  return "Não classificado";
 };
 
 type Bucket = {
