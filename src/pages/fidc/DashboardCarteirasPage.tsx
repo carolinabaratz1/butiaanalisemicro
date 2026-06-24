@@ -191,6 +191,9 @@ export default function DashboardCarteirasPage() {
         </div>
       </div>
 
+      {/* Composição da Exposição em FIDCs */}
+      <CompositionSection portfolioSummaries={portfolioSummaries} latestReportFor={latestReportFor} />
+
       {/* Exposição por carteira (barras) */}
       <div className="px-6 pb-4">
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2">
