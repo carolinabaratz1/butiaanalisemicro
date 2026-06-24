@@ -555,7 +555,7 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
           </div>
           <div className={cn(
             "text-[11px] num",
-            validationOkCount === validation.length ? "text-risk-success" : "text-risk-warning",
+            validationOkCount === validation.length ? "text-risk-normal" : "text-risk-warning",
           )}>
             {validationOkCount}/{validation.length} checagens OK
           </div>
@@ -564,7 +564,7 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
           {validation.map((c) => (
             <li key={c.id} className="flex items-start gap-2 text-[12px]">
               {c.ok
-                ? <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-risk-success shrink-0" />
+                ? <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-risk-normal shrink-0" />
                 : <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-risk-warning shrink-0" />}
               <div className="flex-1">
                 <div className="text-foreground">{c.label}</div>
@@ -640,7 +640,7 @@ function SpotCard({ title, primary, subRows = [], tone, link }: {
       <div className="text-[10.5px] uppercase tracking-wider text-muted-foreground mb-1">{title}</div>
       <div className={cn("text-[15px] font-semibold truncate",
         tone === "warn" && "text-risk-warning",
-        tone === "crit" && "text-risk-danger",
+        tone === "crit" && "text-risk-critical",
       )}>
         {primary}
       </div>
