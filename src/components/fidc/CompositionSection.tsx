@@ -573,8 +573,7 @@ function PortfolioCompositionCard({ summary, grouping, quotasPerFidc, latestRepo
       }
       case "anbima":   add(anbimaOf(p), anbimaOf(p), p.value); break;
       case "cotaTipo": {
-        const cnt = p.fidcId ? (quotasPerFidc.get(p.fidcId)?.size ?? 0) : 0;
-        const lbl = classifyCotaTipo(p.quota?.quota_type, cnt);
+        const lbl = classifyCotaTipo(p);
         add(lbl, lbl, p.value); break;
       }
       case "gestor":   add(p.fidc?.manager || "Não informado", p.fidc?.manager || "Não informado", p.value); break;
