@@ -539,12 +539,42 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
           title="Diversificação"
           primary={`${div.fidcs} FIDCs`}
           subRows={[
+            { label: "Contagem por", value: "CNPJ único" },
             { label: "Gestores", value: String(div.gestores) },
             { label: "Administradores", value: String(div.admins) },
-            { label: "Setores / Tipos", value: String(div.setores) },
+            { label: "Setores (mestre)", value: String(div.setores) },
           ]}
         />
       </div>
+
+      {/* Validação dos dados — checagens contra Cadastro Mestre / COTAS-ISIN */}
+      <div className="mt-3 bg-card border border-border p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Validação dos dados — Cadastro Mestre & COTAS/ISIN
+          </div>
+          <div className={cn(
+            "text-[11px] num",
+            validationOkCount === validation.length ? "text-risk-success" : "text-risk-warning",
+          )}>
+            {validationOkCount}/{validation.length} checagens OK
+          </div>
+        </div>
+        <ul className="space-y-1.5">
+          {validation.map((c) => (
+            <li key={c.id} className="flex items-start gap-2 text-[12px]">
+              {c.ok
+                ? <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-risk-success shrink-0" />
+                : <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-risk-warning shrink-0" />}
+              <div className="flex-1">
+                <div className="text-foreground">{c.label}</div>
+                {c.detail && <div className="text-[11px] text-muted-foreground">{c.detail}</div>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
 
       {/* Composição por carteira */}
       <div className="mt-4">
