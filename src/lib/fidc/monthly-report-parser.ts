@@ -443,20 +443,30 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
         continue;
       }
 
-      const isCotaField   = n === "cota" || n.startsWith("cota ");
-      const isPLField     = n.startsWith("patrimonio liquido");
-      const isQtdField    = n.startsWith("quantidade de cotas");
-      const isRatingField = n === "rating" || n.startsWith("rating ");
-      const isAmortField  = n.startsWith("amortizacao");
-      const isField = isCotaField || isPLField || isQtdField || isRatingField || isAmortField;
+      const isCotaField     = n === "cota" || n.startsWith("cota ");
+      const isPLField       = n.startsWith("patrimonio liquido");
+      const isQtdField      = n.startsWith("quantidade de cotas");
+      const isRatingField   = n === "rating" || n.startsWith("rating ");
+      const isAmortField    = n.startsWith("amortizacao");
+      const isYieldField    = n.startsWith("rentabilidade") || n.startsWith("rentab.");
+      const isSubscField    = n.startsWith("captacao") || n.startsWith("subscricao") || n.startsWith("aplicacao");
+      const isRedempField   = n.startsWith("resgate");
+      const isField = isCotaField || isPLField || isQtdField || isRatingField || isAmortField ||
+                      isYieldField || isSubscField || isRedempField;
 
       if (isField && currentClass) {
-        if (isAmortField) continue;
         const val = asNumber(row[col]);
         if (isCotaField) currentClass.quotaValue = val;
         else if (isPLField) currentClass.navValue = val;
         else if (isQtdField) currentClass.numberOfQuotas = val;
         else if (isRatingField) currentClass.rating = row[col] != null ? String(row[col]).trim() : null;
+        else if (isAmortField) currentClass.amortizationValue = val;
+        else if (isYieldField) {
+          // valores podem vir como "1,23%" → asNumber retorna 1.23; normaliza para 0.0123
+          currentClass.monthlyYieldPct = val != null && Math.abs(val) > 1 ? val / 100 : val;
+        }
+        else if (isSubscField) currentClass.subscriptionValue = val;
+        else if (isRedempField) currentClass.redemptionValue = val;
         continue;
       }
 
@@ -469,6 +479,7 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
           quotaType: sub.quotaType,
           seniorityLevel: sub.seniority,
           navValue: null, quotaValue: null, numberOfQuotas: null, rating: null,
+          monthlyYieldPct: null, subscriptionValue: null, redemptionValue: null, amortizationValue: null,
         };
         awaitingName = false;
         continue;
@@ -484,10 +495,12 @@ export async function parseMonthlyReportFile(file: File): Promise<ParsedMonthlyR
             quotaType: tt.quotaType,
             seniorityLevel: tt.seniority,
             navValue: null, quotaValue: null, numberOfQuotas: null, rating: null,
+            monthlyYieldPct: null, subscriptionValue: null, redemptionValue: null, amortizationValue: null,
           };
         }
       }
     }
+
     pushCurrent();
     return list;
   };
