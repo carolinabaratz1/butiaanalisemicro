@@ -284,3 +284,19 @@ function Select<T extends string>({ label, value, onChange, options }: {
     </label>
   );
 }
+
+function ReportStatusBadge({ status }: { status: string }) {
+  const toneCls: Record<string, string> = {
+    "Completo CVM":         "bg-emerald-500/15 text-emerald-700",
+    "Parcial CVM":          "bg-amber-500/15 text-amber-700",
+    "CVM + Manual":         "bg-amber-500/15 text-amber-700",
+    "Manual":               "bg-amber-500/15 text-amber-700",
+    "Erro de validação":    "bg-red-500/15 text-red-700",
+    "Ausente":              "bg-muted/40 text-muted-foreground",
+  };
+  return (
+    <span className={cn("inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10.5px]", toneCls[status] ?? "bg-muted/40 text-muted-foreground")}>
+      {status}
+    </span>
+  );
+}
