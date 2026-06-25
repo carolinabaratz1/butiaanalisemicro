@@ -97,10 +97,13 @@ function classifyTab(lower: string): string | null {
   if (/_tab_x[_.]?1[_.]/.test(lower)) return "X1";
   if (/_tab_x[_.]?2[_.]/.test(lower)) return "X2";
   if (/_tab_x[_.]?3[_.]/.test(lower)) return "X3";
+  if (/_tab_x[_.]?4[_.]/.test(lower)) return "X4";
   if (/_tab_vii[_.]/.test(lower)) return "VII";
   if (/_tab_vi[_.]/.test(lower)) return "VI";
   if (/_tab_v[_.]/.test(lower)) return "V";
   if (/_tab_iv[_.]/.test(lower)) return "IV";
+  if (/_tab_iii[_.]/.test(lower)) return "III";
+  if (/_tab_ii[_.]/.test(lower)) return "II";
   if (/_tab_i[_.]/.test(lower)) return "I";
   return null;
 }
