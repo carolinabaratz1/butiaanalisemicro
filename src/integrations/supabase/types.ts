@@ -670,6 +670,140 @@ export type Database = {
           },
         ]
       }
+      cvm_data_dictionary: {
+        Row: {
+          column_name: string
+          created_at: string
+          description: string | null
+          expected_type: string | null
+          id: string
+          loaded_at: string
+          source_meta_file: string | null
+          table_name: string
+          updated_at: string
+        }
+        Insert: {
+          column_name: string
+          created_at?: string
+          description?: string | null
+          expected_type?: string | null
+          id?: string
+          loaded_at?: string
+          source_meta_file?: string | null
+          table_name: string
+          updated_at?: string
+        }
+        Update: {
+          column_name?: string
+          created_at?: string
+          description?: string | null
+          expected_type?: string | null
+          id?: string
+          loaded_at?: string
+          source_meta_file?: string | null
+          table_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cvm_fidc_field_mapping: {
+        Row: {
+          composite_rule: string | null
+          created_at: string
+          fallback_rule: string | null
+          id: string
+          is_required: boolean
+          metric_name: string
+          notes: string | null
+          source_column: string | null
+          source_file_pattern: string
+          transformation: string | null
+          updated_at: string
+        }
+        Insert: {
+          composite_rule?: string | null
+          created_at?: string
+          fallback_rule?: string | null
+          id?: string
+          is_required?: boolean
+          metric_name: string
+          notes?: string | null
+          source_column?: string | null
+          source_file_pattern: string
+          transformation?: string | null
+          updated_at?: string
+        }
+        Update: {
+          composite_rule?: string | null
+          created_at?: string
+          fallback_rule?: string | null
+          id?: string
+          is_required?: boolean
+          metric_name?: string
+          notes?: string | null
+          source_column?: string | null
+          source_file_pattern?: string
+          transformation?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cvm_monthly_import_staging: {
+        Row: {
+          cnpj: string
+          created_at: string
+          extracted_metrics: Json
+          extraction_status: string
+          fidc_id: string | null
+          id: string
+          imported_at: string
+          missing_metrics: string[]
+          raw_rows_by_file: Json
+          reference_month: string
+          source_url: string | null
+          updated_at: string
+          validation_summary: Json
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          extracted_metrics?: Json
+          extraction_status?: string
+          fidc_id?: string | null
+          id?: string
+          imported_at?: string
+          missing_metrics?: string[]
+          raw_rows_by_file?: Json
+          reference_month: string
+          source_url?: string | null
+          updated_at?: string
+          validation_summary?: Json
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          extracted_metrics?: Json
+          extraction_status?: string
+          fidc_id?: string | null
+          id?: string
+          imported_at?: string
+          missing_metrics?: string[]
+          raw_rows_by_file?: Json
+          reference_month?: string
+          source_url?: string | null
+          updated_at?: string
+          validation_summary?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cvm_monthly_import_staging_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       emissoes: {
         Row: {
           cnpj_emissor: string
