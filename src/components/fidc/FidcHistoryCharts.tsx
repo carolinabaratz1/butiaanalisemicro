@@ -40,7 +40,6 @@ function moneyTickFormatter(values: (number | null)[]) {
 }
 
 const pctTickFormatter = (v: number) => `${(v * 100).toFixed(1)}%`;
-const intTickFormatter = (v: number) => Number(v).toLocaleString("pt-BR");
 
 export function FidcHistoryCharts({ history }: { history: Row[] }) {
   const data = useMemo(() => {
