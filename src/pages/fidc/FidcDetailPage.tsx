@@ -131,6 +131,22 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
+  // Phase 5 — segmentos detalhados (TAB II) para o mês corrente
+  const { data: segmentRows = [] } = useQuery({
+    queryKey: ["fidc-monthly-segments", id, latestReport?.reference_month ?? null],
+    queryFn: async () => {
+      const ref = latestReport?.reference_month as string | undefined;
+      if (!ref) return [];
+      const { data, error } = await supabase
+        .from("fidc_monthly_segments")
+        .select("segment_group, segment_name, value, pct_of_segment_portfolio")
+        .eq("fidc_id", id).eq("reference_month", ref);
+      if (error) throw error;
+      return (data ?? []) as Array<{ segment_group: string; segment_name: string; value: number | null; pct_of_segment_portfolio: number | null }>;
+    },
+    enabled: !!id && !!latestReport?.reference_month,
+  });
+
   useEffect(() => () => {
     document.body.classList.remove("print-summary");
   }, []);
@@ -387,19 +403,104 @@ export default function FidcDetailPage() {
         </div>
       </section>
 
+      {/* BALANÇO, NEGÓCIOS E FLUXO DE COTISTAS (Phase 5 — CVM) */}
+      {latestReport && (() => {
+        const r = latestReport;
+        const n = (k: string) => r?.[k] != null ? Number(r[k]) : null;
+        const items: Array<{ label: string; value: string; hint?: string }> = [];
+        const fmtBRL = (v: number | null) => v == null ? "—" : BRL(v, { compact: true });
+        const fmtNum = (v: number | null) => v == null ? "—" : v.toLocaleString("pt-BR");
+        const seg = String(r?.main_segment ?? "").trim();
+        const segPct = n("main_segment_pct");
+        items.push({ label: "Ativo total (I)", value: fmtBRL(n("total_assets")) });
+        items.push({ label: "Passivo total (III)", value: fmtBRL(n("total_liabilities")) });
+        items.push({ label: "PL médio (IV.b)", value: fmtBRL(n("avg_nav_value")) });
+        items.push({ label: "Caixa estrito (I.1)", value: fmtBRL(n("cash_strict_value")) });
+        items.push({ label: "Subscrições (X.4)", value: fmtBRL(n("total_subscription_value")) });
+        items.push({ label: "Resgates (X.4)", value: fmtBRL(n("total_redemption_value")) });
+        items.push({ label: "Amortizações (X.4)", value: fmtBRL(n("total_amortization_value")) });
+        items.push({ label: "Fluxo líquido cotistas", value: fmtBRL(n("net_investor_flow_value")), hint: "Subscrições − Resgates − Amortizações" });
+        items.push({ label: "Segmento principal", value: seg || "—", hint: segPct != null ? `${PCT(segPct, 1)} da carteira` : undefined });
+        if (!items.some((i) => i.value !== "—")) return null;
+        return (
+          <section className="px-6 pb-4" data-print-section>
+            <div className="bg-card border border-border">
+              <div className="section-title px-4 pt-3">Balanço, Negócios e Fluxo de Cotistas</div>
+              <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 text-[12px]">
+                {items.map((it, i) => (
+                  <div key={i} className="border border-border px-2.5 py-2">
+                    <div className="text-[10.5px] text-muted-foreground">{it.label}</div>
+                    <div className="text-[14px] font-semibold num mt-0.5">{it.value}</div>
+                    {it.hint && <div className="text-[10px] text-muted-foreground mt-0.5">{it.hint}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
       {/* CARTEIRA DE CRÉDITO */}
       <section className="px-6 pb-4" data-print-summary="hide">
-        <CreditPortfolio
-          segments={(latestReport?.segment_breakdown as { bucket: string; value: number }[] | null) ?? null}
-          maturity={(latestReport?.maturity_breakdown as { bucket: string; value: number }[] | null) ?? null}
-          overdueByBucket={(latestReport?.overdue_breakdown as { bucket: string; value: number }[] | null) ?? null}
-          assignors={(latestReport?.assignors_breakdown as { bucket: string; value: number }[] | null) ?? null}
-          guaranteesValue={latestReport?.guarantees_value != null ? Number(latestReport.guarantees_value) : null}
-          guaranteesPctDc={latestReport?.guarantees_pct_dc != null ? Number(latestReport.guarantees_pct_dc) : null}
-          scrStatus={latestReport?.scr_status ? String(latestReport.scr_status) : null}
-          scrValue={latestReport?.scr_value != null ? Number(latestReport.scr_value) : null}
-          creditRightsValue={latestReport?.credit_rights_value != null ? Number(latestReport.credit_rights_value) : null}
-        />
+        {(() => {
+          // Phase 5 — segmentos vindos da TAB II; fallback ao breakdown legado no raw_data
+          const segmentsFromTable = segmentRows
+            .filter((s) => s.segment_group === "main" && (s.value ?? 0) > 0)
+            .map((s) => ({ bucket: s.segment_name, value: Number(s.value ?? 0) }));
+          const segments = segmentsFromTable.length
+            ? segmentsFromTable
+            : ((latestReport?.segment_breakdown as { bucket: string; value: number }[] | null) ?? null);
+
+          // Maturidade consolidada V+VI (colunas dedicadas)
+          const r = latestReport ?? {};
+          const num = (k: string) => r?.[k] != null ? Number(r[k]) : null;
+          const matBuckets: Array<{ bucket: string; value: number }> = [
+            ["0-30d", "maturity_0_30_value"],
+            ["31-60d", "maturity_31_60_value"],
+            ["61-90d", "maturity_61_90_value"],
+            ["91-120d", "maturity_91_120_value"],
+            ["121-150d", "maturity_121_150_value"],
+            ["151-180d", "maturity_151_180_value"],
+            ["181-360d", "maturity_181_360_value"],
+            ["361-720d", "maturity_361_720_value"],
+            ["721-1080d", "maturity_721_1080_value"],
+            ["acima 1080d", "maturity_over_1080_value"],
+          ].map(([b, k]) => ({ bucket: b, value: num(k) ?? 0 })).filter((x) => x.value > 0);
+          const maturity = matBuckets.length
+            ? matBuckets
+            : ((latestReport?.maturity_breakdown as { bucket: string; value: number }[] | null) ?? null);
+
+          // Inadimplência por faixa
+          const delBuckets: Array<{ bucket: string; value: number }> = [
+            ["0-30d", "delinquency_0_30_value"],
+            ["31-60d", "delinquency_31_60_value"],
+            ["61-90d", "delinquency_61_90_value"],
+            ["91-120d", "delinquency_91_120_value"],
+            ["121-150d", "delinquency_121_150_value"],
+            ["151-180d", "delinquency_151_180_value"],
+            ["181-360d", "delinquency_181_360_value"],
+            ["361-720d", "delinquency_361_720_value"],
+            ["721-1080d", "delinquency_721_1080_value"],
+            ["acima 1080d", "delinquency_over_1080_value"],
+          ].map(([b, k]) => ({ bucket: b, value: num(k) ?? 0 })).filter((x) => x.value > 0);
+          const overdueByBucket = delBuckets.length
+            ? delBuckets
+            : ((latestReport?.overdue_breakdown as { bucket: string; value: number }[] | null) ?? null);
+
+          return (
+            <CreditPortfolio
+              segments={segments}
+              maturity={maturity}
+              overdueByBucket={overdueByBucket}
+              assignors={(latestReport?.assignors_breakdown as { bucket: string; value: number }[] | null) ?? null}
+              guaranteesValue={latestReport?.guarantees_value != null ? Number(latestReport.guarantees_value) : null}
+              guaranteesPctDc={latestReport?.guarantees_pct_dc != null ? Number(latestReport.guarantees_pct_dc) : null}
+              scrStatus={latestReport?.scr_status ? String(latestReport.scr_status) : null}
+              scrValue={latestReport?.scr_value != null ? Number(latestReport.scr_value) : null}
+              creditRightsValue={latestReport?.credit_rights_value != null ? Number(latestReport.credit_rights_value) : null}
+            />
+          );
+        })()}
       </section>
 
       {/* COTAS, SUBORDINAÇÃO E VALIDAÇÕES */}

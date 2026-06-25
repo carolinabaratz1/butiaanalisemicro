@@ -55,6 +55,18 @@ export type MonthlyReportRow = {
   subordinated_calculation_status: string | null;
   investors_count: number | null;
   is_current_version: boolean;
+  // Phase 5 — campos enriquecidos via Dados Abertos CVM
+  main_segment: string | null;
+  main_segment_pct: number | null;
+  total_assets: number | null;
+  total_liabilities: number | null;
+  avg_nav_value: number | null;
+  cash_strict_value: number | null;
+  total_subscription_value: number | null;
+  total_redemption_value: number | null;
+  total_amortization_value: number | null;
+  net_investor_flow_value: number | null;
+  gross_investor_flow_value: number | null;
 };
 
 export type PosicaoRow = {
@@ -210,7 +222,7 @@ export function useFidcMonitorData() {
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
         .select(
-          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version",
+          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version, main_segment, main_segment_pct, total_assets, total_liabilities, avg_nav_value, cash_strict_value, total_subscription_value, total_redemption_value, total_amortization_value, net_investor_flow_value, gross_investor_flow_value",
         )
         .eq("is_current_version", true)
         .order("reference_month", { ascending: false });
