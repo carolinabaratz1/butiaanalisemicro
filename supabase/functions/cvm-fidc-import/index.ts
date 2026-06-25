@@ -339,13 +339,19 @@ function extractMetrics(buf: FidcBuffer, mappings: MappingRow[], filesIndex: Map
       const qt = parseBR(rawQt);
       const vl = parseBR(rawVl);
       const pl = (qt != null && vl != null) ? qt * vl : null;
-      // quota_type
-      const lower = name.toLowerCase();
+      // quota_type — normalização forte (lower + strip acentos + colapsa espaços + remove pipes)
+      const norm = name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/\|/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       let type = "unknown";
-      if (/s[eê]nior/.test(lower)) type = "senior";
-      else if (/mezanino/.test(lower)) type = "mezzanine";
-      else if (/subordinad/.test(lower)) type = "subordinated";
-      else if (/[uú]nica/.test(lower)) type = "unique";
+      if (!norm) type = "unknown";
+      else if (/\bsenior\b|\bsr\b/.test(norm)) type = "senior";
+      else if (/\bmezanino\b|\bmezzanine\b|\bmez\b/.test(norm)) type = "mezzanine";
+      else if (/\bsubordinad[ao]\b|\bsub\b/.test(norm)) type = "subordinated";
+      else if (/\bunica\b|\bunico\b|\bclasse unica\b/.test(norm)) type = "unique";
       buf.classes.push({
         name, normalizedName: normalizeName(name), type,
         pl, quotaValue: vl, numberOfQuotas: qt,
