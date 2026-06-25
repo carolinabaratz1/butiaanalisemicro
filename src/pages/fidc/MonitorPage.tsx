@@ -237,7 +237,7 @@ export default function MonitorPage() {
               );
             })}
             {!rows.length && (
-              <tr><td colSpan={18} className="py-12 text-center text-muted-foreground">Nenhuma posição em FIDC encontrada para esta carteira.</td></tr>
+              <tr><td colSpan={19} className="py-12 text-center text-muted-foreground">Nenhuma posição em FIDC encontrada para esta carteira.</td></tr>
             )}
           </tbody>
         </table>
