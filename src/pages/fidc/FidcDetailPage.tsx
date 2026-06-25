@@ -487,11 +487,20 @@ export default function FidcDetailPage() {
             ? delBuckets
             : ((latestReport?.overdue_breakdown as { bucket: string; value: number }[] | null) ?? null);
 
+          const overdueHeadline = latestReport?.overdue_value != null ? Number(latestReport.overdue_value) : null;
+          const overdueSource = latestReport?.overdue_source ? String(latestReport.overdue_source) : null;
+          const coverageStatus = latestReport?.overdue_bucket_coverage_status ? String(latestReport.overdue_bucket_coverage_status) : null;
+          const unbucketed = latestReport?.delinquency_unbucketed_value != null ? Number(latestReport.delinquency_unbucketed_value) : 0;
+
           return (
             <CreditPortfolio
               segments={segments}
               maturity={maturity}
               overdueByBucket={overdueByBucket}
+              overdueHeadlineValue={overdueHeadline}
+              overdueSource={overdueSource}
+              overdueBucketCoverageStatus={coverageStatus}
+              delinquencyUnbucketedValue={unbucketed}
               assignors={(latestReport?.assignors_breakdown as { bucket: string; value: number }[] | null) ?? null}
               guaranteesValue={latestReport?.guarantees_value != null ? Number(latestReport.guarantees_value) : null}
               guaranteesPctDc={latestReport?.guarantees_pct_dc != null ? Number(latestReport.guarantees_pct_dc) : null}
