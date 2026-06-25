@@ -216,6 +216,7 @@ export default function MonitorPage() {
                       </div>
                     )}
                   </Td>
+                  <Td>{r.fidc ? <ReportStatusBadge status={reportSourceStatusFor(r.fidc.id)} /> : <span className="text-muted-foreground">—</span>}</Td>
                   <Td mono>{r.fidc?.cnpj ? formatCNPJ(r.fidc.cnpj) : "—"}</Td>
                   <Td mono className={cn("text-muted-foreground", isUnmapped && "text-risk-critical")}>{r.isin || "—"}</Td>
                   <Td>{r.quota?.class_name || r.quota?.internal_quota_name || <span className="text-muted-foreground">—</span>}</Td>
