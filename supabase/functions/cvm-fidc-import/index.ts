@@ -615,10 +615,56 @@ Deno.serve(async (req) => {
       } else if (missing.length) status = "parcial";
       if (diffPct != null && diffPct > 0.05) status = "validacao_critica";
 
+      // === TAB II — main segment & validação ===
+      const mainSegs = buf.segments.filter((s) => s.level === 1).sort((a, b) => b.value - a.value);
+      const subSegs = buf.segments.filter((s) => s.level === 2);
+      const main = mainSegs[0];
+      const segmentTotal = buf.segmentTotal;
+      const mainSegmentPct = main && segmentTotal && segmentTotal > 0 ? main.value / segmentTotal : null;
+      // Validação: soma dos principais vs TAB_II_VL_CARTEIRA
+      const sumMain = mainSegs.reduce((s, x) => s + x.value, 0);
+      let segValidation = "ok";
+      if (segmentTotal == null) segValidation = "missing";
+      else if (segmentTotal > 0 && Math.abs(sumMain - segmentTotal) / segmentTotal > 0.01) segValidation = "alert";
+
+      // === TAB X_4 — totais consolidados de fluxos ===
+      const sumFlow = (k: keyof QuotaFlowItem) =>
+        buf.classes.reduce((s, c) => s + ((c.flows?.[k] as number) ?? 0), 0);
+      const totalSub = sumFlow("subscription_value");
+      const totalRed = sumFlow("redemption_value");
+      const totalReqRed = sumFlow("requested_redemption_value");
+      const totalAmort = sumFlow("amortization_value");
+      const netFlow = totalSub - totalRed - totalAmort;
+      const grossFlow = totalSub + totalRed + totalAmort;
+      // Atualiza fluxos por classe net/gross
+      for (const c of buf.classes) {
+        if (!c.flows) continue;
+        const s = (c.flows.subscription_value ?? 0);
+        const r = (c.flows.redemption_value ?? 0);
+        const a = (c.flows.amortization_value ?? 0);
+        (c as ClassRow & { netFlow?: number; grossFlow?: number }).netFlow = s - r - a;
+        (c as ClassRow & { netFlow?: number; grossFlow?: number }).grossFlow = s + r + a;
+      }
+
       return {
         cnpj: buf.cnpj, name: buf.name ?? "", referenceMonth: referenceISO,
         metrics: buf.metrics,
         classes: buf.classes,
+        segments: buf.segments,
+        segmentTotal,
+        mainSegment: main?.name ?? null,
+        mainSegmentValue: main?.value ?? null,
+        mainSegmentPct,
+        segmentValidationStatus: segValidation,
+        subSegmentsCount: subSegs.length,
+        flows: {
+          totalSubscriptionValue: totalSub,
+          totalRedemptionValue: totalRed,
+          totalRequestedRedemptionValue: totalReqRed,
+          totalAmortizationValue: totalAmort,
+          netInvestorFlowValue: netFlow,
+          grossInvestorFlowValue: grossFlow,
+        },
         rowsByFile: Object.fromEntries(Object.entries(buf.rowsByFile).map(([k, v]) => [k, v.slice(0, 5)])),
         pl, creditRights: dc,
         creditRightsGross: value("credit_rights_gross_value"),
