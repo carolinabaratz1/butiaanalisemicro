@@ -23,7 +23,7 @@ const fmtDate = (s: string | null | undefined) => {
 };
 
 export default function DashboardCarteirasPage() {
-  const { isLoading, portfolioSummaries, fidcs, latestReportFor, fidcsWithReportCount } = useFidcMonitorData();
+  const { isLoading, portfolioSummaries, fidcs, latestReportFor, reportSourceStatusFor, fidcsWithReportCount } = useFidcMonitorData();
 
   const consolidated = useMemo(() => {
     const navTotal = portfolioSummaries.reduce((s, p) => s + p.nav, 0);
