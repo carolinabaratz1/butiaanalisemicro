@@ -39,6 +39,16 @@ type Item = {
   // Atrasos
   overdueTotal: number | null;
   overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
+  overdueExistingCreditRightsValue?: number | null;
+  defaultedCreditRightsValue?: number | null;
+  overdueInstallmentsValue?: number | null;
+  overdueValueTabI?: number | null;
+  overdueValueTabVVi?: number | null;
+  overdueSource?: string | null;
+  overdueBucketCoverageStatus?: string | null;
+  delinquencyUnbucketedValue?: number | null;
+  overdueToCreditRightsRatio?: number | null;
+  pddToOverdueRatio?: number | null;
   // Aquisições / negócios
   repurchase: number | null;
   acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
