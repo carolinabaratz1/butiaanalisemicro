@@ -20,7 +20,7 @@ export default function MonitorPage() {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
   const [cvmOpen, setCvmOpen] = useState(false);
 
-  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, fidcsWithReportCount } = useFidcMonitorData();
+  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor, fidcsWithReportCount } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
 
   const rows = useMemo(() => {
@@ -175,6 +175,7 @@ export default function MonitorPage() {
             <tr>
               <Th onClick={() => toggleSort("status")} dir={sort.key === "status" ? sort.dir : undefined}>St</Th>
               <Th onClick={() => toggleSort("name")} dir={sort.key === "name" ? sort.dir : undefined}>FIDC</Th>
+              <Th>Status informe</Th>
               <Th>CNPJ</Th>
               <Th>ISIN</Th>
               <Th>Cota / Classe</Th>
@@ -215,6 +216,7 @@ export default function MonitorPage() {
                       </div>
                     )}
                   </Td>
+                  <Td>{r.fidc ? <ReportStatusBadge status={reportSourceStatusFor(r.fidc.id)} /> : <span className="text-muted-foreground">—</span>}</Td>
                   <Td mono>{r.fidc?.cnpj ? formatCNPJ(r.fidc.cnpj) : "—"}</Td>
                   <Td mono className={cn("text-muted-foreground", isUnmapped && "text-risk-critical")}>{r.isin || "—"}</Td>
                   <Td>{r.quota?.class_name || r.quota?.internal_quota_name || <span className="text-muted-foreground">—</span>}</Td>
@@ -235,7 +237,7 @@ export default function MonitorPage() {
               );
             })}
             {!rows.length && (
-              <tr><td colSpan={18} className="py-12 text-center text-muted-foreground">Nenhuma posição em FIDC encontrada para esta carteira.</td></tr>
+              <tr><td colSpan={19} className="py-12 text-center text-muted-foreground">Nenhuma posição em FIDC encontrada para esta carteira.</td></tr>
             )}
           </tbody>
         </table>
@@ -280,5 +282,21 @@ function Select<T extends string>({ label, value, onChange, options }: {
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </label>
+  );
+}
+
+function ReportStatusBadge({ status }: { status: string }) {
+  const toneCls: Record<string, string> = {
+    "Completo CVM":         "bg-emerald-500/15 text-emerald-700",
+    "Parcial CVM":          "bg-amber-500/15 text-amber-700",
+    "CVM + Manual":         "bg-amber-500/15 text-amber-700",
+    "Manual":               "bg-amber-500/15 text-amber-700",
+    "Erro de validação":    "bg-red-500/15 text-red-700",
+    "Ausente":              "bg-muted/40 text-muted-foreground",
+  };
+  return (
+    <span className={cn("inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10.5px]", toneCls[status] ?? "bg-muted/40 text-muted-foreground")}>
+      {status}
+    </span>
   );
 }

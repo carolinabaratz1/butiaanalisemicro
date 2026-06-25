@@ -13,6 +13,9 @@ import { QuotasSection } from "@/components/fidc/laminate/QuotasSection";
 import { SubordinationPanel } from "@/components/fidc/laminate/SubordinationPanel";
 import { AlertsPanel } from "@/components/fidc/laminate/AlertsPanel";
 import { CreditOpinionPanel } from "@/components/fidc/laminate/CreditOpinionPanel";
+import { DataSourceDialog } from "@/components/fidc/laminate/DataSourceDialog";
+import { resolveReport, type DataSource } from "@/lib/fidc/source-resolver";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +81,7 @@ export default function FidcDetailPage() {
     latestValDate, isLoading, positionAlerts,
   } = useFidcMonitorData();
   const [importOpen, setImportOpen] = useState(false);
+  const [sourceDlgOpen, setSourceDlgOpen] = useState(false);
 
   const { data: quotas = [] } = useQuery({
     queryKey: ["fidc-detail-quotas", id],
@@ -89,18 +93,36 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
-  const { data: latestReport = null } = useQuery({
-    queryKey: ["fidc-monthly-reports", id, "latest"],
+  // Busca AMBAS as fontes (CVM + Manual) para o último mês conhecido do FIDC,
+  // depois resolve com preferência por CVM (zero válido preservado).
+  const { data: resolvedLatest = null } = useQuery({
+    queryKey: ["fidc-report-resolved-latest", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1) Descobre o mês mais recente em qualquer fonte.
+      const { data: months, error: e1 } = await supabase
+        .from("fidc_monthly_reports")
+        .select("reference_month")
+        .eq("fidc_id", id)
+        .order("reference_month", { ascending: false })
+        .limit(1);
+      if (e1) throw e1;
+      const ref = months?.[0]?.reference_month as string | undefined;
+      if (!ref) return { merged: null, cvm: null, manual: null, metrics: {}, anyManualFallback: false, hasCvm: false, hasManual: false, refMonth: null as string | null };
+      // 2) Pega melhor versão por fonte para esse mês.
+      const { data: rows, error: e2 } = await supabase
         .from("fidc_monthly_reports").select("*")
-        .eq("fidc_id", id).eq("is_current_version", true)
-        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
-      if (error) throw error;
-      return data as Record<string, unknown> | null;
+        .eq("fidc_id", id).eq("reference_month", ref)
+        .order("version", { ascending: false });
+      if (e2) throw e2;
+      const list = (rows ?? []) as Array<Record<string, unknown>>;
+      const cvm = list.find((r) => (r.source as string) === "cvm_open_data") ?? null;
+      const manual = list.find((r) => (r.source as string) !== "cvm_open_data") ?? null;
+      return { ...resolveReport(cvm as any, manual as any), refMonth: ref };
     },
     enabled: !!id,
   });
+
+  const latestReport = (resolvedLatest?.merged ?? null) as Record<string, unknown> | null;
 
   const { data: prevReport = null } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "prev", latestReport?.reference_month ?? null],
@@ -109,12 +131,20 @@ export default function FidcDetailPage() {
       if (!ref) return null;
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
-        .select("nav_value, quota_value, reference_month, credit_rights_value, overdue_value, pdd_value")
-        .eq("fidc_id", id).eq("is_current_version", true)
+        .select("nav_value, quota_value, reference_month, credit_rights_value, overdue_value, pdd_value, source, version")
+        .eq("fidc_id", id)
         .lt("reference_month", ref)
-        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
+        .order("reference_month", { ascending: false })
+        .order("version", { ascending: false });
       if (error) throw error;
-      return data as Record<string, unknown> | null;
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+      if (!rows.length) return null;
+      // Pega o último mês anterior (rows[0].reference_month) e resolve CVM-preferring.
+      const prevRef = rows[0].reference_month as string;
+      const same = rows.filter((r) => r.reference_month === prevRef);
+      const cvm = same.find((r) => (r.source as string) === "cvm_open_data") ?? null;
+      const manual = same.find((r) => (r.source as string) !== "cvm_open_data") ?? null;
+      return resolveReport(cvm as any, manual as any).merged as Record<string, unknown> | null;
     },
     enabled: !!id && !!latestReport?.reference_month,
   });
@@ -223,6 +253,13 @@ export default function FidcDetailPage() {
     );
   })();
 
+  // Helper para fonte por métrica (CVM > Manual > Missing).
+  const metricMap = resolvedLatest?.metrics ?? {};
+  const srcOf = (key: string): DataSource => (metricMap[key]?.dataSource ?? "missing");
+  const reasonOf = (key: string): string | null => metricMap[key]?.fallbackReason ?? null;
+  const anyManualFallback = !!resolvedLatest?.anyManualFallback;
+  const metricsList = Object.values(metricMap);
+
   return (
     <div className="laminate">
       {/* Logo apenas na impressão */}
@@ -265,6 +302,9 @@ export default function FidcDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2" data-print="hide">
+            <Button size="sm" variant="outline" onClick={() => setSourceDlgOpen(true)} className="h-8 text-[11.5px]">
+              Ver origem dos dados
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-8 text-[11.5px]">
               <Upload className="h-3.5 w-3.5 mr-1.5" /> Importar Informe Mensal
             </Button>
@@ -284,6 +324,20 @@ export default function FidcDetailPage() {
         </div>
       </header>
 
+      {anyManualFallback && (
+        <div className="px-6 pt-4" data-print="hide">
+          <Alert className="border-amber-500/40 bg-amber-500/5">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-700">Atenção: esta lâmina contém dados de upload manual.</AlertTitle>
+            <AlertDescription className="text-[12px] text-amber-700/90">
+              Alguns indicadores não vieram da CVM e foram preenchidos com upload manual. Verifique a origem dos dados antes de usar na análise.{" "}
+              <button className="underline ml-1" onClick={() => setSourceDlgOpen(true)}>Ver origem dos dados</button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+
       {/* RESUMO DE RISCO */}
       <section className="px-6 py-4 hairline-b" data-print-section>
         <div className="section-title mb-2">Resumo de Risco do Mês</div>
@@ -292,7 +346,7 @@ export default function FidcDetailPage() {
 
       {/* INDICADORES PRINCIPAIS */}
       <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" data-print-section>
-        <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} />
+        <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} source="internal_position" />
         {(() => {
           const r = latestReport;
           const n = (k: string) => r?.[k] != null ? Number(r[k]) : null;
@@ -317,13 +371,13 @@ export default function FidcDetailPage() {
           const cell = (v: string | null) => v == null ? <NoDataInline /> : <>{v}</>;
           return (
             <>
-              <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} />
-              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} accent={varPl != null && varPl < -0.05 ? "warning" : "neutral"} />
-              <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} />
-              <MetricCard label="Rent. mês cota" value={cell(varCota != null ? PCT(varCota, 2) : null)} accent={varCota != null && varCota < 0 ? "warning" : "neutral"} />
-              <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} />
-              <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} />
-              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} />
+              <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} source={srcOf("nav_value")} fallbackReason={reasonOf("nav_value")} />
+              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} accent={varPl != null && varPl < -0.05 ? "warning" : "neutral"} source={srcOf("nav_value")} />
+              <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} source={srcOf("quota_value")} fallbackReason={reasonOf("quota_value")} />
+              <MetricCard label="Rent. mês cota" value={cell(varCota != null ? PCT(varCota, 2) : null)} accent={varCota != null && varCota < 0 ? "warning" : "neutral"} source={srcOf("quota_value")} />
+              <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} source={srcOf("credit_rights_value")} fallbackReason={reasonOf("credit_rights_value")} />
+              <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} source={srcOf("credit_rights_value")} />
+              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} source={srcOf("cash_value")} fallbackReason={reasonOf("cash_value")} />
               {(() => {
                 const overdueSrc = r?.overdue_source ? String(r.overdue_source) : null;
                 const coverage = r?.overdue_bucket_coverage_status ? String(r.overdue_bucket_coverage_status) : null;
@@ -345,6 +399,8 @@ export default function FidcDetailPage() {
                         label={`Atraso/DC${noFaixa ? " ⚠" : ""}`}
                         value={cell(ratioVal != null ? PCT(ratioVal) : null)}
                         accent={ratioVal != null && ratioVal > 0.1 ? (ratioVal > 0.2 ? "critical" : "warning") : "neutral"}
+                        source={srcOf("overdue_value")}
+                        fallbackReason={reasonOf("overdue_value")}
                       />
                     </span>
                     {noFaixa ? (
@@ -365,17 +421,19 @@ export default function FidcDetailPage() {
                   </>
                 );
               })()}
-              <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} />
-              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} />
-              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} />
-              <MetricCard label="Aquisições/DC" value={cell(ratio(acq, dc) != null ? PCT(ratio(acq, dc)!) : null)} />
+              <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} source={srcOf("pdd_value")} fallbackReason={reasonOf("pdd_value")} />
+              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} source={srcOf("pdd_value")} />
+              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} source={srcOf("repurchase_value")} fallbackReason={reasonOf("repurchase_value")} />
+              <MetricCard label="Aquisições/DC" value={cell(ratio(acq, dc) != null ? PCT(ratio(acq, dc)!) : null)} source={srcOf("acquisitions_value")} fallbackReason={reasonOf("acquisitions_value")} />
               <MetricCard
                 label="Subordinação"
                 value={subOk
                   ? cell(sub != null ? PCT(sub) : null)
                   : <span title="Soma das cotas diferente do PL — não confiável" className="text-amber-600 text-[13px]">Inconsistente</span>}
+                source={srcOf("subordinated_value")}
+                fallbackReason={reasonOf("subordinated_value")}
               />
-              <MetricCard label="Cotistas" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} />
+              <MetricCard label="Cotistas" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} source={srcOf("investors_count")} fallbackReason={reasonOf("investors_count")} />
             </>
           );
         })()}
@@ -638,6 +696,7 @@ export default function FidcDetailPage() {
         fidcName={f.name}
         fidcCnpj={f.cnpj ?? null}
       />
+      <DataSourceDialog open={sourceDlgOpen} onOpenChange={setSourceDlgOpen} metrics={metricsList} />
     </div>
   );
 }

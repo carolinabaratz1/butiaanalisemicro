@@ -1,14 +1,18 @@
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+import { SourceBadge } from "@/components/fidc/laminate/SourceBadge";
+import type { DataSource } from "@/lib/fidc/source-resolver";
 
 export function MetricCard({
-  label, value, hint, accent, className,
+  label, value, hint, accent, className, source, fallbackReason,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   accent?: "normal" | "warning" | "critical" | "neutral";
   className?: string;
+  source?: DataSource;
+  fallbackReason?: string | null;
 }) {
   const accentBorder = {
     normal: "border-l-risk-normal",
@@ -24,7 +28,10 @@ export function MetricCard({
         accentBorder, className,
       )}
     >
-      <div className="section-title">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="section-title truncate">{label}</div>
+        {source && <SourceBadge source={source} fallbackReason={fallbackReason} />}
+      </div>
       <div className="text-[19px] font-semibold tracking-tight num text-foreground leading-tight">{value}</div>
       {hint && <div className="text-[11px] text-muted-foreground truncate">{hint}</div>}
     </div>
