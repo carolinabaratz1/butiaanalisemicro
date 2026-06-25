@@ -520,7 +520,84 @@ function FidcDiagnosticView({ fidc, masterName }: { fidc: CvmFidcRow; masterName
         <Kpi label="FIDC (Mestre)" value={masterName ?? "—"} />
         <Kpi label="Nome CVM" value={fidc.name || "—"} />
         <Kpi label="Status" value={STATUS_LABELS[fidc.status]} />
+        <Kpi label="Segmento principal" value={fidc.mainSegment ?? "—"} accent={fidc.segmentValidationStatus === "ok" ? "ok" : fidc.segmentValidationStatus === "alert" ? "warning" : undefined} />
+        <Kpi label="% Segmento principal" value={fidc.mainSegmentPct != null ? PCT(fidc.mainSegmentPct) : "—"} />
+        <Kpi label="Sub-segmentos" value={String(fidc.subSegmentsCount ?? 0)} />
+        <Kpi label="Validação segmentos" value={fidc.segmentValidationStatus ?? "—"} accent={fidc.segmentValidationStatus === "ok" ? "ok" : "warning"} />
       </div>
+
+      {/* Segmentos */}
+      {fidc.segments && fidc.segments.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase text-muted-foreground mb-1">Carteira por segmento (TAB II)</div>
+          <div className="overflow-x-auto border border-border rounded-sm">
+            <table className="w-full text-[11.5px]">
+              <thead className="text-muted-foreground bg-surface-2">
+                <tr><Th>Código</Th><Th>Segmento</Th><Th>Nível</Th><Th>Pai</Th><Th right>Valor</Th><Th right>% Total</Th></tr>
+              </thead>
+              <tbody>
+                {fidc.segments.map((s, i) => (
+                  <tr key={`${s.code}-${i}`} className="hairline-b">
+                    <Td mono>{s.code}</Td>
+                    <Td><span style={{ paddingLeft: (s.level - 1) * 12 }}>{s.name}</span></Td>
+                    <Td mono>{s.level}</Td>
+                    <Td mono className="text-muted-foreground">{s.parent ?? "—"}</Td>
+                    <Td right mono>{BRL(s.value, { compact: true })}</Td>
+                    <Td right mono>{fidc.segmentTotal && fidc.segmentTotal > 0 ? PCT(s.value / fidc.segmentTotal) : "—"}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Classes detalhadas */}
+      {fidc.classes.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase text-muted-foreground mb-1">Classes / Subclasses (TAB X)</div>
+          <div className="overflow-x-auto border border-border rounded-sm">
+            <table className="w-full text-[11.5px] min-w-[1400px]">
+              <thead className="text-muted-foreground bg-surface-2">
+                <tr>
+                  <Th>Classe</Th><Th>Tipo</Th><Th right>Qtd cotas</Th><Th right>Valor cota</Th><Th right>PL</Th>
+                  <Th right>Rent. mês</Th><Th right>Cotistas</Th>
+                  <Th right>Captação</Th><Th right>Resgate</Th><Th right>Amort.</Th><Th right>Net</Th>
+                  <Th>Parse</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {fidc.classes.map((c, i) => (
+                  <tr key={i} className="hairline-b">
+                    <Td><div className="font-medium">{c.name}</div>{c.idSubclasse && <div className="text-[10px] text-muted-foreground font-mono">{c.idSubclasse}</div>}</Td>
+                    <Td>{c.type ?? "—"}</Td>
+                    <Td right mono>{c.numberOfQuotas?.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) ?? "—"}</Td>
+                    <Td right mono>{c.quotaValue != null ? c.quotaValue.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 }) : "—"}</Td>
+                    <Td right mono>{c.pl != null ? BRL(c.pl, { compact: true }) : "—"}</Td>
+                    <Td right mono className={(c.monthlyYieldPct ?? 0) < 0 ? "text-red-600" : ""}>{c.monthlyYieldPct != null ? `${c.monthlyYieldPct.toFixed(2)}%` : "—"}</Td>
+                    <Td right mono>{c.investorsCount ?? "—"}</Td>
+                    <Td right mono>{c.flows?.subscription_value != null ? BRL(c.flows.subscription_value, { compact: true }) : "—"}</Td>
+                    <Td right mono>{c.flows?.redemption_value != null ? BRL(c.flows.redemption_value, { compact: true }) : "—"}</Td>
+                    <Td right mono>{c.flows?.amortization_value != null ? BRL(c.flows.amortization_value, { compact: true }) : "—"}</Td>
+                    <Td right mono className={(c.netFlow ?? 0) < 0 ? "text-red-600" : ""}>{c.netFlow != null ? BRL(c.netFlow, { compact: true }) : "—"}</Td>
+                    <Td><span className={`text-[10px] ${c.parseStatus && c.parseStatus !== "ok" ? "text-amber-700" : "text-muted-foreground"}`}>{c.parseStatus ?? "ok"}</span></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {fidc.flows && (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[11px]">
+              <Kpi label="Σ Captações" value={BRL(fidc.flows.totalSubscriptionValue ?? 0, { compact: true })} accent="ok" />
+              <Kpi label="Σ Resgates" value={BRL(fidc.flows.totalRedemptionValue ?? 0, { compact: true })} />
+              <Kpi label="Σ Resg. Solic." value={BRL(fidc.flows.totalRequestedRedemptionValue ?? 0, { compact: true })} />
+              <Kpi label="Σ Amortizações" value={BRL(fidc.flows.totalAmortizationValue ?? 0, { compact: true })} />
+              <Kpi label="Fluxo líquido" value={BRL(fidc.flows.netInvestorFlowValue ?? 0, { compact: true })} accent={(fidc.flows.netInvestorFlowValue ?? 0) < 0 ? "warning" : "ok"} />
+              <Kpi label="Fluxo bruto" value={BRL(fidc.flows.grossInvestorFlowValue ?? 0, { compact: true })} />
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <div className="text-[10px] uppercase text-muted-foreground mb-1">Métricas extraídas (status por métrica)</div>
