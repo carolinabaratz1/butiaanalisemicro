@@ -1,17 +1,61 @@
-// POC: baixa o ZIP mensal de Informe Mensal FIDC dos Dados Abertos da CVM,
-// processa os CSVs em STREAMING (linha a linha por entry) — só faz parse
-// completo da linha quando o CNPJ está na lista-alvo, evitando estouro de CPU.
+// POC v2 — Schema Discovery + Mapeamento Configurável.
+// Baixa o ZIP mensal da CVM, gera diagnóstico por arquivo (encoding, separador,
+// colunas, amostra, CNPJs únicos) e diagnóstico por FIDC com status por métrica
+// (found_value / found_zero / missing_column / missing_row / mapping_not_defined / parse_error).
+// Nunca converte métrica ausente para zero.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import * as zip from "npm:@zip.js/zip.js@2.7.45";
 
-type ImportRequest = {
-  referenceMonth: string;       // YYYYMM
-  targetCnpjs: string[];        // dígitos apenas (Cadastro Mestre)
-  positionCnpjs?: string[];     // subset com posição na Butiá
+type Req = {
+  referenceMonth: string;            // AAAAMM
+  targetCnpjs: string[];             // Cadastro Mestre
+  positionCnpjs?: string[];          // CNPJs com posição
 };
 
-const onlyDigits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
-const parseBR = (v: string | undefined | null): number | null => {
+type MetricStatus =
+  | "found_value" | "found_zero" | "missing_column"
+  | "missing_row" | "mapping_not_defined" | "parse_error";
+
+type MetricResult = {
+  metric: string;
+  value: number | string | null;
+  status: MetricStatus;
+  sourceFile?: string;
+  sourceColumn?: string;
+  rule?: string;
+  rawValues?: Record<string, unknown>;
+  error?: string;
+};
+
+type FileDiagnostic = {
+  filename: string;
+  extension: string;
+  sizeBytes: number;
+  rows: number;
+  columns: number;
+  separator: string;
+  encoding: string;
+  headers: string[];
+  firstRows: string[][];
+  uniqueCnpjsCount: number;
+  exampleCnpjs: string[];
+  containsMasterCnpj: boolean;
+  matchedMasterCount: number;
+  tableKind: string | null;          // I, IV, V, VI, VII, X1, X2, X3
+};
+
+type MappingRow = {
+  metric_name: string;
+  source_file_pattern: string;
+  source_column: string | null;
+  composite_rule: string | null;
+  transformation: string | null;
+  is_required: boolean;
+};
+
+const onlyDigits = (s: unknown) => String(s ?? "").replace(/\D/g, "");
+const parseBR = (v: unknown): number | null => {
   if (v == null) return null;
   const s = String(v).trim();
   if (!s || s === "-" || s.toUpperCase() === "NA") return null;
@@ -19,10 +63,16 @@ const parseBR = (v: string | undefined | null): number | null => {
   const n = Number(norm);
   return Number.isFinite(n) ? n : null;
 };
+const upper = (s: unknown) => String(s ?? "").toUpperCase();
 
-// Split rápido — usa split(";") direto quando não há aspas (caso geral).
-function splitFast(line: string): string[] {
-  if (line.indexOf('"') < 0) return line.split(";");
+function detectSeparator(line: string): string {
+  const counts = { ";": (line.match(/;/g) || []).length, ",": (line.match(/,/g) || []).length, "\t": (line.match(/\t/g) || []).length };
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] > 0 ? best[0] : ";";
+}
+
+function splitLine(line: string, sep: string): string[] {
+  if (line.indexOf('"') < 0) return line.split(sep);
   const out: string[] = []; let cur = ""; let inQ = false;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
@@ -30,7 +80,7 @@ function splitFast(line: string): string[] {
       if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
       else cur += c;
     } else if (c === '"') inQ = true;
-    else if (c === ";") { out.push(cur); cur = ""; }
+    else if (c === sep) { out.push(cur); cur = ""; }
     else cur += c;
   }
   out.push(cur);
@@ -40,100 +90,9 @@ function splitFast(line: string): string[] {
 function cnpjColIndex(header: string[]): number {
   const cands = ["CNPJ_FUNDO_CLASSE", "CNPJ_FUNDO", "CNPJ_FUNDO_COND", "CNPJ"];
   for (const c of cands) { const i = header.indexOf(c); if (i >= 0) return i; }
-  return -1;
+  return header.findIndex((h) => /CNPJ/.test(h));
 }
 
-type FidcAgg = {
-  cnpj: string;
-  denomFundo?: string;
-  pl?: number | null;
-  creditRights?: number | null;
-  pdd?: number | null;
-  caixaAmpliado?: number | null;
-  cash?: number | null;
-  vbTotal?: number | null;
-  viBTotal?: number | null;
-  vb1?: number; vb2?: number; vb3?: number; vb4?: number;
-  vib1?: number; vib2?: number; vib3?: number; vib4?: number;
-  repurchase?: number | null;
-  investors?: number | null;
-  classes: Array<{ name: string; type?: string; pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null; monthlyYieldPct?: number | null }>;
-};
-
-function ensureAgg(map: Map<string, FidcAgg>, cnpj: string): FidcAgg {
-  let a = map.get(cnpj);
-  if (!a) { a = { cnpj, classes: [] }; map.set(cnpj, a); }
-  return a;
-}
-
-const upper = (s: string | undefined) => (s ?? "").toUpperCase();
-const includesAny = (text: string, keys: string[]) => { for (const k of keys) if (text.includes(k)) return true; return false; };
-
-// Dispatcher por tabela — recebe linha já parseada com CNPJ alvo confirmado.
-function dispatch(tabKind: string, row: Record<string, string>, a: FidcAgg) {
-  // metadado
-  if (!a.denomFundo) a.denomFundo = row["DENOM_SOCIAL"] || row["DENOM_FUNDO"] || row["DENOM_FUNDO_CLASSE"] || "";
-
-  const num = (names: string[]) => {
-    for (const n of names) { const v = row[n]; if (v !== undefined && v !== "") return parseBR(v); }
-    return null;
-  };
-  const txtAtivo = upper(row["TP_ATIVO"] || row["TP_APLIC"] || row["DS_TP_ATIVO"] || row["TP_TITULO"] || row["TP_INSTR"] || row["CD_ATIVO"] || "");
-
-  if (tabKind === "I") {
-    const v = num(["VL_MERC_POS_FINAL", "VL_TOTAL", "VL_ATUAL", "VL"]);
-    if (v == null) return;
-    if (includesAny(txtAtivo, ["DISPONIBILIDADE"])) a.cash = (a.cash ?? 0) + v;
-    else if (includesAny(txtAtivo, ["PROVISAO", "PROVISÃO", "PDD"])) a.pdd = (a.pdd ?? 0) + Math.abs(v);
-    else if (includesAny(txtAtivo, ["DIREITOS CREDITORIOS", "DIREITO CREDITORIO", "DIREITOS CREDITÓRIOS"])) a.creditRights = (a.creditRights ?? 0) + v;
-    else if (includesAny(txtAtivo, ["VALORES MOBILIARIOS", "TITULOS PUBLICOS", "CERTIFICADO DE DEPOSITO", "COMPROMISSADAS", "RENDA FIXA", "COTAS DE FIDC", "COTAS DE FUNDOS", "WARRANT"])) {
-      a.caixaAmpliado = (a.caixaAmpliado ?? 0) + v;
-    }
-  } else if (tabKind === "IV") {
-    const v = num(["VL_PATRIM_LIQ", "VL_PL", "VL_TOTAL", "PATRIM_LIQ"]);
-    if (v != null) a.pl = a.pl == null ? v : Math.max(a.pl, v);
-  } else if (tabKind === "V" || tabKind === "VI") {
-    if (!includesAny(txtAtivo + upper(row["FAIXA_PRAZO"] || row["TP_PRAZO"] || ""), ["VENCID", "INADIMPL"])) return;
-    const v = num(["VL_MERC_POS_FINAL", "VL_TOTAL", "VL_ATUAL"]); if (v == null) return;
-    const txt = upper(row["TP_PRAZO"] || row["FAIXA_PRAZO"]);
-    if (tabKind === "V") {
-      a.vbTotal = (a.vbTotal ?? 0) + v;
-      if (/30/.test(txt)) a.vb1 = (a.vb1 ?? 0) + v;
-      else if (/60/.test(txt)) a.vb2 = (a.vb2 ?? 0) + v;
-      else if (/90/.test(txt)) a.vb3 = (a.vb3 ?? 0) + v;
-      else if (/120/.test(txt)) a.vb4 = (a.vb4 ?? 0) + v;
-    } else {
-      a.viBTotal = (a.viBTotal ?? 0) + v;
-      if (/30/.test(txt)) a.vib1 = (a.vib1 ?? 0) + v;
-      else if (/60/.test(txt)) a.vib2 = (a.vib2 ?? 0) + v;
-      else if (/90/.test(txt)) a.vib3 = (a.vib3 ?? 0) + v;
-      else if (/120/.test(txt)) a.vib4 = (a.vib4 ?? 0) + v;
-    }
-  } else if (tabKind === "VII") {
-    if (!includesAny(txtAtivo + upper(row["TP_OPER"] || row["TP_NEG"] || ""), ["RECOMPRA"])) return;
-    const v = num(["VL_MERC_POS_FINAL", "VL_TOTAL", "VL_ATUAL"]);
-    if (v != null) a.repurchase = (a.repurchase ?? 0) + v;
-  } else if (tabKind === "X1") {
-    const v = num(["NR_COTST", "QT_COTST", "NR_INVEST"]);
-    if (v != null) a.investors = Math.max(a.investors ?? 0, Math.round(v));
-  } else if (tabKind === "X2") {
-    const name = row["DENOM_CLASSE"] || row["DENOM_CLASSE_COTA"] || row["TP_CLASSE"] || row["CLASSE"] || "Classe única";
-    a.classes.push({
-      name,
-      type: row["TP_CLASSE"] || row["TP_SERIE"] || "",
-      pl: num(["VL_PATRIM_LIQ", "VL_PL", "PATRIM_LIQ", "VL_TOTAL"]),
-      quotaValue: num(["VL_COTA", "VL_QUOTA"]),
-      numberOfQuotas: num(["QT_COTA", "QT_QUOTA"]),
-    });
-  } else if (tabKind === "X3") {
-    const name = row["DENOM_CLASSE"] || row["DENOM_CLASSE_COTA"] || row["TP_CLASSE"] || "";
-    const yld = num(["RENTAB_MES", "RENTAB_MENSAL", "RENTAB", "PERC_RENTAB"]);
-    const target = a.classes.find((c) => c.name === name) ?? a.classes[a.classes.length - 1];
-    if (target && yld != null) target.monthlyYieldPct = yld;
-  }
-}
-
-// Identifica que tabela é, pelo nome do arquivo.
 function classifyTab(lower: string): string | null {
   if (/_tab_x[_.]?1[_.]/.test(lower)) return "X1";
   if (/_tab_x[_.]?2[_.]/.test(lower)) return "X2";
@@ -146,62 +105,220 @@ function classifyTab(lower: string): string | null {
   return null;
 }
 
-// Lê um entry em streaming, processando linha a linha sem materializar todo o CSV.
-async function streamCsvEntry(entry: zip.Entry, tabKind: string, targetSet: Set<string>, agg: Map<string, FidcAgg>, allCnpjs: Set<string>): Promise<number> {
-  const decoder = new TextDecoder("iso-8859-1");
-  let buffer = "";
-  let header: string[] = [];
-  let idxCnpj = -1;
-  let total = 0;
+// Resolve um nome de coluna (com candidatos separados por '|') contra headers reais
+function resolveColumn(headers: string[], cands: string | null): string | null {
+  if (!cands) return null;
+  const upH = headers.map((h) => h.toUpperCase().trim());
+  for (const c of cands.split("|").map((s) => s.trim().toUpperCase())) {
+    const idx = upH.indexOf(c);
+    if (idx >= 0) return headers[idx];
+    // fuzzy: contains
+    const fz = upH.findIndex((h) => h.includes(c));
+    if (fz >= 0) return headers[fz];
+  }
+  return null;
+}
 
-  const handleLine = (line: string) => {
+// Per-CNPJ collected data, by file. Acts as the staging buffer.
+type FidcBuffer = {
+  cnpj: string;
+  name?: string;
+  rowsByFile: Record<string, Array<Record<string, string>>>;   // sample <=10 rows
+  metrics: Record<string, MetricResult>;
+  classes: Array<{ name: string; type?: string; pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null; monthlyYieldPct?: number | null }>;
+};
+
+async function streamEntry(
+  entry: zip.Entry,
+  diag: FileDiagnostic,
+  targetSet: Set<string>,
+  buffer: Map<string, FidcBuffer>,
+  allCnpjs: Set<string>,
+): Promise<void> {
+  const decoder = new TextDecoder("iso-8859-1"); // CVM padrão
+  diag.encoding = "iso-8859-1";
+  let leftover = "";
+  let header: string[] = [];
+  let sep = ";";
+  let idxCnpj = -1;
+
+  const handle = (line: string) => {
     if (!line) return;
     if (!header.length) {
-      header = line.split(";").map((h) => h.trim().toUpperCase());
+      sep = detectSeparator(line);
+      diag.separator = sep;
+      header = splitLine(line, sep).map((h) => h.trim().toUpperCase());
+      diag.headers = header;
+      diag.columns = header.length;
       idxCnpj = cnpjColIndex(header);
       return;
     }
-    total++;
+    diag.rows++;
+    const fields = splitLine(line, sep);
+    if (diag.firstRows.length < 3) diag.firstRows.push(fields.slice(0, Math.min(fields.length, 20)));
     if (idxCnpj < 0) return;
-    const fields = splitFast(line);
     const cnpj = onlyDigits(fields[idxCnpj]);
     if (!cnpj) return;
-    if (allCnpjs.size < 30000) allCnpjs.add(cnpj); // amostragem para diagnóstico
+    if (allCnpjs.size < 100000) allCnpjs.add(cnpj);
+    if (diag.exampleCnpjs.length < 5 && !diag.exampleCnpjs.includes(cnpj)) diag.exampleCnpjs.push(cnpj);
+    diag.uniqueCnpjsCount++; // contagem aproximada (linhas com CNPJ)
     if (!targetSet.has(cnpj)) return;
-    // Monta dict só para os alvos
+    diag.matchedMasterCount++;
+    diag.containsMasterCnpj = true;
+
+    // monta row dict
     const row: Record<string, string> = {};
     for (let i = 0; i < header.length; i++) row[header[i]] = (fields[i] ?? "").trim();
-    const a = ensureAgg(agg, cnpj);
-    dispatch(tabKind, row, a);
+
+    let buf = buffer.get(cnpj);
+    if (!buf) { buf = { cnpj, rowsByFile: {}, metrics: {}, classes: [] }; buffer.set(cnpj, buf); }
+    if (!buf.name) buf.name = row["DENOM_SOCIAL"] || row["DENOM_FUNDO"] || row["DENOM_FUNDO_CLASSE"] || "";
+    const arr = (buf.rowsByFile[entry.filename] ??= []);
+    if (arr.length < 10) arr.push(row);
   };
 
   const writable = new WritableStream<Uint8Array>({
     write(chunk) {
-      buffer += decoder.decode(chunk, { stream: true });
+      leftover += decoder.decode(chunk, { stream: true });
       let nl: number;
-      while ((nl = buffer.indexOf("\n")) >= 0) {
-        let line = buffer.slice(0, nl);
+      while ((nl = leftover.indexOf("\n")) >= 0) {
+        let line = leftover.slice(0, nl);
         if (line.endsWith("\r")) line = line.slice(0, -1);
-        buffer = buffer.slice(nl + 1);
-        handleLine(line);
+        leftover = leftover.slice(nl + 1);
+        handle(line);
       }
     },
     close() {
-      buffer += decoder.decode();
-      if (buffer.endsWith("\r")) buffer = buffer.slice(0, -1);
-      if (buffer) handleLine(buffer);
+      leftover += decoder.decode();
+      if (leftover.endsWith("\r")) leftover = leftover.slice(0, -1);
+      if (leftover) handle(leftover);
     },
   });
 
-  // zip.js v2 aceita um WritableStream em getData
-  await (entry as any).getData(writable);
-  return total;
+  await (entry as unknown as { getData: (w: WritableStream) => Promise<unknown> }).getData(writable);
+  diag.uniqueCnpjsCount = Math.min(diag.uniqueCnpjsCount, diag.rows);
+}
+
+// Aplica mappings sobre o conjunto coletado de linhas do FIDC.
+// rule format suportadas em composite_rule:
+//   sum:COL1,COL2,...                  → soma valores na MESMA linha
+//   abs_sum:COL1,COL2,...              → soma de |val|
+//   row_sum:filterCol=A,B|valueCol=VL  → soma de todas as linhas onde filterCol ∈ {A,B}
+function extractMetrics(buf: FidcBuffer, mappings: MappingRow[], filesIndex: Map<string, FileDiagnostic>) {
+  for (const m of mappings) {
+    // localiza arquivo(s) cuja key contém o pattern
+    const fileKey = [...Object.keys(buf.rowsByFile)].find((fn) => fn.toLowerCase().includes(m.source_file_pattern.toLowerCase()));
+    if (!fileKey) {
+      // fallback: arquivo existe no ZIP mas o CNPJ não apareceu nele
+      const inZip = [...filesIndex.keys()].find((fn) => fn.toLowerCase().includes(m.source_file_pattern.toLowerCase()));
+      buf.metrics[m.metric_name] = {
+        metric: m.metric_name,
+        value: null,
+        status: inZip ? "missing_row" : "missing_column",
+        sourceFile: inZip ?? undefined,
+        sourceColumn: m.source_column ?? m.composite_rule ?? undefined,
+        rule: m.composite_rule ?? undefined,
+      };
+      continue;
+    }
+    const rows = buf.rowsByFile[fileKey];
+    const fileDiag = filesIndex.get(fileKey);
+    const headers = fileDiag?.headers ?? Object.keys(rows[0] ?? {});
+
+    try {
+      let value: number | string | null = null;
+      let status: MetricStatus = "mapping_not_defined";
+      const rawValues: Record<string, unknown> = {};
+      let resolvedCol: string | null = null;
+
+      if (m.composite_rule) {
+        const [kind, args] = m.composite_rule.split(":");
+        const cols = (args ?? "").split(/[,+]/).map((s) => s.trim()).filter(Boolean);
+        const resolved = cols.map((c) => ({ candidate: c, resolved: resolveColumn(headers, c) }));
+        const missing = resolved.filter((r) => !r.resolved).map((r) => r.candidate);
+        if (resolved.every((r) => !r.resolved)) {
+          status = "missing_column";
+          buf.metrics[m.metric_name] = { metric: m.metric_name, value: null, status, sourceFile: fileKey, rule: m.composite_rule, error: `colunas não encontradas: ${missing.join(",")}` };
+          continue;
+        }
+        let total = 0; let anyFound = false;
+        for (const r of resolved) {
+          if (!r.resolved) continue;
+          for (const row of rows) {
+            const raw = row[r.resolved];
+            const n = parseBR(raw);
+            rawValues[r.resolved] = raw;
+            if (n != null) {
+              total += kind === "abs_sum" ? Math.abs(n) : n;
+              anyFound = true;
+            }
+          }
+        }
+        value = anyFound ? total : null;
+        status = !anyFound ? "missing_row" : total === 0 ? "found_zero" : "found_value";
+        buf.metrics[m.metric_name] = { metric: m.metric_name, value, status, sourceFile: fileKey, rule: m.composite_rule, rawValues };
+        continue;
+      }
+
+      if (!m.source_column) {
+        buf.metrics[m.metric_name] = { metric: m.metric_name, value: null, status: "mapping_not_defined", sourceFile: fileKey };
+        continue;
+      }
+      resolvedCol = resolveColumn(headers, m.source_column);
+      if (!resolvedCol) {
+        buf.metrics[m.metric_name] = { metric: m.metric_name, value: null, status: "missing_column", sourceFile: fileKey, sourceColumn: m.source_column };
+        continue;
+      }
+      // pega valor da primeira linha não vazia
+      let raw: string | undefined;
+      for (const row of rows) {
+        const v = row[resolvedCol];
+        if (v !== undefined && v !== "") { raw = v; break; }
+      }
+      rawValues[resolvedCol] = raw;
+      if (raw === undefined || raw === "") {
+        status = "missing_row";
+        value = null;
+      } else if (m.transformation === "int") {
+        const n = parseBR(raw);
+        value = n == null ? null : Math.round(n);
+        status = n == null ? "parse_error" : n === 0 ? "found_zero" : "found_value";
+      } else if (m.transformation === "text") {
+        value = String(raw);
+        status = "found_value";
+      } else {
+        const n = parseBR(raw);
+        if (n == null) { status = "parse_error"; value = null; }
+        else if (m.transformation === "abs") { value = Math.abs(n); status = n === 0 ? "found_zero" : "found_value"; }
+        else { value = n; status = n === 0 ? "found_zero" : "found_value"; }
+      }
+      buf.metrics[m.metric_name] = { metric: m.metric_name, value, status, sourceFile: fileKey, sourceColumn: resolvedCol, rawValues };
+    } catch (e) {
+      buf.metrics[m.metric_name] = { metric: m.metric_name, value: null, status: "parse_error", sourceFile: fileKey, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  // Classes (X2): coleta lista (não é mapeamento simples)
+  const x2Key = Object.keys(buf.rowsByFile).find((fn) => /_tab_x[_.]?2[_.]/.test(fn.toLowerCase()));
+  if (x2Key) {
+    for (const row of buf.rowsByFile[x2Key]) {
+      const name = row["DENOM_CLASSE"] || row["DENOM_CLASSE_COTA"] || row["TP_CLASSE"] || row["CLASSE"] || "Classe única";
+      buf.classes.push({
+        name,
+        type: row["TP_CLASSE"] || row["TP_SERIE"] || "",
+        pl: parseBR(row["VL_PATRIM_LIQ"] || row["VL_PL"] || row["VL_TOTAL"]),
+        quotaValue: parseBR(row["VL_COTA"] || row["VL_QUOTA"]),
+        numberOfQuotas: parseBR(row["QT_COTA"] || row["QT_QUOTA"]),
+      });
+    }
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const t0 = Date.now();
   try {
-    const body = (await req.json()) as ImportRequest;
+    const body = (await req.json()) as Req;
     const ref = String(body.referenceMonth || "").trim();
     if (!/^\d{6}$/.test(ref)) {
       return new Response(JSON.stringify({ error: "referenceMonth deve ser AAAAMM" }),
@@ -211,19 +328,21 @@ Deno.serve(async (req) => {
     const targetSet = new Set((body.targetCnpjs || []).map(onlyDigits).filter(Boolean));
     const positionSet = new Set((body.positionCnpjs || []).map(onlyDigits).filter(Boolean));
 
-    const readErrors: string[] = [];
-    const alerts: string[] = [];
-    const t0 = Date.now();
+    // Carrega mapeamento atual
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: mappings = [] } = await admin
+      .from("cvm_fidc_field_mapping")
+      .select("metric_name, source_file_pattern, source_column, composite_rule, transformation, is_required");
 
     const resp = await fetch(url);
     if (!resp.ok) {
       return new Response(JSON.stringify({
-        referenceMonth: ref, url, fileSizeBytes: 0, fileHash: "", status: `HTTP ${resp.status}`,
-        filesInZip: [], rowsByFile: {}, totalCnpjs: 0,
+        referenceMonth: ref, url, fileSizeBytes: 0, fileHash: "",
+        status: `HTTP ${resp.status}`, files: [], totalCnpjs: 0,
         mestreFound: [], mestreMissing: Array.from(targetSet),
         posFound: [], posMissing: Array.from(positionSet),
-        readErrors: [`Falha no download (HTTP ${resp.status})`], alerts: [], fidcs: [],
-        elapsedMs: Date.now() - t0,
+        readErrors: [`Falha no download (HTTP ${resp.status})`], alerts: [],
+        fidcs: [], mappingsUsed: mappings, elapsedMs: Date.now() - t0,
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const ab = await resp.arrayBuffer();
@@ -233,80 +352,111 @@ Deno.serve(async (req) => {
 
     const reader = new zip.ZipReader(new zip.BlobReader(new Blob([bytes])));
     const entries = await reader.getEntries();
-    const filesInZip = entries.map((e) => e.filename);
 
-    const agg = new Map<string, FidcAgg>();
-    const rowsByFile: Record<string, number> = {};
+    const filesIndex = new Map<string, FileDiagnostic>();
+    const buffer = new Map<string, FidcBuffer>();
     const allCnpjs = new Set<string>();
+    const readErrors: string[] = [];
 
     for (const entry of entries) {
-      if (!/\.csv$/i.test(entry.filename)) continue;
-      const lower = entry.filename.toLowerCase();
-      const kind = classifyTab(lower);
-      if (!kind) { rowsByFile[entry.filename] = 0; continue; }
+      const filename = entry.filename;
+      const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+      const diag: FileDiagnostic = {
+        filename, extension: ext,
+        sizeBytes: (entry as unknown as { uncompressedSize?: number }).uncompressedSize ?? 0,
+        rows: 0, columns: 0, separator: "?", encoding: "?",
+        headers: [], firstRows: [], uniqueCnpjsCount: 0, exampleCnpjs: [],
+        containsMasterCnpj: false, matchedMasterCount: 0,
+        tableKind: classifyTab(filename.toLowerCase()),
+      };
+      filesIndex.set(filename, diag);
+      if (ext !== "csv") continue;
       try {
-        rowsByFile[entry.filename] = await streamCsvEntry(entry, kind, targetSet, agg, allCnpjs);
+        await streamEntry(entry, diag, targetSet, buffer, allCnpjs);
       } catch (e) {
-        readErrors.push(`${entry.filename}: ${e instanceof Error ? e.message : String(e)}`);
+        readErrors.push(`${filename}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
     await reader.close();
 
-    // 3) Consolidação
-    const referenceISO = `${ref.slice(0, 4)}-${ref.slice(4, 6)}-01`;
-    const fidcs = Array.from(agg.values()).map((a) => {
-      const overdueTotal = (a.vbTotal ?? 0) + (a.viBTotal ?? 0);
-      const ovd30 = (a.vb1 ?? 0) + (a.vib1 ?? 0);
-      const ovd60 = (a.vb2 ?? 0) + (a.vib2 ?? 0);
-      const ovd90 = (a.vb3 ?? 0) + (a.vib3 ?? 0);
-      const ovd120 = (a.vb4 ?? 0) + (a.vib4 ?? 0);
-      const caixaAmpliado = (a.cash ?? 0) + (a.caixaAmpliado ?? 0);
-      const sumClassesPL = a.classes.reduce((s, c) => s + (c.pl ?? 0), 0);
-      const diff = (a.pl ?? 0) - sumClassesPL;
-      const diffPct = a.pl ? Math.abs(diff) / a.pl : null;
+    // Aplica mappings sobre cada FIDC do alvo
+    for (const buf of buffer.values()) {
+      extractMetrics(buf, mappings as MappingRow[], filesIndex);
+    }
 
-      const flags: string[] = [];
-      let status: "completo" | "parcial" | "cotas_ausentes" | "validacao_critica" | "nao_encontrado" = "completo";
-      if (a.pl == null) flags.push("PL ausente");
-      if (a.creditRights == null) flags.push("DC ausente");
-      if (caixaAmpliado <= 0) flags.push("Caixa Ampliado = 0");
-      if (a.pdd == null) flags.push("PDD ausente");
-      if (overdueTotal <= 0) flags.push("Atrasos não detectados");
-      if (!a.classes.length) { flags.push("Sem cotas/classes"); status = "cotas_ausentes"; }
-      if (diffPct != null && diffPct > 0.05) { flags.push(`PL x cotas divergente (${(diffPct * 100).toFixed(2)}%)`); status = "validacao_critica"; }
-      if (flags.length && status === "completo") status = "parcial";
+    // Resumo final por FIDC
+    const referenceISO = `${ref.slice(0, 4)}-${ref.slice(4, 6)}-01`;
+    const fidcs = Array.from(buffer.values()).map((buf) => {
+      const get = (k: string) => buf.metrics[k];
+      const value = (k: string) => {
+        const m = get(k); return m && (m.status === "found_value" || m.status === "found_zero") ? (m.value as number) : null;
+      };
+      const pl = value("nav_value");
+      const dc = value("credit_rights_value");
+      const sumClassesPL = buf.classes.reduce((s, c) => s + (c.pl ?? 0), 0);
+      const diff = pl != null ? pl - sumClassesPL : null;
+      const diffPct = pl ? Math.abs(diff! / pl) : null;
+      const missing: string[] = [];
+      for (const m of mappings) {
+        const r = buf.metrics[m.metric_name];
+        if (!r || r.status === "missing_column" || r.status === "missing_row" || r.status === "mapping_not_defined" || r.status === "parse_error") {
+          missing.push(m.metric_name);
+        }
+      }
+      let status: "completo" | "parcial" | "mapping_error" | "validacao_critica" = "completo";
+      const plMeta = buf.metrics["nav_value"];
+      if (!plMeta || plMeta.status === "missing_column" || plMeta.status === "missing_row" || plMeta.status === "mapping_not_defined") {
+        status = "mapping_error";
+      } else if (missing.length) status = "parcial";
+      if (diffPct != null && diffPct > 0.05) status = "validacao_critica";
 
       return {
-        cnpj: a.cnpj, name: a.denomFundo ?? "", referenceMonth: referenceISO,
-        pl: a.pl ?? null, creditRights: a.creditRights ?? null,
-        caixaAmpliado, cash: a.cash ?? null, pdd: a.pdd ?? null,
-        overdueTotal, overdue30: ovd30, overdue60: ovd60, overdue90: ovd90, overdue120: ovd120,
-        repurchase: a.repurchase ?? null, investors: a.investors ?? null,
-        classes: a.classes, sumClassesPL,
-        plDiff: diff, plDiffPct: diffPct, flags, status,
-        hasPositionInButia: positionSet.has(a.cnpj),
+        cnpj: buf.cnpj, name: buf.name ?? "", referenceMonth: referenceISO,
+        metrics: buf.metrics,
+        classes: buf.classes,
+        rowsByFile: Object.fromEntries(Object.entries(buf.rowsByFile).map(([k, v]) => [k, v.slice(0, 5)])),
+        pl, creditRights: dc,
+        caixaAmpliado: value("cash_value"),
+        pdd: value("pdd_value"),
+        overdueTotal: value("overdue_value"),
+        overdue30: value("delinquency_30_value"),
+        overdue60: value("delinquency_60_value"),
+        overdue90: value("delinquency_90_value"),
+        overdue120: value("delinquency_120_value"),
+        repurchase: value("repurchase_value"),
+        investors: value("investors_count"),
+        sumClassesPL, plDiff: diff, plDiffPct: diffPct,
+        missingMetrics: missing,
+        status,
+        hasPositionInButia: positionSet.has(buf.cnpj),
       };
     });
 
-    const foundCnpjs = new Set(fidcs.map((f) => f.cnpj));
+    const foundSet = new Set(fidcs.map((f) => f.cnpj));
     const mestreFound: string[] = []; const mestreMissing: string[] = [];
-    for (const c of targetSet) (foundCnpjs.has(c) ? mestreFound : mestreMissing).push(c);
+    for (const c of targetSet) (foundSet.has(c) ? mestreFound : mestreMissing).push(c);
     const posFound: string[] = []; const posMissing: string[] = [];
-    for (const c of positionSet) (foundCnpjs.has(c) ? posFound : posMissing).push(c);
+    for (const c of positionSet) (foundSet.has(c) ? posFound : posMissing).push(c);
 
+    const alerts: string[] = [];
+    if (!filesIndex.size) alerts.push("ZIP sem arquivos.");
     if (mestreMissing.length) alerts.push(`${mestreMissing.length} CNPJ(s) do Cadastro Mestre ausentes no informe CVM.`);
-    if (!Object.keys(rowsByFile).length) alerts.push("Nenhum CSV foi lido do ZIP — possível mudança de layout.");
+    const mappingErrors = fidcs.filter((f) => f.status === "mapping_error").length;
+    if (mappingErrors) alerts.push(`${mappingErrors} FIDC(s) com erro de mapeamento (CNPJ presente na CVM mas PL não encontrado).`);
 
     const payload = {
       referenceMonth: ref, url, fileSizeBytes: bytes.byteLength, fileHash, status: "ok",
-      filesInZip, rowsByFile, totalCnpjs: allCnpjs.size,
+      files: Array.from(filesIndex.values()),
+      totalCnpjs: allCnpjs.size,
       mestreFound, mestreMissing, posFound, posMissing,
       readErrors, alerts,
       fidcs: fidcs.sort((a, b) => (b.pl ?? 0) - (a.pl ?? 0)),
+      mappingsUsed: mappings,
       elapsedMs: Date.now() - t0,
     };
     return new Response(JSON.stringify(payload), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
