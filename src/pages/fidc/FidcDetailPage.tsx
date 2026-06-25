@@ -131,6 +131,22 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
+  // Phase 5 — segmentos detalhados (TAB II) para o mês corrente
+  const { data: segmentRows = [] } = useQuery({
+    queryKey: ["fidc-monthly-segments", id, latestReport?.reference_month ?? null],
+    queryFn: async () => {
+      const ref = latestReport?.reference_month as string | undefined;
+      if (!ref) return [];
+      const { data, error } = await supabase
+        .from("fidc_monthly_segments")
+        .select("segment_group, segment_name, value, pct_of_segment_portfolio")
+        .eq("fidc_id", id).eq("reference_month", ref);
+      if (error) throw error;
+      return (data ?? []) as Array<{ segment_group: string; segment_name: string; value: number | null; pct_of_segment_portfolio: number | null }>;
+    },
+    enabled: !!id && !!latestReport?.reference_month,
+  });
+
   useEffect(() => () => {
     document.body.classList.remove("print-summary");
   }, []);
