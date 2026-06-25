@@ -696,6 +696,7 @@ export default function FidcDetailPage() {
         fidcName={f.name}
         fidcCnpj={f.cnpj ?? null}
       />
+      <DataSourceDialog open={sourceDlgOpen} onOpenChange={setSourceDlgOpen} metrics={metricsList} />
     </div>
   );
 }
