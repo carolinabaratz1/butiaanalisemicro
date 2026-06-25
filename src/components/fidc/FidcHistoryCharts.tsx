@@ -113,6 +113,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Area type="monotone" dataKey="pl" stroke="hsl(var(--primary))" strokeWidth={1.6} fill="url(#gPL)" />
           </AreaChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Patrimônio Líquido", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Valor da Cota" subtitle="R$ por cota">
