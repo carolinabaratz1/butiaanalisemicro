@@ -125,6 +125,8 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
       posTotal: diag.posFound.length + diag.posMissing.length,
       plFound: fids.filter((f) => f.pl != null).length,
       dcFound: fids.filter((f) => f.creditRights != null).length,
+      segFound: fids.filter((f) => f.mainSegment).length,
+      flowsFound: fids.filter((f) => (f.flows?.totalSubscriptionValue ?? 0) + (f.flows?.totalRedemptionValue ?? 0) > 0).length,
       completos: fids.filter((f) => f.status === "completo").length,
       parciais: fids.filter((f) => f.status === "parcial").length,
       mappingErrors: fids.filter((f) => f.status === "mapping_error").length,
@@ -202,6 +204,8 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                       <Kpi label="Posição encontrados" value={`${summary.posFound}/${summary.posTotal}`} accent={summary.posFound === summary.posTotal ? "ok" : "warning"} />
                       <Kpi label="FIDCs PL ok" value={String(summary.plFound)} accent="ok" />
                       <Kpi label="FIDCs DC ok" value={String(summary.dcFound)} accent="ok" />
+                      <Kpi label="FIDCs c/ Segmento" value={String(summary.segFound)} accent={summary.segFound > 0 ? "ok" : "warning"} />
+                      <Kpi label="FIDCs c/ Fluxo Cota" value={String(summary.flowsFound)} accent={summary.flowsFound > 0 ? "ok" : "warning"} />
                       <Kpi label="Completos" value={String(summary.completos)} accent="ok" />
                       <Kpi label="Parciais" value={String(summary.parciais)} accent="warning" />
                       <Kpi label="Erro mapeamento" value={String(summary.mappingErrors)} accent={summary.mappingErrors ? "warning" : "ok"} />
@@ -303,7 +307,9 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                           <Th>Status</Th><Th>CNPJ</Th><Th>FIDC</Th><Th>Pos. Butiá</Th>
                           <Th right>PL</Th><Th right>DC</Th><Th right>Caixa Ampl.</Th><Th right>PDD</Th>
                           <Th right>Atraso total</Th><Th right>30d</Th><Th right>60d</Th><Th right>90d</Th><Th right>120d</Th>
-                          <Th right>Recompras</Th><Th right>Cotistas</Th><Th right>Classes</Th><Th right>Σ PL Cotas</Th><Th right>Δ PL</Th>
+                          <Th right>Recompras</Th><Th right>Cotistas</Th>
+                          <Th>Segmento principal</Th><Th right>% Seg</Th><Th right>Fluxo líq.</Th>
+                          <Th right>Classes</Th><Th right>Σ PL Cotas</Th><Th right>Δ PL</Th>
                           <Th>Versão</Th><Th>Diagnóstico</Th>
                         </tr>
                       </thead>
@@ -336,6 +342,9 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                               <Td right mono>{cell(f.overdue120)}</Td>
                               <Td right mono>{cell(f.repurchase)}</Td>
                               <Td right mono>{f.investors ?? "N/D"}</Td>
+                              <Td><span className="text-[11px]">{f.mainSegment ?? <span className="text-muted-foreground">—</span>}</span></Td>
+                              <Td right mono>{f.mainSegmentPct != null ? PCT(f.mainSegmentPct) : "—"}</Td>
+                              <Td right mono className={(f.flows?.netInvestorFlowValue ?? 0) < 0 ? "text-red-600" : ""}>{cell(f.flows?.netInvestorFlowValue ?? null)}</Td>
                               <Td right mono>{f.classes.length}</Td>
                               <Td right mono>{BRL(f.sumClassesPL, { compact: true })}</Td>
                               <Td right mono className={f.plDiffPct != null && f.plDiffPct > 0.05 ? "text-red-600" : ""}>{f.plDiffPct != null ? PCT(f.plDiffPct) : "—"}</Td>
@@ -360,7 +369,7 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                             </tr>
                           );
                         })}
-                        {!diag.fidcs.length && <tr><td colSpan={21} className="py-10 text-center text-muted-foreground">Nenhum FIDC do Cadastro Mestre encontrado neste informe.</td></tr>}
+                        {!diag.fidcs.length && <tr><td colSpan={24} className="py-10 text-center text-muted-foreground">Nenhum FIDC do Cadastro Mestre encontrado neste informe.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -511,7 +520,84 @@ function FidcDiagnosticView({ fidc, masterName }: { fidc: CvmFidcRow; masterName
         <Kpi label="FIDC (Mestre)" value={masterName ?? "—"} />
         <Kpi label="Nome CVM" value={fidc.name || "—"} />
         <Kpi label="Status" value={STATUS_LABELS[fidc.status]} />
+        <Kpi label="Segmento principal" value={fidc.mainSegment ?? "—"} accent={fidc.segmentValidationStatus === "ok" ? "ok" : fidc.segmentValidationStatus === "alert" ? "warning" : undefined} />
+        <Kpi label="% Segmento principal" value={fidc.mainSegmentPct != null ? PCT(fidc.mainSegmentPct) : "—"} />
+        <Kpi label="Sub-segmentos" value={String(fidc.subSegmentsCount ?? 0)} />
+        <Kpi label="Validação segmentos" value={fidc.segmentValidationStatus ?? "—"} accent={fidc.segmentValidationStatus === "ok" ? "ok" : "warning"} />
       </div>
+
+      {/* Segmentos */}
+      {fidc.segments && fidc.segments.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase text-muted-foreground mb-1">Carteira por segmento (TAB II)</div>
+          <div className="overflow-x-auto border border-border rounded-sm">
+            <table className="w-full text-[11.5px]">
+              <thead className="text-muted-foreground bg-surface-2">
+                <tr><Th>Código</Th><Th>Segmento</Th><Th>Nível</Th><Th>Pai</Th><Th right>Valor</Th><Th right>% Total</Th></tr>
+              </thead>
+              <tbody>
+                {fidc.segments.map((s, i) => (
+                  <tr key={`${s.code}-${i}`} className="hairline-b">
+                    <Td mono>{s.code}</Td>
+                    <Td><span style={{ paddingLeft: (s.level - 1) * 12 }}>{s.name}</span></Td>
+                    <Td mono>{s.level}</Td>
+                    <Td mono className="text-muted-foreground">{s.parent ?? "—"}</Td>
+                    <Td right mono>{BRL(s.value, { compact: true })}</Td>
+                    <Td right mono>{fidc.segmentTotal && fidc.segmentTotal > 0 ? PCT(s.value / fidc.segmentTotal) : "—"}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Classes detalhadas */}
+      {fidc.classes.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase text-muted-foreground mb-1">Classes / Subclasses (TAB X)</div>
+          <div className="overflow-x-auto border border-border rounded-sm">
+            <table className="w-full text-[11.5px] min-w-[1400px]">
+              <thead className="text-muted-foreground bg-surface-2">
+                <tr>
+                  <Th>Classe</Th><Th>Tipo</Th><Th right>Qtd cotas</Th><Th right>Valor cota</Th><Th right>PL</Th>
+                  <Th right>Rent. mês</Th><Th right>Cotistas</Th>
+                  <Th right>Captação</Th><Th right>Resgate</Th><Th right>Amort.</Th><Th right>Net</Th>
+                  <Th>Parse</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {fidc.classes.map((c, i) => (
+                  <tr key={i} className="hairline-b">
+                    <Td><div className="font-medium">{c.name}</div>{c.idSubclasse && <div className="text-[10px] text-muted-foreground font-mono">{c.idSubclasse}</div>}</Td>
+                    <Td>{c.type ?? "—"}</Td>
+                    <Td right mono>{c.numberOfQuotas?.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) ?? "—"}</Td>
+                    <Td right mono>{c.quotaValue != null ? c.quotaValue.toLocaleString("pt-BR", { minimumFractionDigits: 6, maximumFractionDigits: 8 }) : "—"}</Td>
+                    <Td right mono>{c.pl != null ? BRL(c.pl, { compact: true }) : "—"}</Td>
+                    <Td right mono className={(c.monthlyYieldPct ?? 0) < 0 ? "text-red-600" : ""}>{c.monthlyYieldPct != null ? `${c.monthlyYieldPct.toFixed(2)}%` : "—"}</Td>
+                    <Td right mono>{c.investorsCount ?? "—"}</Td>
+                    <Td right mono>{c.flows?.subscription_value != null ? BRL(c.flows.subscription_value, { compact: true }) : "—"}</Td>
+                    <Td right mono>{c.flows?.redemption_value != null ? BRL(c.flows.redemption_value, { compact: true }) : "—"}</Td>
+                    <Td right mono>{c.flows?.amortization_value != null ? BRL(c.flows.amortization_value, { compact: true }) : "—"}</Td>
+                    <Td right mono className={(c.netFlow ?? 0) < 0 ? "text-red-600" : ""}>{c.netFlow != null ? BRL(c.netFlow, { compact: true }) : "—"}</Td>
+                    <Td><span className={`text-[10px] ${c.parseStatus && c.parseStatus !== "ok" ? "text-amber-700" : "text-muted-foreground"}`}>{c.parseStatus ?? "ok"}</span></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {fidc.flows && (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mt-2 text-[11px]">
+              <Kpi label="Σ Captações" value={BRL(fidc.flows.totalSubscriptionValue ?? 0, { compact: true })} accent="ok" />
+              <Kpi label="Σ Resgates" value={BRL(fidc.flows.totalRedemptionValue ?? 0, { compact: true })} />
+              <Kpi label="Σ Resg. Solic." value={BRL(fidc.flows.totalRequestedRedemptionValue ?? 0, { compact: true })} />
+              <Kpi label="Σ Amortizações" value={BRL(fidc.flows.totalAmortizationValue ?? 0, { compact: true })} />
+              <Kpi label="Fluxo líquido" value={BRL(fidc.flows.netInvestorFlowValue ?? 0, { compact: true })} accent={(fidc.flows.netInvestorFlowValue ?? 0) < 0 ? "warning" : "ok"} />
+              <Kpi label="Fluxo bruto" value={BRL(fidc.flows.grossInvestorFlowValue ?? 0, { compact: true })} />
+            </div>
+          )}
+        </div>
+      )}
 
       <div>
         <div className="text-[10px] uppercase text-muted-foreground mb-1">Métricas extraídas (status por métrica)</div>
@@ -577,15 +663,28 @@ function CompareTab({ cnpj, fidcId, cvmRow, referenceMonth }: { cnpj: string; fi
   if (!cvmRow) return <Empty label="Sem dados CVM." />;
   const rows = [
     ["PL", cvmRow.pl, manual?.nav_value],
+    ["PL Médio", cvmRow.avgNav ?? null, (manual as any)?.avg_nav_value],
+    ["Ativo total", cvmRow.totalAssets ?? null, (manual as any)?.total_assets],
+    ["Passivo total", cvmRow.totalLiabilities ?? null, (manual as any)?.total_liabilities],
     ["Direitos Creditórios", cvmRow.creditRights, manual?.credit_rights_value],
+    ["DC Bruto (c/ PDD)", cvmRow.creditRightsGross ?? null, (manual as any)?.credit_rights_gross_value],
     ["Caixa Ampliado", cvmRow.caixaAmpliado, manual?.cash_value],
+    ["Caixa Estrito", cvmRow.cashStrict ?? null, (manual as any)?.cash_strict_value],
     ["PDD", cvmRow.pdd, manual?.pdd_value],
     ["Atraso total", cvmRow.overdueTotal, manual?.overdue_value],
-    ["Inad 30d", cvmRow.overdue30, manual?.overdue_30d_value],
-    ["Inad 60d", cvmRow.overdue60, manual?.overdue_60d_value],
-    ["Inad 90d", cvmRow.overdue90, manual?.overdue_90d_value],
-    ["Inad 120d", cvmRow.overdue120, manual?.overdue_120d_value],
+    ["Inad 30d+", cvmRow.overdue30, manual?.overdue_30d_value],
+    ["Inad 60d+", cvmRow.overdue60, manual?.overdue_60d_value],
+    ["Inad 90d+", cvmRow.overdue90, manual?.overdue_90d_value],
+    ["Inad 120d+", cvmRow.overdue120, manual?.overdue_120d_value],
+    ["Pré-pagamentos", cvmRow.prepaid ?? null, (manual as any)?.prepaid_value],
     ["Recompras", cvmRow.repurchase, manual?.repurchase_value],
+    ["Substituições", cvmRow.substitution ?? null, (manual as any)?.substitution_value],
+    ["Aquis. c/ risco", cvmRow.acquisitionWithRisk ?? null, (manual as any)?.acquisition_with_risk_value],
+    ["Aquis. s/ risco", cvmRow.acquisitionWithoutRisk ?? null, (manual as any)?.acquisition_without_risk_value],
+    ["Captações", cvmRow.flows?.totalSubscriptionValue ?? null, (manual as any)?.total_subscription_value],
+    ["Resgates", cvmRow.flows?.totalRedemptionValue ?? null, (manual as any)?.total_redemption_value],
+    ["Amortizações", cvmRow.flows?.totalAmortizationValue ?? null, (manual as any)?.total_amortization_value],
+    ["Fluxo líquido", cvmRow.flows?.netInvestorFlowValue ?? null, (manual as any)?.net_investor_flow_value],
     ["Cotistas", cvmRow.investors, manual?.investors_count],
     ["Σ PL Cotas", cvmRow.sumClassesPL, manual?.quota_total_nav_value],
   ] as Array<[string, number | null | undefined, number | null | undefined]>;

@@ -37,17 +37,48 @@ export type CvmFileDiagnostic = {
   tableKind: string | null;
 };
 
+export type CvmQuotaFlow = {
+  subscription_value?: number; subscription_quota_quantity?: number;
+  redemption_value?: number; redemption_quota_quantity?: number;
+  requested_redemption_value?: number; requested_redemption_quota_quantity?: number;
+  amortization_value?: number; amortization_quota_quantity?: number;
+};
+
 export type CvmFidcRow = {
   cnpj: string;
   name: string;
   referenceMonth: string;
   metrics: Record<string, MetricResult>;
-  classes: Array<{ name: string; type?: string; pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null; monthlyYieldPct?: number | null }>;
+  classes: Array<{
+    name: string; type?: string;
+    pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null;
+    monthlyYieldPct?: number | null;
+    rawQuotaQuantity?: string; rawQuotaValue?: string; rawMonthlyReturn?: string;
+    parseStatus?: string; idSubclasse?: string;
+    investorsCount?: number | null;
+    flows?: CvmQuotaFlow; netFlow?: number; grossFlow?: number;
+  }>;
+  segments?: Array<{ code: string; name: string; level: number; parent?: string; value: number }>;
+  segmentTotal?: number | null;
+  mainSegment?: string | null; mainSegmentValue?: number | null; mainSegmentPct?: number | null;
+  segmentValidationStatus?: string | null;
+  subSegmentsCount?: number;
+  flows?: {
+    totalSubscriptionValue?: number; totalRedemptionValue?: number;
+    totalRequestedRedemptionValue?: number; totalAmortizationValue?: number;
+    netInvestorFlowValue?: number; grossInvestorFlowValue?: number;
+  };
   rowsByFile: Record<string, Array<Record<string, string>>>;
   pl: number | null; creditRights: number | null; caixaAmpliado: number | null;
+  creditRightsGross?: number | null;
+  totalAssets?: number | null; totalLiabilities?: number | null;
+  avgNav?: number | null; cashStrict?: number | null;
   pdd: number | null; overdueTotal: number | null;
   overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
-  repurchase: number | null; investors: number | null;
+  prepaid?: number | null;
+  repurchase: number | null; substitution?: number | null;
+  acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
+  investors: number | null;
   sumClassesPL: number; plDiff: number | null; plDiffPct: number | null;
   missingMetrics: string[];
   status: CvmFidcStatus;
