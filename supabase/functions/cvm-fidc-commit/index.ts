@@ -62,6 +62,17 @@ type Item = {
   classes: ClassItem[]; sumClassesPL: number;
   plDiff: number | null; plDiffPct: number | null;
   status: string;
+  // Subordinação por senioridade + limites
+  subordination?: {
+    seniorNav: number; mezzNav: number; subNav: number; uniqueNav: number; unknownNav: number;
+    seniorPct: number | null; mezzPct: number | null; subPct: number | null;
+    seniorRatio: number | null; mezzRatio: number | null;
+    seniorLimit: number | null; mezzLimit: number | null;
+    seniorExcess: number | null; mezzExcess: number | null;
+    seniorStatus: string; mezzStatus: string; qualityFlag: string | null;
+    quotaSum: number; navDiff: number | null; navDiffPct: number | null;
+    validation: "ok" | "alert" | "critical";
+  } | null;
   // Coleções
   segments?: SegmentItem[];
   flows?: FlowsTotal;
@@ -165,7 +176,31 @@ Deno.serve(async (req) => {
           quota_validation_difference_percentage: it.plDiffPct,
           quota_validation_status: mapValidation(it.status),
           quota_classes_found_count: it.classes.length,
-          subordinated_calculation_status: it.classes.length > 1 ? "calculated" : "single_class",
+          subordinated_calculation_status: it.subordination
+            ? (it.subordination.validation === "critical" ? "inconsistent_quota_validation"
+              : (it.subordination.mezzNav > 0 ? "calculated_with_mezzanine" : "calculated"))
+            : (it.classes.length > 1 ? "calculated" : "single_class"),
+          // Subordinação por senioridade
+          senior_nav_value: it.subordination?.seniorNav ?? null,
+          senior_nav_pct: it.subordination?.seniorPct ?? null,
+          mezzanine_nav_value: it.subordination?.mezzNav ?? null,
+          mezzanine_nav_pct: it.subordination?.mezzPct ?? null,
+          subordinated_nav_value: it.subordination?.subNav ?? null,
+          subordinated_nav_pct: it.subordination?.subPct ?? null,
+          unique_nav_value: it.subordination?.uniqueNav ?? null,
+          unknown_quota_nav_value: it.subordination?.unknownNav ?? null,
+          senior_subordination_ratio: it.subordination?.seniorRatio ?? null,
+          mezzanine_subordination_ratio: it.subordination?.mezzRatio ?? null,
+          senior_subordination_limit: it.subordination?.seniorLimit ?? null,
+          mezzanine_subordination_limit: it.subordination?.mezzLimit ?? null,
+          senior_subordination_excess: it.subordination?.seniorExcess ?? null,
+          mezzanine_subordination_excess: it.subordination?.mezzExcess ?? null,
+          senior_subordination_status: it.subordination?.seniorStatus ?? null,
+          mezzanine_subordination_status: it.subordination?.mezzStatus ?? null,
+          senior_subordination_status_quality: it.subordination?.qualityFlag ?? null,
+          quota_classes_nav_sum: it.subordination?.quotaSum ?? it.sumClassesPL,
+          quota_classes_nav_diff: it.subordination?.navDiff ?? it.plDiff,
+          quota_classes_nav_diff_pct: it.subordination?.navDiffPct ?? it.plDiffPct,
           raw_data: {
             source: "cvm_open_data", url: body.sourceUrl,
             classes: it.classes, segments: it.segments ?? [], flows, status: it.status,
@@ -202,17 +237,22 @@ Deno.serve(async (req) => {
 
         // Cotas
         if (it.classes.length) {
+          const officialPL = it.pl && it.pl > 0 ? it.pl : null;
           const rows = it.classes.map((c) => {
             const f = c.flows ?? {};
             const yieldPct = c.monthlyYieldPct ?? null;
+            const navQ = c.pl ?? null;
             return {
               fidc_monthly_report_id: reportId,
               cnpj_fundo_classe: it.cnpj,
               reference_month: it.referenceMonth,
               class_name: c.name,
+              class_series_name: c.name,
               quota_type: c.type ?? null,
               id_subclasse: c.idSubclasse ?? null,
-              nav_value: c.pl ?? null,
+              nav_value: navQ,
+              quota_nav_value: navQ,
+              nav_pct: officialPL != null && navQ != null ? navQ / officialPL : null,
               quota_value: c.quotaValue ?? null,
               number_of_quotas: c.numberOfQuotas ?? null,
               raw_quota_quantity: c.rawQuotaQuantity ?? null,
@@ -240,6 +280,7 @@ Deno.serve(async (req) => {
           const { error } = await admin.from("fidc_monthly_quota_classes").insert(rows);
           if (error) throw error;
         }
+
 
         // Segmentos
         if (it.segments && it.segments.length) {

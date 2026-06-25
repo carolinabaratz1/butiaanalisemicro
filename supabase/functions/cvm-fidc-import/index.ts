@@ -339,13 +339,19 @@ function extractMetrics(buf: FidcBuffer, mappings: MappingRow[], filesIndex: Map
       const qt = parseBR(rawQt);
       const vl = parseBR(rawVl);
       const pl = (qt != null && vl != null) ? qt * vl : null;
-      // quota_type
-      const lower = name.toLowerCase();
+      // quota_type — normalização forte (lower + strip acentos + colapsa espaços + remove pipes)
+      const norm = name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/\|/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       let type = "unknown";
-      if (/s[eê]nior/.test(lower)) type = "senior";
-      else if (/mezanino/.test(lower)) type = "mezzanine";
-      else if (/subordinad/.test(lower)) type = "subordinated";
-      else if (/[uú]nica/.test(lower)) type = "unique";
+      if (!norm) type = "unknown";
+      else if (/\bsenior\b|\bsr\b/.test(norm)) type = "senior";
+      else if (/\bmezanino\b|\bmezzanine\b|\bmez\b/.test(norm)) type = "mezzanine";
+      else if (/\bsubordinad[ao]\b|\bsub\b/.test(norm)) type = "subordinated";
+      else if (/\bunica\b|\bunico\b|\bclasse unica\b/.test(norm)) type = "unique";
       buf.classes.push({
         name, normalizedName: normalizeName(name), type,
         pl, quotaValue: vl, numberOfQuotas: qt,
@@ -651,6 +657,89 @@ Deno.serve(async (req) => {
       };
     }
 
+    // === Subordinação por senioridade + limites manuais ===
+    // 1) carrega map CNPJ→fidc_id e limites vigentes
+    const cnpjsInBuffer = Array.from(buffer.keys());
+    const fidcIdByCnpj = new Map<string, string>();
+    if (cnpjsInBuffer.length) {
+      const { data: fidcRows } = await admin.from("fidcs").select("id, cnpj").in("cnpj", cnpjsInBuffer);
+      for (const r of (fidcRows ?? []) as Array<{ id: string; cnpj: string }>) {
+        fidcIdByCnpj.set(onlyDigits(r.cnpj), r.id);
+      }
+    }
+    const refDateISO = `${ref.slice(0, 4)}-${ref.slice(4, 6)}-01`;
+    type LimitRow = { fidc_id: string; senior_min_subordination_pct: number | null; mezzanine_min_subordination_pct: number | null; effective_from: string; effective_to: string | null };
+    const limitsByFidc = new Map<string, LimitRow>();
+    const fidcIdList = Array.from(new Set(Array.from(fidcIdByCnpj.values())));
+    if (fidcIdList.length) {
+      const { data: limRows } = await admin
+        .from("fidc_subordination_limits")
+        .select("fidc_id, senior_min_subordination_pct, mezzanine_min_subordination_pct, effective_from, effective_to")
+        .in("fidc_id", fidcIdList)
+        .lte("effective_from", refDateISO)
+        .order("effective_from", { ascending: false });
+      for (const r of (limRows ?? []) as LimitRow[]) {
+        if (limitsByFidc.has(r.fidc_id)) continue;
+        if (r.effective_to && r.effective_to < refDateISO) continue;
+        limitsByFidc.set(r.fidc_id, r);
+      }
+    }
+    // 2) anexa subordinação calculada por buf
+    for (const buf of buffer.values()) {
+      const sumBy = (t: string) => buf.classes.filter((c) => c.type === t).reduce((s, c) => s + (c.pl ?? 0), 0);
+      const seniorNav = sumBy("senior");
+      const mezzNav = sumBy("mezzanine");
+      const subNav = sumBy("subordinated");
+      const uniqueNav = sumBy("unique");
+      const unknownNav = sumBy("unknown");
+      const quotaSum = seniorNav + mezzNav + subNav + uniqueNav + unknownNav;
+      const navMeta = buf.metrics["nav_value"];
+      const officialPL = navMeta && (navMeta.status === "found_value" || navMeta.status === "found_zero") ? Number(navMeta.value) || 0 : null;
+      const plOk = officialPL != null && officialPL > 0;
+      const seniorRatio = plOk ? (officialPL! - seniorNav) / officialPL! : null;
+      const mezzRatio = plOk && mezzNav > 0 ? subNav / officialPL! : null;
+      const navDiff = plOk ? quotaSum - officialPL! : null;
+      const navDiffPct = plOk ? Math.abs(navDiff!) / officialPL! : null;
+      let validation: "ok" | "alert" | "critical" = "ok";
+      if (navDiffPct != null) {
+        if (navDiffPct > 0.002) validation = "critical";
+        else if (navDiffPct > 0.0001) validation = "alert";
+      }
+      const fidcId = fidcIdByCnpj.get(buf.cnpj);
+      const lim = fidcId ? limitsByFidc.get(fidcId) : undefined;
+      const seniorLimit = lim?.senior_min_subordination_pct != null ? Number(lim.senior_min_subordination_pct) / 100 : null;
+      const mezzLimit = lim?.mezzanine_min_subordination_pct != null ? Number(lim.mezzanine_min_subordination_pct) / 100 : null;
+      const seniorExcess = seniorRatio != null && seniorLimit != null ? seniorRatio - seniorLimit : null;
+      const mezzExcess = mezzRatio != null && mezzLimit != null ? mezzRatio - mezzLimit : null;
+      const NEAR = 0.01;
+      let seniorStatus: string;
+      if (validation === "critical") seniorStatus = "inconsistent_quota_validation";
+      else if (seniorRatio == null) seniorStatus = "not_calculable";
+      else if (seniorLimit == null) seniorStatus = "missing_limit";
+      else if (seniorRatio < seniorLimit) seniorStatus = "below_limit";
+      else if (seniorRatio - seniorLimit <= NEAR) seniorStatus = "near_limit";
+      else seniorStatus = "adequate";
+      let mezzStatus: string;
+      if (mezzNav <= 0) mezzStatus = "not_applicable";
+      else if (validation === "critical") mezzStatus = "inconsistent_quota_validation";
+      else if (mezzRatio == null) mezzStatus = "not_calculable";
+      else if (mezzLimit == null) mezzStatus = "missing_limit";
+      else if (mezzRatio < mezzLimit) mezzStatus = "below_limit";
+      else if (mezzRatio - mezzLimit <= NEAR) mezzStatus = "near_limit";
+      else mezzStatus = "adequate";
+      const qualityFlag = unknownNav > 0 && plOk && unknownNav / officialPL! > 0.0001 ? "contains_unknown_quota_type" : null;
+      (buf as FidcBuffer & { subordination?: Record<string, unknown> }).subordination = {
+        seniorNav, mezzNav, subNav, uniqueNav, unknownNav,
+        seniorPct: plOk ? seniorNav / officialPL! : null,
+        mezzPct: plOk ? mezzNav / officialPL! : null,
+        subPct: plOk ? subNav / officialPL! : null,
+        seniorRatio, mezzRatio,
+        seniorLimit, mezzLimit, seniorExcess, mezzExcess,
+        seniorStatus, mezzStatus, qualityFlag,
+        quotaSum, navDiff, navDiffPct, validation,
+      };
+    }
+
     // Resumo final por FIDC
     const referenceISO = `${ref.slice(0, 4)}-${ref.slice(4, 6)}-01`;
     const fidcs = Array.from(buffer.values()).map((buf) => {
@@ -759,6 +848,7 @@ Deno.serve(async (req) => {
         acquisitionWithoutRisk: value("acquisition_without_risk_value"),
         investors: value("investors_count"),
         sumClassesPL, plDiff: diff, plDiffPct: diffPct,
+        subordination: (buf as FidcBuffer & { subordination?: Record<string, unknown> }).subordination ?? null,
         missingMetrics: missing,
         status,
         hasPositionInButia: positionSet.has(buf.cnpj),

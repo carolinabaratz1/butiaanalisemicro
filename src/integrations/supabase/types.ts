@@ -919,6 +919,7 @@ export type Database = {
           amortization_quota_quantity: number | null
           amortization_value: number | null
           class_name: string | null
+          class_series_name: string | null
           cnpj_fundo_classe: string | null
           created_at: string
           fidc_monthly_report_id: string
@@ -933,11 +934,13 @@ export type Database = {
           monthly_return_decimal: number | null
           monthly_return_pct: number | null
           monthly_yield_pct: number | null
+          nav_pct: number | null
           nav_value: number | null
           net_quota_flow_value: number | null
           number_of_quotas: number | null
           parse_status: string | null
           quota_flow_source_file: string | null
+          quota_nav_value: number | null
           quota_type: string | null
           quota_value: number | null
           rating: string | null
@@ -959,6 +962,7 @@ export type Database = {
           amortization_quota_quantity?: number | null
           amortization_value?: number | null
           class_name?: string | null
+          class_series_name?: string | null
           cnpj_fundo_classe?: string | null
           created_at?: string
           fidc_monthly_report_id: string
@@ -973,11 +977,13 @@ export type Database = {
           monthly_return_decimal?: number | null
           monthly_return_pct?: number | null
           monthly_yield_pct?: number | null
+          nav_pct?: number | null
           nav_value?: number | null
           net_quota_flow_value?: number | null
           number_of_quotas?: number | null
           parse_status?: string | null
           quota_flow_source_file?: string | null
+          quota_nav_value?: number | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
@@ -999,6 +1005,7 @@ export type Database = {
           amortization_quota_quantity?: number | null
           amortization_value?: number | null
           class_name?: string | null
+          class_series_name?: string | null
           cnpj_fundo_classe?: string | null
           created_at?: string
           fidc_monthly_report_id?: string
@@ -1013,11 +1020,13 @@ export type Database = {
           monthly_return_decimal?: number | null
           monthly_return_pct?: number | null
           monthly_yield_pct?: number | null
+          nav_pct?: number | null
           nav_value?: number | null
           net_quota_flow_value?: number | null
           number_of_quotas?: number | null
           parse_status?: string | null
           quota_flow_source_file?: string | null
+          quota_nav_value?: number | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
@@ -1108,6 +1117,12 @@ export type Database = {
           maturity_91_120_value: number | null
           maturity_breakdown: Json | null
           maturity_over_1080_value: number | null
+          mezzanine_nav_pct: number | null
+          mezzanine_nav_value: number | null
+          mezzanine_subordination_excess: number | null
+          mezzanine_subordination_limit: number | null
+          mezzanine_subordination_ratio: number | null
+          mezzanine_subordination_status: string | null
           nav_value: number | null
           net_investor_flow_value: number | null
           overdue_120d_value: number | null
@@ -1129,6 +1144,9 @@ export type Database = {
           portfolio_book_value: number | null
           prepaid_value: number | null
           quota_classes_found_count: number | null
+          quota_classes_nav_diff: number | null
+          quota_classes_nav_diff_pct: number | null
+          quota_classes_nav_sum: number | null
           quota_total_nav_value: number | null
           quota_validation_difference: number | null
           quota_validation_difference_percentage: number | null
@@ -1145,11 +1163,20 @@ export type Database = {
           segment_breakdown: Json | null
           segment_portfolio_value: number | null
           segment_validation_status: string | null
+          senior_nav_pct: number | null
+          senior_nav_value: number | null
+          senior_subordination_excess: number | null
+          senior_subordination_limit: number | null
+          senior_subordination_ratio: number | null
+          senior_subordination_status: string | null
+          senior_subordination_status_quality: string | null
           source: string
           source_file_name: string | null
           source_url: string | null
           subordinated_calculation_notes: string | null
           subordinated_calculation_status: string | null
+          subordinated_nav_pct: number | null
+          subordinated_nav_value: number | null
           subordinated_value: number | null
           substitution_value: number | null
           substitutions_value: number | null
@@ -1159,6 +1186,8 @@ export type Database = {
           total_redemption_value: number | null
           total_requested_redemption_value: number | null
           total_subscription_value: number | null
+          unique_nav_value: number | null
+          unknown_quota_nav_value: number | null
           updated_at: string
           version: number
         }
@@ -1217,6 +1246,12 @@ export type Database = {
           maturity_91_120_value?: number | null
           maturity_breakdown?: Json | null
           maturity_over_1080_value?: number | null
+          mezzanine_nav_pct?: number | null
+          mezzanine_nav_value?: number | null
+          mezzanine_subordination_excess?: number | null
+          mezzanine_subordination_limit?: number | null
+          mezzanine_subordination_ratio?: number | null
+          mezzanine_subordination_status?: string | null
           nav_value?: number | null
           net_investor_flow_value?: number | null
           overdue_120d_value?: number | null
@@ -1238,6 +1273,9 @@ export type Database = {
           portfolio_book_value?: number | null
           prepaid_value?: number | null
           quota_classes_found_count?: number | null
+          quota_classes_nav_diff?: number | null
+          quota_classes_nav_diff_pct?: number | null
+          quota_classes_nav_sum?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
           quota_validation_difference_percentage?: number | null
@@ -1254,11 +1292,20 @@ export type Database = {
           segment_breakdown?: Json | null
           segment_portfolio_value?: number | null
           segment_validation_status?: string | null
+          senior_nav_pct?: number | null
+          senior_nav_value?: number | null
+          senior_subordination_excess?: number | null
+          senior_subordination_limit?: number | null
+          senior_subordination_ratio?: number | null
+          senior_subordination_status?: string | null
+          senior_subordination_status_quality?: string | null
           source?: string
           source_file_name?: string | null
           source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
+          subordinated_nav_pct?: number | null
+          subordinated_nav_value?: number | null
           subordinated_value?: number | null
           substitution_value?: number | null
           substitutions_value?: number | null
@@ -1268,6 +1315,8 @@ export type Database = {
           total_redemption_value?: number | null
           total_requested_redemption_value?: number | null
           total_subscription_value?: number | null
+          unique_nav_value?: number | null
+          unknown_quota_nav_value?: number | null
           updated_at?: string
           version?: number
         }
@@ -1326,6 +1375,12 @@ export type Database = {
           maturity_91_120_value?: number | null
           maturity_breakdown?: Json | null
           maturity_over_1080_value?: number | null
+          mezzanine_nav_pct?: number | null
+          mezzanine_nav_value?: number | null
+          mezzanine_subordination_excess?: number | null
+          mezzanine_subordination_limit?: number | null
+          mezzanine_subordination_ratio?: number | null
+          mezzanine_subordination_status?: string | null
           nav_value?: number | null
           net_investor_flow_value?: number | null
           overdue_120d_value?: number | null
@@ -1347,6 +1402,9 @@ export type Database = {
           portfolio_book_value?: number | null
           prepaid_value?: number | null
           quota_classes_found_count?: number | null
+          quota_classes_nav_diff?: number | null
+          quota_classes_nav_diff_pct?: number | null
+          quota_classes_nav_sum?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
           quota_validation_difference_percentage?: number | null
@@ -1363,11 +1421,20 @@ export type Database = {
           segment_breakdown?: Json | null
           segment_portfolio_value?: number | null
           segment_validation_status?: string | null
+          senior_nav_pct?: number | null
+          senior_nav_value?: number | null
+          senior_subordination_excess?: number | null
+          senior_subordination_limit?: number | null
+          senior_subordination_ratio?: number | null
+          senior_subordination_status?: string | null
+          senior_subordination_status_quality?: string | null
           source?: string
           source_file_name?: string | null
           source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
+          subordinated_nav_pct?: number | null
+          subordinated_nav_value?: number | null
           subordinated_value?: number | null
           substitution_value?: number | null
           substitutions_value?: number | null
@@ -1377,6 +1444,8 @@ export type Database = {
           total_redemption_value?: number | null
           total_requested_redemption_value?: number | null
           total_subscription_value?: number | null
+          unique_nav_value?: number | null
+          unknown_quota_nav_value?: number | null
           updated_at?: string
           version?: number
         }
@@ -1579,6 +1648,62 @@ export type Database = {
             columns: ["fidc_quota_class_id"]
             isOneToOne: false
             referencedRelation: "fidc_quota_classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_subordination_limits: {
+        Row: {
+          cnpj_fundo_classe: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          effective_to: string | null
+          fidc_id: string
+          id: string
+          mezzanine_min_subordination_pct: number | null
+          notes: string | null
+          regulation_reference: string | null
+          senior_min_subordination_pct: number | null
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          cnpj_fundo_classe?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from: string
+          effective_to?: string | null
+          fidc_id: string
+          id?: string
+          mezzanine_min_subordination_pct?: number | null
+          notes?: string | null
+          regulation_reference?: string | null
+          senior_min_subordination_pct?: number | null
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          cnpj_fundo_classe?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          effective_to?: string | null
+          fidc_id?: string
+          id?: string
+          mezzanine_min_subordination_pct?: number | null
+          notes?: string | null
+          regulation_reference?: string | null
+          senior_min_subordination_pct?: number | null
+          source?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_subordination_limits_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
             referencedColumns: ["id"]
           },
         ]
