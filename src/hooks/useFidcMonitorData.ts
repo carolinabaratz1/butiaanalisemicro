@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveReport, classifyReportStatus, type ReportSourceStatus } from "@/lib/fidc/source-resolver";
 
 // Os 3 fundos Butiá que investem em FIDCs.
 // O `source` precisa bater EXATAMENTE com posicoes.trading_desk_share_source.
