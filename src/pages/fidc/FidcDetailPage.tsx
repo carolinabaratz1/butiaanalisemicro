@@ -13,6 +13,9 @@ import { QuotasSection } from "@/components/fidc/laminate/QuotasSection";
 import { SubordinationPanel } from "@/components/fidc/laminate/SubordinationPanel";
 import { AlertsPanel } from "@/components/fidc/laminate/AlertsPanel";
 import { CreditOpinionPanel } from "@/components/fidc/laminate/CreditOpinionPanel";
+import { DataSourceDialog } from "@/components/fidc/laminate/DataSourceDialog";
+import { resolveReport, type DataSource } from "@/lib/fidc/source-resolver";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 import { Button } from "@/components/ui/button";
 import {
