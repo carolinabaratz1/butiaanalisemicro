@@ -10,6 +10,10 @@ type Props = {
   segments?: Item[] | null;
   maturity?: Item[] | null;
   overdueByBucket?: Item[] | null;
+  overdueHeadlineValue?: number | null;
+  overdueSource?: string | null;
+  overdueBucketCoverageStatus?: string | null;
+  delinquencyUnbucketedValue?: number | null;
   assignors?: Item[] | null;
   guaranteesValue?: number | null;
   guaranteesPctDc?: number | null;
