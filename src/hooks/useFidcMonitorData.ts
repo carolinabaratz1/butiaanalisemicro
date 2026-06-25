@@ -565,6 +565,8 @@ export function useFidcMonitorData() {
     positionAlerts,
     latestReportFor,
     prevReportFor,
+    resolveReportFor,
+    reportSourceStatusFor,
     fidcsWithReportCount,
   };
 }
