@@ -155,6 +155,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Area type="monotone" dataKey="dc" stroke="#10b981" strokeWidth={1.6} fill="url(#gDC)" />
           </AreaChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Direitos creditórios", color: "#10b981" }]} />
       </ChartCard>
 
       <ChartCard title="Inadimplência e PDD" subtitle="% sobre Direitos Creditórios">
