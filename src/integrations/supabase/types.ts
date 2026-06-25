@@ -1067,6 +1067,7 @@ export type Database = {
           credit_rights_value: number | null
           credit_rights_with_risk_transfer: number | null
           credit_rights_without_risk_transfer: number | null
+          defaulted_credit_rights_value: number | null
           delinquency_0_30_value: number | null
           delinquency_120_plus_value: number | null
           delinquency_121_150_value: number | null
@@ -1081,6 +1082,7 @@ export type Database = {
           delinquency_90_plus_value: number | null
           delinquency_91_120_value: number | null
           delinquency_over_1080_value: number | null
+          delinquency_unbucketed_value: number | null
           disposals_value: number | null
           fidc_id: string
           file_hash: string | null
@@ -1113,8 +1115,16 @@ export type Database = {
           overdue_60d_value: number | null
           overdue_90d_value: number | null
           overdue_breakdown: Json | null
+          overdue_bucket_coverage_status: string | null
+          overdue_existing_credit_rights_value: number | null
+          overdue_installments_value: number | null
+          overdue_source: string | null
+          overdue_to_credit_rights_ratio: number | null
           overdue_value: number | null
+          overdue_value_tab_i: number | null
+          overdue_value_tab_v_vi: number | null
           payables_value: number | null
+          pdd_to_overdue_ratio: number | null
           pdd_value: number | null
           portfolio_book_value: number | null
           prepaid_value: number | null
@@ -1166,6 +1176,7 @@ export type Database = {
           credit_rights_value?: number | null
           credit_rights_with_risk_transfer?: number | null
           credit_rights_without_risk_transfer?: number | null
+          defaulted_credit_rights_value?: number | null
           delinquency_0_30_value?: number | null
           delinquency_120_plus_value?: number | null
           delinquency_121_150_value?: number | null
@@ -1180,6 +1191,7 @@ export type Database = {
           delinquency_90_plus_value?: number | null
           delinquency_91_120_value?: number | null
           delinquency_over_1080_value?: number | null
+          delinquency_unbucketed_value?: number | null
           disposals_value?: number | null
           fidc_id: string
           file_hash?: string | null
@@ -1212,8 +1224,16 @@ export type Database = {
           overdue_60d_value?: number | null
           overdue_90d_value?: number | null
           overdue_breakdown?: Json | null
+          overdue_bucket_coverage_status?: string | null
+          overdue_existing_credit_rights_value?: number | null
+          overdue_installments_value?: number | null
+          overdue_source?: string | null
+          overdue_to_credit_rights_ratio?: number | null
           overdue_value?: number | null
+          overdue_value_tab_i?: number | null
+          overdue_value_tab_v_vi?: number | null
           payables_value?: number | null
+          pdd_to_overdue_ratio?: number | null
           pdd_value?: number | null
           portfolio_book_value?: number | null
           prepaid_value?: number | null
@@ -1265,6 +1285,7 @@ export type Database = {
           credit_rights_value?: number | null
           credit_rights_with_risk_transfer?: number | null
           credit_rights_without_risk_transfer?: number | null
+          defaulted_credit_rights_value?: number | null
           delinquency_0_30_value?: number | null
           delinquency_120_plus_value?: number | null
           delinquency_121_150_value?: number | null
@@ -1279,6 +1300,7 @@ export type Database = {
           delinquency_90_plus_value?: number | null
           delinquency_91_120_value?: number | null
           delinquency_over_1080_value?: number | null
+          delinquency_unbucketed_value?: number | null
           disposals_value?: number | null
           fidc_id?: string
           file_hash?: string | null
@@ -1311,8 +1333,16 @@ export type Database = {
           overdue_60d_value?: number | null
           overdue_90d_value?: number | null
           overdue_breakdown?: Json | null
+          overdue_bucket_coverage_status?: string | null
+          overdue_existing_credit_rights_value?: number | null
+          overdue_installments_value?: number | null
+          overdue_source?: string | null
+          overdue_to_credit_rights_ratio?: number | null
           overdue_value?: number | null
+          overdue_value_tab_i?: number | null
+          overdue_value_tab_v_vi?: number | null
           payables_value?: number | null
+          pdd_to_overdue_ratio?: number | null
           pdd_value?: number | null
           portfolio_book_value?: number | null
           prepaid_value?: number | null
