@@ -75,6 +75,17 @@ export type CvmFidcRow = {
   avgNav?: number | null; cashStrict?: number | null;
   pdd: number | null; overdueTotal: number | null;
   overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
+  // Atraso/inadimplência detalhado (TAB I + TAB V/VI)
+  overdueExistingCreditRightsValue?: number | null;
+  defaultedCreditRightsValue?: number | null;
+  overdueInstallmentsValue?: number | null;
+  overdueValueTabI?: number | null;
+  overdueValueTabVVi?: number | null;
+  overdueSource?: "tab_i" | "tab_v_vi" | "none" | string | null;
+  overdueBucketCoverageStatus?: "com_abertura_por_faixa" | "sem_abertura_por_faixa" | "somente_tab_v_vi" | "sem_inadimplencia_reportada" | string | null;
+  delinquencyUnbucketedValue?: number | null;
+  overdueToCreditRightsRatio?: number | null;
+  pddToOverdueRatio?: number | null;
   prepaid?: number | null;
   repurchase: number | null; substitution?: number | null;
   acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
