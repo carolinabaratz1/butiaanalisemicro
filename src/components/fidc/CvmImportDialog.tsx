@@ -125,6 +125,8 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
       posTotal: diag.posFound.length + diag.posMissing.length,
       plFound: fids.filter((f) => f.pl != null).length,
       dcFound: fids.filter((f) => f.creditRights != null).length,
+      segFound: fids.filter((f) => f.mainSegment).length,
+      flowsFound: fids.filter((f) => (f.flows?.totalSubscriptionValue ?? 0) + (f.flows?.totalRedemptionValue ?? 0) > 0).length,
       completos: fids.filter((f) => f.status === "completo").length,
       parciais: fids.filter((f) => f.status === "parcial").length,
       mappingErrors: fids.filter((f) => f.status === "mapping_error").length,
