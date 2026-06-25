@@ -1,148 +1,120 @@
-# Parser do Informe Mensal FIDC — extração por âncoras e de/para
 
-Objetivo: reduzir drasticamente os N/D na lâmina individual do FIDC, lendo o informe **por seção e por rótulo textual normalizado**, nunca por linha fixa. Sem mexer em upload de posições, Cadastro Mestre, sidebar; sem IA; sem nova migration (todos os novos campos ficam dentro do `raw_data` JSON).
+# POC: Importar Informes via CVM (Dados Abertos)
 
----
+Adiciona um caminho alternativo de importação ao FIDC Monitor, baixando o ZIP oficial mensal da CVM, filtrando os CNPJs do Cadastro Mestre e mostrando diagnóstico antes de gravar. O upload manual atual permanece intacto e funciona em paralelo.
 
-## Fase 1 — Reescrita de `src/lib/fidc/monthly-report-parser.ts`
+## Escopo
 
-### 1.1 Mapa de seções (âncoras textuais)
+**Mantém:** sidebar, upload manual, Cadastro Mestre, base de posições, dados existentes.
+**Não faz:** PDF, IA, gravação automática sem confirmação, alteração de schema das tabelas existentes (apenas adiciona colunas em `fidc_monthly_reports`).
 
-Ancorar uma vez por arquivo. Cada âncora delimita janela `[from, to)` para buscas internas — nada é por número de linha.
+## Arquitetura
 
-```
-I  - Ativo
-  1 - Disponibilidades                    → caixa estrito
-  2 - Carteira
-    a) DC com aquisição substancial
-       a.2.1) Valor Total Parcelas Inadimplentes
-       a.3)   Créditos Existentes Inadimplentes
-       a.10)  Provisão para Redução
-       a.11)  (cedentes)
-    b) DC sem aquisição substancial
-       b.2.1, b.3, b.10, b.11 (idem)
-    c) Valores Mobiliários
-    d) Títulos Públicos Federais
-    e) CDB
-    f) Compromissadas
-    g) Outros Ativos RF
-    h) Cotas de FIDCs
-    i) Warrants
-II - Carteira por Segmento                → segment_breakdown
-III - Passivo
-IV - Patrimônio Líquido
-   a) Valor do PL                          → nav_value
-   b) Valor do PL Médio                    → raw.monthly_average_nav_value
-V  - Comportamento DC com aquisição
-   a) Por Prazo de Vencimento (a.1..a.10)
-   b) Inadimplentes (b.1..b.10) [entre X e Y dias / acima de 1080]
-VI - Comportamento DC sem aquisição
-   a) Por Prazo (mesmo padrão)
-   b) Inadimplentes (mesmo padrão)
-VII - Negócios no mês
-   a) Aquisições  (a.1 qtd, a.2 valor)
-   b) Alienações  (b.1 qtd, b.2 valor, b.3 contábil)
-   c) Substituições (c.1, c.2, c.3)
-   d) Recompras    (d.1, d.2, d.3)
-IX - Taxas
-X  - Outras Informações
-   1) Nº de Cotistas                       → investors_count
-   2) Descrição da Série/Classe            → cotas (campos: Cota, PL, Quantidade, Rating)
-   3) Rentabilidade Apurada no Mês         → monthlyYieldPct por classe
-   4) Captações, Resgates e Amortizações   → subs/red/amort por classe
-   7) Garantias (7.1 valor, 7.2 %)
-   8) SCR (8.1 / 8.2 / "Não possui informação apresentada")
+O ZIP da CVM tem ~50 MB e é hospedado em `dados.cvm.gov.br` (sem CORS para origens externas). Não dá para baixar direto do browser. Solução:
+
+```text
+Browser (modal POC) ──► Edge Function `cvm-fidc-import`
+                           │
+                           ├─ baixa ZIP da CVM
+                           ├─ descompacta (CSVs ; latin1)
+                           ├─ filtra por CNPJs do Cadastro Mestre + posições
+                           ├─ agrega métricas por FIDC e por classe de cota
+                           └─ devolve JSON de diagnóstico
+Browser ──► (usuário confirma) ──► Edge Function `cvm-fidc-commit`
+                           │
+                           └─ grava em fidc_monthly_reports + fidc_monthly_quota_classes
+                              com source='cvm_open_data', is_current_version, versionamento
 ```
 
-### 1.2 Normalização e parsing numérico
+Cache do ZIP em memória da função por execução (sem storage). O usuário pode reabrir o diagnóstico sem re-baixar dentro da mesma sessão da função (chave: AAAAMM + hash).
 
-Reaproveitar `norm()`, `asNumber()`. Adicionar `pickRightmostNumber(row, col)` que, se a célula da coluna do mês estiver vazia, pega o último valor numérico não-nulo à direita da linha — defesa contra colunas mescladas. Manter detecção de `(neg)` e `R$ x.xxx,xx`.
+## Estrutura dos CSVs da CVM
 
-### 1.3 Novas extrações (vão para `MonthlyMetrics` ou `raw_data`)
+O ZIP `inf_mensal_fidc_AAAAMM.zip` contém ~10 CSVs separados por `;`, encoding latin1:
 
-**Coluna do banco já existente** (sem migration):
-- `cash_value` ← **Caixa Ampliado** = I.1 + I.2.c..i (soma de presentes).
-- `overdue_30/60/90/120d_value` ← V.b.1..4 + VI.b.1..4 usando rótulos "entre 1 e 30", "entre 31 e 60", "entre 61 e 90", "entre 91 e 120".
-- `overdue_value` ← preferencial V.b + VI.b (totais de "b) Inadimplentes").
-- `repurchase_value` ← VII.d.2.
-- `acquisitions_value` ← VII.a.2.
-- `substitutions_value` ← VII.c.2.
-- `disposals_value` ← VII.b.2.
-- `guarantees_value` ← 7.1; `guarantees_pct_dc` calculado.
-- `scr_status` / `scr_value` ← seção 8.
-- `segment_breakdown` ← filhos diretos de II (apenas com valor ≠ 0).
-- `maturity_breakdown` ← V.a + VI.a buckets `Até 30`, `31 a 60`, …, `Acima de 1080`.
-- `overdue_breakdown` ← V.b + VI.b buckets 30/60/90/120/150/180/360/720/1080/+1080.
-- `assignors_breakdown` ← filhos de a.11 + b.11.
-- `investors_count` ← X.1.
+- `inf_mensal_fidc_tab_I_AAAAMM.csv` — Ativos (I.1, I.2.a..i, subitens .10 para PDD)
+- `inf_mensal_fidc_tab_II_AAAAMM.csv` — Carteira por segmento
+- `inf_mensal_fidc_tab_IV_AAAAMM.csv` — PL (IV.a)
+- `inf_mensal_fidc_tab_V_AAAAMM.csv` — Inadimplência DC (V.a prazos, V.b atrasos por faixa)
+- `inf_mensal_fidc_tab_VI_AAAAMM.csv` — Inadimplência outros (VI.b)
+- `inf_mensal_fidc_tab_VII_AAAAMM.csv` — Negócios do mês (VII.d.2 recompras)
+- `inf_mensal_fidc_tab_X_1_AAAAMM.csv` — Cotistas
+- `inf_mensal_fidc_tab_X_2_AAAAMM.csv` — Classes de cota (PL, qtd, valor)
+- `inf_mensal_fidc_tab_X_3_AAAAMM.csv` — Rentabilidade mensal por classe
+- `inf_mensal_fidc_tab_X_4_AAAAMM.csv` — Subscrições/resgates/amortizações
 
-**Campos novos em `raw_data`** (sem migration):
-- `cash_strict_value` ← I.1.
-- `cash_ampliado_components` ← objeto com `{ disponibilidades, valoresMobiliarios, tpf, cdb, compromissadas, outrosRF, cotasFIDC, warrants }`.
-- `total_assets`, `total_liabilities`.
-- `delinquency_30_plus_value`, `delinquency_60_plus_value`, `delinquency_90_plus_value` (e seus `_ratio`).
-- `maturity_buckets` (mesmo conteúdo de `maturity_breakdown`, formato `{ bucket, value }`).
-- `portfolio_by_segment` (idem).
-- `monthly_credit_rights_transactions` = `{ acquisitions:{qty,value}, disposals:{qty,value,book}, substitutions:{qty,value,book}, repurchases:{qty,value,book} }`.
-- `quota_monthly_returns` = lista `{ class_name, monthly_return }` da seção X.3.
-- `quota_flows` = lista `{ class_name, captacao_valor, captacao_qtd, resgate_valor, resgate_qtd, resgate_pendente_valor, resgate_pendente_qtd, amort_valor_cota, amort_valor_total }` da seção X.4.
-- `guarantees` = `{ valor: 7.1, pct_dc: 7.2 }`.
-- `scr` = `{ status, valor_devedores: 8.1, valor_operacoes: 8.2 }`.
+Chave de join: `CNPJ_FUNDO_CLASSE` (ou `CNPJ_FUNDO` em meses antigos). Para classes, `CNPJ_FUNDO_CLASSE` + `DENOM_CLASSE`/`TP_CLASSE`.
 
-### 1.4 Cotas/classes (seção X.2)
+## Entregáveis
 
-Mantém leitura iterativa atual, mas:
-- Janela limitada a `[anchor("2) Descricao"), anchor("3) Rentabilidade"))`.
-- Após o parsing das classes, ler X.3 e fazer match por `norm(className)` para preencher `monthlyYieldPct`.
-- Idem X.4 para `subscriptionValue` / `redemptionValue` / `amortizationValue`.
-- `seniority_level` classificado por regex: `senior|sr` → senior; `mezanino|mz` → mezzanine; `subordinad|sub` → subordinated; `unica|monoclasse` → unique; senão `unknown`.
+### 1. Edge functions
 
-### 1.5 Checklist expandido
+**`supabase/functions/cvm-fidc-import/index.ts`** (POC, diagnóstico):
 
-Adicionar linhas: PL Médio, Caixa Estrito, Caixa Ampliado, Inadimplência 30/60/90/120, Garantias, SCR, Aquisições, Alienações, Substituições, com `section` apontando a âncora usada e `foundLabel` com o rótulo localizado.
+- Input: `{ referenceMonth: 'YYYYMM' }`
+- Baixa ZIP, descompacta com `jsr:@zip-js/zip-js` (Deno), faz streaming dos CSVs com parser próprio leve (split por `;` respeitando aspas).
+- Recebe lista de CNPJs alvo no request body (enviada pelo cliente — Cadastro Mestre + posições) para evitar chamadas extras de DB.
+- Para cada FIDC alvo, agrega: PL (IV.a), DC (I.2.a+I.2.b), Caixa Ampliado (I.1 + I.2.c..i), PDD (|I.2.a.10|+|I.2.b.10|), Atraso (V.b+VI.b), Inad 30/60/90/120 (V.b.1-4 + VI.b.1-4), Recompras (VII.d.2), Cotistas (X.1), Classes (X.2 + X.3).
+- Valida PL ≈ soma PL das classes; classifica status.
+- Retorna `{ url, fileSizeBytes, fileHash, filesInZip[], rowsByFile{}, totalCnpjs, mestreFound[], mestreMissing[], posFound[], posMissing[], readErrors[], alerts[], fidcs[] }`.
 
-### 1.6 Validações
+**`supabase/functions/cvm-fidc-commit/index.ts`** (gravação após confirmação):
 
-Mantém atual (Ativo−Passivo≈PL, II≈I.2.a+b, PL×cotas). Adiciona:
-- "Caixa Ampliado ≥ Caixa Estrito" — se não, `inconsistent`.
-- "Soma V.b ≈ overdue_value" — se diferença > 1%, `inconsistent`.
+- Input: `{ referenceMonth, fileHash, sourceUrl, mode: 'replace'|'new_version', items: [...] }`
+- Para cada FIDC: marca `is_current_version=false` nos informes prévios desse mês (modo `new_version`) ou faz UPDATE in-place (modo `replace`), insere `fidc_monthly_reports` com `source='cvm_open_data'`, `source_url`, `imported_at`, `file_hash`, `is_current_version=true`, `raw_data` com linhas originais resumidas.
+- Insere `fidc_monthly_quota_classes`.
+- Verifica JWT (usa anon key + RLS via service_role após validar role Gestor/Coordenação via `has_role`).
 
----
+### 2. Migração mínima
 
-## Fase 2 — Consumo na lâmina
+Adicionar a `fidc_monthly_reports`:
+- `source TEXT NOT NULL DEFAULT 'manual_upload'`
+- `source_url TEXT`
+- `file_hash TEXT`
+- `imported_at TIMESTAMPTZ DEFAULT now()`
+- `is_current_version BOOLEAN NOT NULL DEFAULT true`
+- `version INTEGER NOT NULL DEFAULT 1`
+- índice parcial em `(fidc_id, reference_month) WHERE is_current_version`
 
-Sem alterar a estrutura visual. Pequenos ajustes:
+Mesmas colunas (source, is_current_version) em `fidc_monthly_quota_classes` para coerência. Sem mudanças de RLS — políticas atuais já cobrem.
 
-- `FidcDetailPage.tsx` → card **Caixa/PL** continua usando `cash_value` (que agora é Ampliado). Tooltip do card explica "Caixa Ampliado = Disp. + Valores Mob. + TPF + CDB + Compromissadas + Outros RF + Cotas FIDC + Warrants".
-- `LaminateCharts.tsx` → painel **Inadimplência por Faixa**: adicionar séries `30+`, `60+`, `90+` lidas de `raw_data.delinquency_*_plus_ratio` quando presentes (mantém 30/60/90/120 individuais).
-- `CreditPortfolio.tsx` → bloco **Garantias** lê `raw_data.guarantees`; bloco **SCR** lê `raw_data.scr`; bloco **Fluxo de negócios** lê `raw_data.monthly_credit_rights_transactions` quando disponível (fallback nas colunas dedicadas).
-- `QuotasSection.tsx` → tabela "Cotas importadas" mostra colunas `Rent. mês`, `Captação`, `Resgate`, `Amortização` quando vierem.
-- Onde uma métrica resultar `null`, manter `NoDataInline` com `title="Não localizado no informe (seção <âncora>)"`.
+### 3. Frontend
 
-## Fase 3 — Smoke test
+**`src/components/fidc/CvmImportDialog.tsx`** — modal grande com:
+- Input mês `AAAAMM` (default mês anterior).
+- Painel de diagnóstico com cards (URL, status, hash, tamanho, arquivos, contagens) e seções:
+  - "Cadastro Mestre — encontrados / não encontrados"
+  - "FIDCs com posição — encontrados / não encontrados"
+  - "Erros de leitura" / "Alertas"
+- Tabela por FIDC com todas as colunas solicitadas (CNPJ, Nome, Mês, PL, DC, Caixa Ampliado, PDD, Atraso, Inad 30/60/90/120, Recompras, Cotistas, Classes, Soma PL Classes, Δ PL, Status com badge).
+- Drawer por linha mostrando as classes (X.2/X.3) e validação subordinação.
+- Botão **"Confirmar e gravar informes CVM"** (rotulado claramente como POC). Antes de gravar, para FIDCs com informe existente do mesmo mês: dialog inline com 3 opções (Substituir / Nova versão / Cancelar) — aplicável por linha ou em massa.
+- Comparativo CVM vs upload manual: coluna extra "Δ vs manual" usando o `latestReportFor(fidcId)` quando `source='manual_upload'`.
 
-Após edits, abrir uma página de FIDC com informe já importado e verificar console + render. Re-importar 1 mês para popular os novos campos do `raw_data` (avisar o usuário).
+**`src/pages/fidc/MonitorPage.tsx`** — adicionar botão "Importar Informes via CVM" no header (ao lado do contador de informes), abrindo o `CvmImportDialog`. Permissão: `fidc_can_write`.
 
----
+**`src/lib/fidc/cvm-mapping.ts`** — constantes do de/para de campos CVM → métricas (fonte única, espelhada client+server). Lista de status, regras de validação, formatador de URL.
 
-## Critérios de aceite (do usuário)
+**`src/hooks/useCvmImport.ts`** — `useMutation` para `diagnose` e `commit` via `supabase.functions.invoke`.
 
-- Caixa/PL usa Caixa Ampliado.
-- DC = I.2.a + I.2.b.
-- PL = IV.a.
-- PDD = |I.2.a.10| + |I.2.b.10|.
-- Atraso = V.b + VI.b (fallback I).
-- Inad. 30/60/90/120 = V.b.1-4 + VI.b.1-4.
-- Recompras = VII.d.2.
-- Cotistas = X.1.
-- Cotas = X.2.
-- Rent. = X.3.
-- Captação/Resgate/Amort = X.4.
-- Garantias = 7).
-- SCR = 8).
-- Nenhuma métrica ausente vira zero indevido — vira `N/D` com tooltip.
-- Checklist mostra a seção e o rótulo encontrado.
+### 4. Permissões e UX
+
+- Apenas Gestor/Coordenação/Especialista veem o botão (mesmo gate do upload manual).
+- Loading com progresso por etapa (download → unzip → parse → agregação).
+- Toasts de sucesso/erro; rollback transacional na função de commit (`BEGIN…COMMIT` via RPC ou múltiplos upserts idempotentes).
+
+## Riscos e mitigações
+
+- **Tamanho do ZIP (~50 MB) e timeout de Edge Function**: parsing por streaming linha-a-linha; só guardar em memória CNPJs alvo. Em meses recentes ~15k FIDCs ⇒ filtragem reduz drasticamente.
+- **Layout muda entre meses**: parser detecta colunas por nome de header, com fallback documentado. Linhas com header inesperado entram em `readErrors`.
+- **Encoding latin1 / decimais com vírgula**: TextDecoder('latin1') + `parseNumberBR`.
+- **Sem CORS pra browser**: tudo pela Edge Function.
+- **Idempotência do commit**: chave `(fidc_id, reference_month, version)` única; `is_current_version` único parcial.
+
+## Critérios de aceite (mapeados)
+
+Todos os 10 itens da seção "Critérios de aceite" do pedido ficam cobertos pelos componentes acima. Upload manual intacto. Comparativo CVM × manual disponível na tabela.
 
 ## Fora de escopo
 
-- Upload de posições; Cadastro Mestre; sidebar; IA; nova migration.
+Re-processar meses passados em lote, agendar download recorrente, parser de PDF, IA, mudanças no Cadastro Mestre e nas posições.

@@ -798,6 +798,7 @@ export type Database = {
           rating: string | null
           redemption_value: number | null
           seniority_level: number | null
+          source: string
           subscription_value: number | null
         }
         Insert: {
@@ -817,6 +818,7 @@ export type Database = {
           rating?: string | null
           redemption_value?: number | null
           seniority_level?: number | null
+          source?: string
           subscription_value?: number | null
         }
         Update: {
@@ -836,6 +838,7 @@ export type Database = {
           rating?: string | null
           redemption_value?: number | null
           seniority_level?: number | null
+          source?: string
           subscription_value?: number | null
         }
         Relationships: [
@@ -864,9 +867,11 @@ export type Database = {
           credit_rights_value: number | null
           disposals_value: number | null
           fidc_id: string
+          file_hash: string | null
           guarantees_pct_dc: number | null
           guarantees_value: number | null
           id: string
+          imported_at: string
           imported_by: string | null
           investors_count: number | null
           is_current_version: boolean
@@ -893,7 +898,9 @@ export type Database = {
           scr_status: string | null
           scr_value: number | null
           segment_breakdown: Json | null
+          source: string
           source_file_name: string | null
+          source_url: string | null
           subordinated_calculation_notes: string | null
           subordinated_calculation_status: string | null
           subordinated_value: number | null
@@ -909,9 +916,11 @@ export type Database = {
           credit_rights_value?: number | null
           disposals_value?: number | null
           fidc_id: string
+          file_hash?: string | null
           guarantees_pct_dc?: number | null
           guarantees_value?: number | null
           id?: string
+          imported_at?: string
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
@@ -938,7 +947,9 @@ export type Database = {
           scr_status?: string | null
           scr_value?: number | null
           segment_breakdown?: Json | null
+          source?: string
           source_file_name?: string | null
+          source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null
@@ -954,9 +965,11 @@ export type Database = {
           credit_rights_value?: number | null
           disposals_value?: number | null
           fidc_id?: string
+          file_hash?: string | null
           guarantees_pct_dc?: number | null
           guarantees_value?: number | null
           id?: string
+          imported_at?: string
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
@@ -983,7 +996,9 @@ export type Database = {
           scr_status?: string | null
           scr_value?: number | null
           segment_breakdown?: Json | null
+          source?: string
           source_file_name?: string | null
+          source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null

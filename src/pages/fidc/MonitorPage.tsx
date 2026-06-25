@@ -5,8 +5,10 @@ import { BRL, PCT, formatCNPJ } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
-import { Search, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Search, Loader2, CheckCircle2, AlertTriangle, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { CvmImportDialog } from "@/components/fidc/CvmImportDialog";
 
 type PosStatus = "mapped" | "unmapped";
 
@@ -16,6 +18,7 @@ export default function MonitorPage() {
   const q = (sp.get("q") ?? "").toLowerCase();
   const statusFilter = (sp.get("status") ?? "all") as "all" | PosStatus;
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
+  const [cvmOpen, setCvmOpen] = useState(false);
 
   const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, fidcsWithReportCount } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
@@ -129,9 +132,13 @@ export default function MonitorPage() {
             <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 bg-muted/40 text-muted-foreground">
               <AlertTriangle className="h-3 w-3" /> Informes mensais: {Math.min(fidcsWithReportCount, summary.fidcCount)}/{summary.fidcCount}
             </span>
+            <Button size="sm" variant="outline" onClick={() => setCvmOpen(true)} className="h-7 text-[11px]">
+              <Database className="h-3 w-3 mr-1" /> Importar Informes via CVM
+            </Button>
           </div>
         }
       />
+      <CvmImportDialog open={cvmOpen} onOpenChange={setCvmOpen} />
 
       <div className="px-6 py-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 hairline-b">
         <MetricCard label="PL da Carteira" value={summary.nav > 0 ? BRL(summary.nav, { compact: true }) : <NoDataInline reason="PL não disponível para a data" />} />
