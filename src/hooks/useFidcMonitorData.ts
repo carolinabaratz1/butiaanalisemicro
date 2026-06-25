@@ -55,6 +55,18 @@ export type MonthlyReportRow = {
   subordinated_calculation_status: string | null;
   investors_count: number | null;
   is_current_version: boolean;
+  // Phase 5 — campos enriquecidos via Dados Abertos CVM
+  main_segment: string | null;
+  main_segment_pct: number | null;
+  total_assets: number | null;
+  total_liabilities: number | null;
+  avg_nav_value: number | null;
+  cash_strict_value: number | null;
+  total_subscription_value: number | null;
+  total_redemption_value: number | null;
+  total_amortization_value: number | null;
+  net_investor_flow_value: number | null;
+  gross_investor_flow_value: number | null;
 };
 
 export type PosicaoRow = {
