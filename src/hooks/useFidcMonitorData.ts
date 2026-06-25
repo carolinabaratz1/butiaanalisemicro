@@ -217,17 +217,17 @@ export function useFidcMonitorData() {
 
   // 4) Informes mensais (última versão por FIDC + versão anterior por FIDC para variações)
   const reportsQ = useQuery({
-    queryKey: ["fidc-monthly-reports-all-monitor"],
+    queryKey: ["fidc-monthly-reports-all-monitor-v2"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
         .select(
-          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version, main_segment, main_segment_pct, total_assets, total_liabilities, avg_nav_value, cash_strict_value, total_subscription_value, total_redemption_value, total_amortization_value, net_investor_flow_value, gross_investor_flow_value",
+          "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version, main_segment, main_segment_pct, total_assets, total_liabilities, avg_nav_value, cash_strict_value, total_subscription_value, total_redemption_value, total_amortization_value, net_investor_flow_value, gross_investor_flow_value, source, source_file_name, source_url, version",
         )
-        .eq("is_current_version", true)
-        .order("reference_month", { ascending: false });
+        .order("reference_month", { ascending: false })
+        .order("version", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as MonthlyReportRow[];
+      return (data ?? []) as (MonthlyReportRow & { source?: string | null; source_file_name?: string | null; source_url?: string | null; version?: number | null })[];
     },
   });
 
@@ -249,20 +249,65 @@ export function useFidcMonitorData() {
     return m;
   }, [quotas]);
 
-  // Agrupa relatórios por FIDC (já ordenados desc por reference_month)
-  const reportsByFidc = useMemo(() => {
-    const m = new Map<string, MonthlyReportRow[]>();
+  // Agrupa relatórios por FIDC e por mês, separando fonte (CVM x Manual).
+  // Para cada (fidc, mês), preserva o maior `version` por fonte.
+  type SourcedPair = { month: string; cvm: any | null; manual: any | null };
+  const monthsByFidc = useMemo(() => {
+    const m = new Map<string, Map<string, SourcedPair>>();
     reports.forEach((r) => {
-      if (!m.has(r.fidc_id)) m.set(r.fidc_id, []);
-      m.get(r.fidc_id)!.push(r);
+      const mo = (r.reference_month || "").slice(0, 10);
+      if (!mo) return;
+      if (!m.has(r.fidc_id)) m.set(r.fidc_id, new Map());
+      const monthMap = m.get(r.fidc_id)!;
+      if (!monthMap.has(mo)) monthMap.set(mo, { month: mo, cvm: null, manual: null });
+      const pair = monthMap.get(mo)!;
+      const src = (r as any).source === "cvm_open_data" ? "cvm" : "manual";
+      const cur = pair[src];
+      if (!cur || (Number(r.version ?? 0) > Number(cur.version ?? 0))) pair[src] = r;
     });
     return m;
   }, [reports]);
 
-  const latestReportFor = (fidcId: string): MonthlyReportRow | null =>
-    reportsByFidc.get(fidcId)?.[0] ?? null;
-  const prevReportFor = (fidcId: string): MonthlyReportRow | null =>
-    reportsByFidc.get(fidcId)?.[1] ?? null;
+  // Resolve um mês específico (ou o mais recente) priorizando CVM.
+  const resolveReportFor = (fidcId: string, monthIso?: string) => {
+    const monthMap = monthsByFidc.get(fidcId);
+    if (!monthMap) return resolveReport(null, null);
+    const months = Array.from(monthMap.keys()).sort().reverse();
+    const target = monthIso ?? months[0];
+    const pair = target ? monthMap.get(target) : null;
+    return resolveReport(pair?.cvm ?? null, pair?.manual ?? null);
+  };
+
+  // latestReportFor agora devolve o objeto MERGED (CVM-preferring) compatível com o tipo antigo.
+  const latestReportFor = (fidcId: string): MonthlyReportRow | null => {
+    const r = resolveReportFor(fidcId);
+    return (r.merged as MonthlyReportRow) ?? null;
+  };
+  const prevReportFor = (fidcId: string): MonthlyReportRow | null => {
+    const monthMap = monthsByFidc.get(fidcId);
+    if (!monthMap) return null;
+    const months = Array.from(monthMap.keys()).sort().reverse();
+    if (months.length < 2) return null;
+    return resolveReportFor(fidcId, months[1]).merged as MonthlyReportRow | null;
+  };
+
+  // Compat: reportsByFidc é exposto como lista MERGED de meses (desc).
+  const reportsByFidc = useMemo(() => {
+    const out = new Map<string, MonthlyReportRow[]>();
+    monthsByFidc.forEach((monthMap, fid) => {
+      const months = Array.from(monthMap.keys()).sort().reverse();
+      out.set(
+        fid,
+        months
+          .map((mo) => resolveReport(monthMap.get(mo)!.cvm, monthMap.get(mo)!.manual).merged as MonthlyReportRow | null)
+          .filter(Boolean) as MonthlyReportRow[],
+      );
+    });
+    return out;
+  }, [monthsByFidc]);
+
+  const reportSourceStatusFor = (fidcId: string): ReportSourceStatus =>
+    classifyReportStatus(resolveReportFor(fidcId));
 
   const portfolioSummaries: PortfolioSummary[] = useMemo(() => {
     return FIDC_PORTFOLIOS.map((portfolio) => {
