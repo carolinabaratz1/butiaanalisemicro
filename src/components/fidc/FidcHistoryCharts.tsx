@@ -212,7 +212,9 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Subordinação / PL", color: "hsl(var(--primary))" }]} />
       </ChartCard>
+
 
       <ChartCard title="Amortização Total no Mês" subtitle="R$">
         <ResponsiveContainer width="100%" height={220}>
