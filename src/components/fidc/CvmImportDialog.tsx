@@ -204,6 +204,8 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                       <Kpi label="Posição encontrados" value={`${summary.posFound}/${summary.posTotal}`} accent={summary.posFound === summary.posTotal ? "ok" : "warning"} />
                       <Kpi label="FIDCs PL ok" value={String(summary.plFound)} accent="ok" />
                       <Kpi label="FIDCs DC ok" value={String(summary.dcFound)} accent="ok" />
+                      <Kpi label="FIDCs c/ Segmento" value={String(summary.segFound)} accent={summary.segFound > 0 ? "ok" : "warning"} />
+                      <Kpi label="FIDCs c/ Fluxo Cota" value={String(summary.flowsFound)} accent={summary.flowsFound > 0 ? "ok" : "warning"} />
                       <Kpi label="Completos" value={String(summary.completos)} accent="ok" />
                       <Kpi label="Parciais" value={String(summary.parciais)} accent="warning" />
                       <Kpi label="Erro mapeamento" value={String(summary.mappingErrors)} accent={summary.mappingErrors ? "warning" : "ok"} />
