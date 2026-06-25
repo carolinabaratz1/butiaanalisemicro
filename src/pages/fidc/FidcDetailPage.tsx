@@ -371,13 +371,13 @@ export default function FidcDetailPage() {
           const cell = (v: string | null) => v == null ? <NoDataInline /> : <>{v}</>;
           return (
             <>
-              <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} />
-              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} accent={varPl != null && varPl < -0.05 ? "warning" : "neutral"} />
-              <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} />
-              <MetricCard label="Rent. mês cota" value={cell(varCota != null ? PCT(varCota, 2) : null)} accent={varCota != null && varCota < 0 ? "warning" : "neutral"} />
-              <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} />
-              <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} />
-              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} />
+              <MetricCard label="PL" value={cell(nav != null ? BRL(nav, { compact: true }) : null)} source={srcOf("nav_value")} fallbackReason={reasonOf("nav_value")} />
+              <MetricCard label="Var. mensal PL" value={cell(varPl != null ? PCT(varPl) : null)} accent={varPl != null && varPl < -0.05 ? "warning" : "neutral"} source={srcOf("nav_value")} />
+              <MetricCard label="Cota" value={cell(cota != null ? cota.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 8 }) : null)} source={srcOf("quota_value")} fallbackReason={reasonOf("quota_value")} />
+              <MetricCard label="Rent. mês cota" value={cell(varCota != null ? PCT(varCota, 2) : null)} accent={varCota != null && varCota < 0 ? "warning" : "neutral"} source={srcOf("quota_value")} />
+              <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} source={srcOf("credit_rights_value")} fallbackReason={reasonOf("credit_rights_value")} />
+              <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} source={srcOf("credit_rights_value")} />
+              <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} source={srcOf("cash_value")} fallbackReason={reasonOf("cash_value")} />
               {(() => {
                 const overdueSrc = r?.overdue_source ? String(r.overdue_source) : null;
                 const coverage = r?.overdue_bucket_coverage_status ? String(r.overdue_bucket_coverage_status) : null;
