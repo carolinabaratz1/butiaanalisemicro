@@ -177,7 +177,7 @@ async function streamEntry(
     if (!buf) { buf = { cnpj, rowsByFile: {}, metrics: {}, classes: [] }; buffer.set(cnpj, buf); }
     if (!buf.name) buf.name = row["DENOM_SOCIAL"] || row["DENOM_FUNDO"] || row["DENOM_FUNDO_CLASSE"] || "";
     const arr = (buf.rowsByFile[entry.filename] ??= []);
-    if (arr.length < 10) arr.push(row);
+    if (arr.length < 100) arr.push(row);
   };
 
   const writable = new WritableStream<Uint8Array>({
