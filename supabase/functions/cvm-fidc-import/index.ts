@@ -848,6 +848,7 @@ Deno.serve(async (req) => {
         acquisitionWithoutRisk: value("acquisition_without_risk_value"),
         investors: value("investors_count"),
         sumClassesPL, plDiff: diff, plDiffPct: diffPct,
+        subordination: (buf as FidcBuffer & { subordination?: Record<string, unknown> }).subordination ?? null,
         missingMetrics: missing,
         status,
         hasPositionInButia: positionSet.has(buf.cnpj),
