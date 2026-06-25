@@ -324,6 +324,20 @@ export default function FidcDetailPage() {
         </div>
       </header>
 
+      {anyManualFallback && (
+        <div className="px-6 pt-4" data-print="hide">
+          <Alert className="border-amber-500/40 bg-amber-500/5">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-700">Atenção: esta lâmina contém dados de upload manual.</AlertTitle>
+            <AlertDescription className="text-[12px] text-amber-700/90">
+              Alguns indicadores não vieram da CVM e foram preenchidos com upload manual. Verifique a origem dos dados antes de usar na análise.{" "}
+              <button className="underline ml-1" onClick={() => setSourceDlgOpen(true)}>Ver origem dos dados</button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+
       {/* RESUMO DE RISCO */}
       <section className="px-6 py-4 hairline-b" data-print-section>
         <div className="section-title mb-2">Resumo de Risco do Mês</div>
