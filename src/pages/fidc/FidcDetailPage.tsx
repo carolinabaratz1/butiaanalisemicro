@@ -421,17 +421,19 @@ export default function FidcDetailPage() {
                   </>
                 );
               })()}
-              <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} />
-              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} />
-              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} />
-              <MetricCard label="Aquisições/DC" value={cell(ratio(acq, dc) != null ? PCT(ratio(acq, dc)!) : null)} />
+              <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} source={srcOf("pdd_value")} fallbackReason={reasonOf("pdd_value")} />
+              <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} source={srcOf("pdd_value")} />
+              <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} source={srcOf("repurchase_value")} fallbackReason={reasonOf("repurchase_value")} />
+              <MetricCard label="Aquisições/DC" value={cell(ratio(acq, dc) != null ? PCT(ratio(acq, dc)!) : null)} source={srcOf("acquisitions_value")} fallbackReason={reasonOf("acquisitions_value")} />
               <MetricCard
                 label="Subordinação"
                 value={subOk
                   ? cell(sub != null ? PCT(sub) : null)
                   : <span title="Soma das cotas diferente do PL — não confiável" className="text-amber-600 text-[13px]">Inconsistente</span>}
+                source={srcOf("subordinated_value")}
+                fallbackReason={reasonOf("subordinated_value")}
               />
-              <MetricCard label="Cotistas" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} />
+              <MetricCard label="Cotistas" value={cell(inv != null ? inv.toLocaleString("pt-BR") : null)} source={srcOf("investors_count")} fallbackReason={reasonOf("investors_count")} />
             </>
           );
         })()}
