@@ -63,7 +63,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
         pl: nav,
         cota: num(r.quota_value),
         dc,
-        investidores: num(r.investors_count),
+        amortizacao: num(r.total_amortization_value),
         atrasoPct: ratio(overdue, dc),
         pddPct: ratio(pdd, dc),
         pddAtrasoPct: overdue && overdue !== 0 && pdd != null ? pdd / overdue : null,
