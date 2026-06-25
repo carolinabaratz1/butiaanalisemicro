@@ -176,7 +176,31 @@ Deno.serve(async (req) => {
           quota_validation_difference_percentage: it.plDiffPct,
           quota_validation_status: mapValidation(it.status),
           quota_classes_found_count: it.classes.length,
-          subordinated_calculation_status: it.classes.length > 1 ? "calculated" : "single_class",
+          subordinated_calculation_status: it.subordination
+            ? (it.subordination.validation === "critical" ? "inconsistent_quota_validation"
+              : (it.subordination.mezzNav > 0 ? "calculated_with_mezzanine" : "calculated"))
+            : (it.classes.length > 1 ? "calculated" : "single_class"),
+          // Subordinação por senioridade
+          senior_nav_value: it.subordination?.seniorNav ?? null,
+          senior_nav_pct: it.subordination?.seniorPct ?? null,
+          mezzanine_nav_value: it.subordination?.mezzNav ?? null,
+          mezzanine_nav_pct: it.subordination?.mezzPct ?? null,
+          subordinated_nav_value: it.subordination?.subNav ?? null,
+          subordinated_nav_pct: it.subordination?.subPct ?? null,
+          unique_nav_value: it.subordination?.uniqueNav ?? null,
+          unknown_quota_nav_value: it.subordination?.unknownNav ?? null,
+          senior_subordination_ratio: it.subordination?.seniorRatio ?? null,
+          mezzanine_subordination_ratio: it.subordination?.mezzRatio ?? null,
+          senior_subordination_limit: it.subordination?.seniorLimit ?? null,
+          mezzanine_subordination_limit: it.subordination?.mezzLimit ?? null,
+          senior_subordination_excess: it.subordination?.seniorExcess ?? null,
+          mezzanine_subordination_excess: it.subordination?.mezzExcess ?? null,
+          senior_subordination_status: it.subordination?.seniorStatus ?? null,
+          mezzanine_subordination_status: it.subordination?.mezzStatus ?? null,
+          senior_subordination_status_quality: it.subordination?.qualityFlag ?? null,
+          quota_classes_nav_sum: it.subordination?.quotaSum ?? it.sumClassesPL,
+          quota_classes_nav_diff: it.subordination?.navDiff ?? it.plDiff,
+          quota_classes_nav_diff_pct: it.subordination?.navDiffPct ?? it.plDiffPct,
           raw_data: {
             source: "cvm_open_data", url: body.sourceUrl,
             classes: it.classes, segments: it.segments ?? [], flows, status: it.status,
