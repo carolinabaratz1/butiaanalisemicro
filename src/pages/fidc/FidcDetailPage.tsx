@@ -10,8 +10,10 @@ import { MonthlyReportImportDialog } from "@/components/fidc/MonthlyReportImport
 import { LaminateCharts } from "@/components/fidc/laminate/LaminateCharts";
 import { CreditPortfolio } from "@/components/fidc/laminate/CreditPortfolio";
 import { QuotasSection } from "@/components/fidc/laminate/QuotasSection";
+import { SubordinationPanel } from "@/components/fidc/laminate/SubordinationPanel";
 import { AlertsPanel } from "@/components/fidc/laminate/AlertsPanel";
 import { CreditOpinionPanel } from "@/components/fidc/laminate/CreditOpinionPanel";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -548,6 +550,11 @@ export default function FidcDetailPage() {
         })()}
       </section>
 
+      {/* SUBORDINAÇÃO & ESTRUTURA DE CAPITAL (Fase B) */}
+      <section className="px-6 pb-4">
+        <SubordinationPanel fidcId={id} latestReport={latestReport} />
+      </section>
+
       {/* COTAS, SUBORDINAÇÃO E VALIDAÇÕES */}
       <section className="px-6 pb-4">
         <QuotasSection
@@ -557,6 +564,7 @@ export default function FidcDetailPage() {
           masterQuotas={quotas as any}
         />
       </section>
+
 
       {/* ALERTAS */}
       <section className="px-6 pb-4">
