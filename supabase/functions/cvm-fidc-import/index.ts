@@ -196,7 +196,7 @@ async function streamEntry(
     for (let i = 0; i < header.length; i++) row[header[i]] = (fields[i] ?? "").trim();
 
     let buf = buffer.get(cnpj);
-    if (!buf) { buf = { cnpj, rowsByFile: {}, metrics: {}, classes: [] }; buffer.set(cnpj, buf); }
+    if (!buf) { buf = { cnpj, rowsByFile: {}, metrics: {}, classes: [], segments: [], segmentTotal: null }; buffer.set(cnpj, buf); }
     if (!buf.name) buf.name = row["DENOM_SOCIAL"] || row["DENOM_FUNDO"] || row["DENOM_FUNDO_CLASSE"] || "";
     const arr = (buf.rowsByFile[entry.filename] ??= []);
     if (arr.length < 100) arr.push(row);
