@@ -342,6 +342,9 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                               <Td right mono>{cell(f.overdue120)}</Td>
                               <Td right mono>{cell(f.repurchase)}</Td>
                               <Td right mono>{f.investors ?? "N/D"}</Td>
+                              <Td><span className="text-[11px]">{f.mainSegment ?? <span className="text-muted-foreground">—</span>}</span></Td>
+                              <Td right mono>{f.mainSegmentPct != null ? PCT(f.mainSegmentPct) : "—"}</Td>
+                              <Td right mono className={(f.flows?.netInvestorFlowValue ?? 0) < 0 ? "text-red-600" : ""}>{cell(f.flows?.netInvestorFlowValue ?? null)}</Td>
                               <Td right mono>{f.classes.length}</Td>
                               <Td right mono>{BRL(f.sumClassesPL, { compact: true })}</Td>
                               <Td right mono className={f.plDiffPct != null && f.plDiffPct > 0.05 ? "text-red-600" : ""}>{f.plDiffPct != null ? PCT(f.plDiffPct) : "—"}</Td>
