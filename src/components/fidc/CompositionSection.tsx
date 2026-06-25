@@ -28,7 +28,7 @@ const OTHERS_COLOR = "hsl(217 10% 65%)";
 
 type Grouping =
   | "fidc" | "anbima" | "cotaTipo" | "gestor"
-  | "admin" | "rating" | "informe";
+  | "admin" | "rating" | "informe" | "segmento";
 type ChartKind = "donut" | "pie" | "bar";
 type Metric = "expR" | "pctCart" | "pctExpo";
 type TopN = 5 | 10 | 999;
@@ -37,6 +37,7 @@ const GROUPING_OPTS: { id: Grouping; label: string }[] = [
   { id: "fidc",     label: "Por FIDC/CNPJ" },
   { id: "anbima",   label: "Por Tipo ANBIMA / Setor" },
   { id: "cotaTipo", label: "Por Tipo de Cota" },
+  { id: "segmento", label: "Por Segmento Principal (CVM)" },
   { id: "gestor",   label: "Por Gestor" },
   { id: "admin",    label: "Por Administrador" },
   { id: "rating",   label: "Por Rating" },
