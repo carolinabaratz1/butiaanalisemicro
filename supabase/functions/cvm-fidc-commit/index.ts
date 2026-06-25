@@ -237,17 +237,22 @@ Deno.serve(async (req) => {
 
         // Cotas
         if (it.classes.length) {
+          const officialPL = it.pl && it.pl > 0 ? it.pl : null;
           const rows = it.classes.map((c) => {
             const f = c.flows ?? {};
             const yieldPct = c.monthlyYieldPct ?? null;
+            const navQ = c.pl ?? null;
             return {
               fidc_monthly_report_id: reportId,
               cnpj_fundo_classe: it.cnpj,
               reference_month: it.referenceMonth,
               class_name: c.name,
+              class_series_name: c.name,
               quota_type: c.type ?? null,
               id_subclasse: c.idSubclasse ?? null,
-              nav_value: c.pl ?? null,
+              nav_value: navQ,
+              quota_nav_value: navQ,
+              nav_pct: officialPL != null && navQ != null ? navQ / officialPL : null,
               quota_value: c.quotaValue ?? null,
               number_of_quotas: c.numberOfQuotas ?? null,
               raw_quota_quantity: c.rawQuotaQuantity ?? null,
@@ -275,6 +280,7 @@ Deno.serve(async (req) => {
           const { error } = await admin.from("fidc_monthly_quota_classes").insert(rows);
           if (error) throw error;
         }
+
 
         // Segmentos
         if (it.segments && it.segments.length) {
