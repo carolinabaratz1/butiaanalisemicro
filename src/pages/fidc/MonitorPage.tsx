@@ -5,8 +5,10 @@ import { BRL, PCT, formatCNPJ } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
-import { Search, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Search, Loader2, CheckCircle2, AlertTriangle, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { CvmImportDialog } from "@/components/fidc/CvmImportDialog";
 
 type PosStatus = "mapped" | "unmapped";
 
