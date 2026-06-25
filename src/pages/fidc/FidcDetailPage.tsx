@@ -81,6 +81,7 @@ export default function FidcDetailPage() {
     latestValDate, isLoading, positionAlerts,
   } = useFidcMonitorData();
   const [importOpen, setImportOpen] = useState(false);
+  const [sourceDlgOpen, setSourceDlgOpen] = useState(false);
 
   const { data: quotas = [] } = useQuery({
     queryKey: ["fidc-detail-quotas", id],
