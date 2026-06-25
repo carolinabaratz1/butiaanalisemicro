@@ -132,9 +132,13 @@ export default function MonitorPage() {
             <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 bg-muted/40 text-muted-foreground">
               <AlertTriangle className="h-3 w-3" /> Informes mensais: {Math.min(fidcsWithReportCount, summary.fidcCount)}/{summary.fidcCount}
             </span>
+            <Button size="sm" variant="outline" onClick={() => setCvmOpen(true)} className="h-7 text-[11px]">
+              <Database className="h-3 w-3 mr-1" /> Importar Informes via CVM
+            </Button>
           </div>
         }
       />
+      <CvmImportDialog open={cvmOpen} onOpenChange={setCvmOpen} />
 
       <div className="px-6 py-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 hairline-b">
         <MetricCard label="PL da Carteira" value={summary.nav > 0 ? BRL(summary.nav, { compact: true }) : <NoDataInline reason="PL não disponível para a data" />} />
