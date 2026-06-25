@@ -916,63 +916,123 @@ export type Database = {
       }
       fidc_monthly_quota_classes: {
         Row: {
+          amortization_quota_quantity: number | null
           amortization_value: number | null
           class_name: string | null
+          cnpj_fundo_classe: string | null
           created_at: string
           fidc_monthly_report_id: string
           fidc_quota_class_id: string | null
+          gross_quota_flow_value: number | null
           id: string
+          id_subclasse: string | null
+          investors_count: number | null
+          investors_source_file: string | null
           isin: string | null
           matching_status: string | null
+          monthly_return_decimal: number | null
+          monthly_return_pct: number | null
           monthly_yield_pct: number | null
           nav_value: number | null
+          net_quota_flow_value: number | null
           number_of_quotas: number | null
+          parse_status: string | null
+          quota_flow_source_file: string | null
           quota_type: string | null
           quota_value: number | null
           rating: string | null
+          raw_monthly_return: string | null
+          raw_quota_quantity: string | null
+          raw_quota_value: string | null
+          redemption_quota_quantity: number | null
           redemption_value: number | null
+          reference_month: string | null
+          requested_redemption_quota_quantity: number | null
+          requested_redemption_value: number | null
+          return_source_file: string | null
           seniority_level: number | null
           source: string
+          subscription_quota_quantity: number | null
           subscription_value: number | null
         }
         Insert: {
+          amortization_quota_quantity?: number | null
           amortization_value?: number | null
           class_name?: string | null
+          cnpj_fundo_classe?: string | null
           created_at?: string
           fidc_monthly_report_id: string
           fidc_quota_class_id?: string | null
+          gross_quota_flow_value?: number | null
           id?: string
+          id_subclasse?: string | null
+          investors_count?: number | null
+          investors_source_file?: string | null
           isin?: string | null
           matching_status?: string | null
+          monthly_return_decimal?: number | null
+          monthly_return_pct?: number | null
           monthly_yield_pct?: number | null
           nav_value?: number | null
+          net_quota_flow_value?: number | null
           number_of_quotas?: number | null
+          parse_status?: string | null
+          quota_flow_source_file?: string | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
+          raw_monthly_return?: string | null
+          raw_quota_quantity?: string | null
+          raw_quota_value?: string | null
+          redemption_quota_quantity?: number | null
           redemption_value?: number | null
+          reference_month?: string | null
+          requested_redemption_quota_quantity?: number | null
+          requested_redemption_value?: number | null
+          return_source_file?: string | null
           seniority_level?: number | null
           source?: string
+          subscription_quota_quantity?: number | null
           subscription_value?: number | null
         }
         Update: {
+          amortization_quota_quantity?: number | null
           amortization_value?: number | null
           class_name?: string | null
+          cnpj_fundo_classe?: string | null
           created_at?: string
           fidc_monthly_report_id?: string
           fidc_quota_class_id?: string | null
+          gross_quota_flow_value?: number | null
           id?: string
+          id_subclasse?: string | null
+          investors_count?: number | null
+          investors_source_file?: string | null
           isin?: string | null
           matching_status?: string | null
+          monthly_return_decimal?: number | null
+          monthly_return_pct?: number | null
           monthly_yield_pct?: number | null
           nav_value?: number | null
+          net_quota_flow_value?: number | null
           number_of_quotas?: number | null
+          parse_status?: string | null
+          quota_flow_source_file?: string | null
           quota_type?: string | null
           quota_value?: number | null
           rating?: string | null
+          raw_monthly_return?: string | null
+          raw_quota_quantity?: string | null
+          raw_quota_value?: string | null
+          redemption_quota_quantity?: number | null
           redemption_value?: number | null
+          reference_month?: string | null
+          requested_redemption_quota_quantity?: number | null
+          requested_redemption_value?: number | null
+          return_source_file?: string | null
           seniority_level?: number | null
           source?: string
+          subscription_quota_quantity?: number | null
           subscription_value?: number | null
         }
         Relationships: [
@@ -994,14 +1054,37 @@ export type Database = {
       }
       fidc_monthly_reports: {
         Row: {
+          acquisition_value: number | null
+          acquisition_with_risk_value: number | null
+          acquisition_without_risk_value: number | null
           acquisitions_value: number | null
           assignors_breakdown: Json | null
+          avg_nav_value: number | null
+          cash_strict_value: number | null
           cash_value: number | null
           created_at: string
+          credit_rights_gross_value: number | null
           credit_rights_value: number | null
+          credit_rights_with_risk_transfer: number | null
+          credit_rights_without_risk_transfer: number | null
+          delinquency_0_30_value: number | null
+          delinquency_120_plus_value: number | null
+          delinquency_121_150_value: number | null
+          delinquency_151_180_value: number | null
+          delinquency_181_360_value: number | null
+          delinquency_30_plus_value: number | null
+          delinquency_31_60_value: number | null
+          delinquency_361_720_value: number | null
+          delinquency_60_plus_value: number | null
+          delinquency_61_90_value: number | null
+          delinquency_721_1080_value: number | null
+          delinquency_90_plus_value: number | null
+          delinquency_91_120_value: number | null
+          delinquency_over_1080_value: number | null
           disposals_value: number | null
           fidc_id: string
           file_hash: string | null
+          gross_investor_flow_value: number | null
           guarantees_pct_dc: number | null
           guarantees_value: number | null
           id: string
@@ -1009,15 +1092,32 @@ export type Database = {
           imported_by: string | null
           investors_count: number | null
           is_current_version: boolean
+          main_segment: string | null
+          main_segment_pct: number | null
+          main_segment_value: number | null
+          maturity_0_30_value: number | null
+          maturity_121_150_value: number | null
+          maturity_151_180_value: number | null
+          maturity_181_360_value: number | null
+          maturity_31_60_value: number | null
+          maturity_361_720_value: number | null
+          maturity_61_90_value: number | null
+          maturity_721_1080_value: number | null
+          maturity_91_120_value: number | null
           maturity_breakdown: Json | null
+          maturity_over_1080_value: number | null
           nav_value: number | null
+          net_investor_flow_value: number | null
           overdue_120d_value: number | null
           overdue_30d_value: number | null
           overdue_60d_value: number | null
           overdue_90d_value: number | null
           overdue_breakdown: Json | null
           overdue_value: number | null
+          payables_value: number | null
           pdd_value: number | null
+          portfolio_book_value: number | null
+          prepaid_value: number | null
           quota_classes_found_count: number | null
           quota_total_nav_value: number | null
           quota_validation_difference: number | null
@@ -1029,28 +1129,61 @@ export type Database = {
           raw_data: Json | null
           reference_month: string
           repurchase_value: number | null
+          sale_value: number | null
           scr_status: string | null
           scr_value: number | null
           segment_breakdown: Json | null
+          segment_portfolio_value: number | null
+          segment_validation_status: string | null
           source: string
           source_file_name: string | null
           source_url: string | null
           subordinated_calculation_notes: string | null
           subordinated_calculation_status: string | null
           subordinated_value: number | null
+          substitution_value: number | null
           substitutions_value: number | null
+          total_amortization_value: number | null
+          total_assets: number | null
+          total_liabilities: number | null
+          total_redemption_value: number | null
+          total_requested_redemption_value: number | null
+          total_subscription_value: number | null
           updated_at: string
           version: number
         }
         Insert: {
+          acquisition_value?: number | null
+          acquisition_with_risk_value?: number | null
+          acquisition_without_risk_value?: number | null
           acquisitions_value?: number | null
           assignors_breakdown?: Json | null
+          avg_nav_value?: number | null
+          cash_strict_value?: number | null
           cash_value?: number | null
           created_at?: string
+          credit_rights_gross_value?: number | null
           credit_rights_value?: number | null
+          credit_rights_with_risk_transfer?: number | null
+          credit_rights_without_risk_transfer?: number | null
+          delinquency_0_30_value?: number | null
+          delinquency_120_plus_value?: number | null
+          delinquency_121_150_value?: number | null
+          delinquency_151_180_value?: number | null
+          delinquency_181_360_value?: number | null
+          delinquency_30_plus_value?: number | null
+          delinquency_31_60_value?: number | null
+          delinquency_361_720_value?: number | null
+          delinquency_60_plus_value?: number | null
+          delinquency_61_90_value?: number | null
+          delinquency_721_1080_value?: number | null
+          delinquency_90_plus_value?: number | null
+          delinquency_91_120_value?: number | null
+          delinquency_over_1080_value?: number | null
           disposals_value?: number | null
           fidc_id: string
           file_hash?: string | null
+          gross_investor_flow_value?: number | null
           guarantees_pct_dc?: number | null
           guarantees_value?: number | null
           id?: string
@@ -1058,15 +1191,32 @@ export type Database = {
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
+          main_segment?: string | null
+          main_segment_pct?: number | null
+          main_segment_value?: number | null
+          maturity_0_30_value?: number | null
+          maturity_121_150_value?: number | null
+          maturity_151_180_value?: number | null
+          maturity_181_360_value?: number | null
+          maturity_31_60_value?: number | null
+          maturity_361_720_value?: number | null
+          maturity_61_90_value?: number | null
+          maturity_721_1080_value?: number | null
+          maturity_91_120_value?: number | null
           maturity_breakdown?: Json | null
+          maturity_over_1080_value?: number | null
           nav_value?: number | null
+          net_investor_flow_value?: number | null
           overdue_120d_value?: number | null
           overdue_30d_value?: number | null
           overdue_60d_value?: number | null
           overdue_90d_value?: number | null
           overdue_breakdown?: Json | null
           overdue_value?: number | null
+          payables_value?: number | null
           pdd_value?: number | null
+          portfolio_book_value?: number | null
+          prepaid_value?: number | null
           quota_classes_found_count?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
@@ -1078,28 +1228,61 @@ export type Database = {
           raw_data?: Json | null
           reference_month: string
           repurchase_value?: number | null
+          sale_value?: number | null
           scr_status?: string | null
           scr_value?: number | null
           segment_breakdown?: Json | null
+          segment_portfolio_value?: number | null
+          segment_validation_status?: string | null
           source?: string
           source_file_name?: string | null
           source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null
+          substitution_value?: number | null
           substitutions_value?: number | null
+          total_amortization_value?: number | null
+          total_assets?: number | null
+          total_liabilities?: number | null
+          total_redemption_value?: number | null
+          total_requested_redemption_value?: number | null
+          total_subscription_value?: number | null
           updated_at?: string
           version?: number
         }
         Update: {
+          acquisition_value?: number | null
+          acquisition_with_risk_value?: number | null
+          acquisition_without_risk_value?: number | null
           acquisitions_value?: number | null
           assignors_breakdown?: Json | null
+          avg_nav_value?: number | null
+          cash_strict_value?: number | null
           cash_value?: number | null
           created_at?: string
+          credit_rights_gross_value?: number | null
           credit_rights_value?: number | null
+          credit_rights_with_risk_transfer?: number | null
+          credit_rights_without_risk_transfer?: number | null
+          delinquency_0_30_value?: number | null
+          delinquency_120_plus_value?: number | null
+          delinquency_121_150_value?: number | null
+          delinquency_151_180_value?: number | null
+          delinquency_181_360_value?: number | null
+          delinquency_30_plus_value?: number | null
+          delinquency_31_60_value?: number | null
+          delinquency_361_720_value?: number | null
+          delinquency_60_plus_value?: number | null
+          delinquency_61_90_value?: number | null
+          delinquency_721_1080_value?: number | null
+          delinquency_90_plus_value?: number | null
+          delinquency_91_120_value?: number | null
+          delinquency_over_1080_value?: number | null
           disposals_value?: number | null
           fidc_id?: string
           file_hash?: string | null
+          gross_investor_flow_value?: number | null
           guarantees_pct_dc?: number | null
           guarantees_value?: number | null
           id?: string
@@ -1107,15 +1290,32 @@ export type Database = {
           imported_by?: string | null
           investors_count?: number | null
           is_current_version?: boolean
+          main_segment?: string | null
+          main_segment_pct?: number | null
+          main_segment_value?: number | null
+          maturity_0_30_value?: number | null
+          maturity_121_150_value?: number | null
+          maturity_151_180_value?: number | null
+          maturity_181_360_value?: number | null
+          maturity_31_60_value?: number | null
+          maturity_361_720_value?: number | null
+          maturity_61_90_value?: number | null
+          maturity_721_1080_value?: number | null
+          maturity_91_120_value?: number | null
           maturity_breakdown?: Json | null
+          maturity_over_1080_value?: number | null
           nav_value?: number | null
+          net_investor_flow_value?: number | null
           overdue_120d_value?: number | null
           overdue_30d_value?: number | null
           overdue_60d_value?: number | null
           overdue_90d_value?: number | null
           overdue_breakdown?: Json | null
           overdue_value?: number | null
+          payables_value?: number | null
           pdd_value?: number | null
+          portfolio_book_value?: number | null
+          prepaid_value?: number | null
           quota_classes_found_count?: number | null
           quota_total_nav_value?: number | null
           quota_validation_difference?: number | null
@@ -1127,22 +1327,91 @@ export type Database = {
           raw_data?: Json | null
           reference_month?: string
           repurchase_value?: number | null
+          sale_value?: number | null
           scr_status?: string | null
           scr_value?: number | null
           segment_breakdown?: Json | null
+          segment_portfolio_value?: number | null
+          segment_validation_status?: string | null
           source?: string
           source_file_name?: string | null
           source_url?: string | null
           subordinated_calculation_notes?: string | null
           subordinated_calculation_status?: string | null
           subordinated_value?: number | null
+          substitution_value?: number | null
           substitutions_value?: number | null
+          total_amortization_value?: number | null
+          total_assets?: number | null
+          total_liabilities?: number | null
+          total_redemption_value?: number | null
+          total_requested_redemption_value?: number | null
+          total_subscription_value?: number | null
           updated_at?: string
           version?: number
         }
         Relationships: [
           {
             foreignKeyName: "fidc_monthly_reports_fidc_id_fkey"
+            columns: ["fidc_id"]
+            isOneToOne: false
+            referencedRelation: "fidcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_monthly_segments: {
+        Row: {
+          cnpj_fundo_classe: string
+          created_at: string
+          fidc_id: string | null
+          id: string
+          parent_segment: string | null
+          pct_of_segment_portfolio: number | null
+          reference_month: string
+          segment_code: string | null
+          segment_group: string
+          segment_level: number
+          segment_name: string
+          source: string
+          source_file: string | null
+          value: number | null
+        }
+        Insert: {
+          cnpj_fundo_classe: string
+          created_at?: string
+          fidc_id?: string | null
+          id?: string
+          parent_segment?: string | null
+          pct_of_segment_portfolio?: number | null
+          reference_month: string
+          segment_code?: string | null
+          segment_group: string
+          segment_level?: number
+          segment_name: string
+          source?: string
+          source_file?: string | null
+          value?: number | null
+        }
+        Update: {
+          cnpj_fundo_classe?: string
+          created_at?: string
+          fidc_id?: string | null
+          id?: string
+          parent_segment?: string | null
+          pct_of_segment_portfolio?: number | null
+          reference_month?: string
+          segment_code?: string | null
+          segment_group?: string
+          segment_level?: number
+          segment_name?: string
+          source?: string
+          source_file?: string | null
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_monthly_segments_fidc_id_fkey"
             columns: ["fidc_id"]
             isOneToOne: false
             referencedRelation: "fidcs"
