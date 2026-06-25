@@ -175,6 +175,7 @@ export default function MonitorPage() {
             <tr>
               <Th onClick={() => toggleSort("status")} dir={sort.key === "status" ? sort.dir : undefined}>St</Th>
               <Th onClick={() => toggleSort("name")} dir={sort.key === "name" ? sort.dir : undefined}>FIDC</Th>
+              <Th>Status informe</Th>
               <Th>CNPJ</Th>
               <Th>ISIN</Th>
               <Th>Cota / Classe</Th>
