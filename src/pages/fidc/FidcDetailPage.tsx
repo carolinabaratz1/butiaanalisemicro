@@ -346,7 +346,7 @@ export default function FidcDetailPage() {
 
       {/* INDICADORES PRINCIPAIS */}
       <section className="px-6 py-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" data-print-section>
-        <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} />
+        <MetricCard label="Exposição Butiá" value={BRL(exposureTotal, { compact: true })} hint={`${ports.length} carteira(s)`} source="internal_position" />
         {(() => {
           const r = latestReport;
           const n = (k: string) => r?.[k] != null ? Number(r[k]) : null;
