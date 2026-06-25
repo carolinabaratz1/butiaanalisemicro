@@ -89,18 +89,36 @@ export default function FidcDetailPage() {
     enabled: !!id,
   });
 
-  const { data: latestReport = null } = useQuery({
-    queryKey: ["fidc-monthly-reports", id, "latest"],
+  // Busca AMBAS as fontes (CVM + Manual) para o último mês conhecido do FIDC,
+  // depois resolve com preferência por CVM (zero válido preservado).
+  const { data: resolvedLatest = null } = useQuery({
+    queryKey: ["fidc-report-resolved-latest", id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // 1) Descobre o mês mais recente em qualquer fonte.
+      const { data: months, error: e1 } = await supabase
+        .from("fidc_monthly_reports")
+        .select("reference_month")
+        .eq("fidc_id", id)
+        .order("reference_month", { ascending: false })
+        .limit(1);
+      if (e1) throw e1;
+      const ref = months?.[0]?.reference_month as string | undefined;
+      if (!ref) return { merged: null, cvm: null, manual: null, metrics: {}, anyManualFallback: false, hasCvm: false, hasManual: false, refMonth: null as string | null };
+      // 2) Pega melhor versão por fonte para esse mês.
+      const { data: rows, error: e2 } = await supabase
         .from("fidc_monthly_reports").select("*")
-        .eq("fidc_id", id).eq("is_current_version", true)
-        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
-      if (error) throw error;
-      return data as Record<string, unknown> | null;
+        .eq("fidc_id", id).eq("reference_month", ref)
+        .order("version", { ascending: false });
+      if (e2) throw e2;
+      const list = (rows ?? []) as Array<Record<string, unknown>>;
+      const cvm = list.find((r) => (r.source as string) === "cvm_open_data") ?? null;
+      const manual = list.find((r) => (r.source as string) !== "cvm_open_data") ?? null;
+      return { ...resolveReport(cvm as any, manual as any), refMonth: ref };
     },
     enabled: !!id,
   });
+
+  const latestReport = (resolvedLatest?.merged ?? null) as Record<string, unknown> | null;
 
   const { data: prevReport = null } = useQuery({
     queryKey: ["fidc-monthly-reports", id, "prev", latestReport?.reference_month ?? null],
@@ -109,12 +127,20 @@ export default function FidcDetailPage() {
       if (!ref) return null;
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
-        .select("nav_value, quota_value, reference_month, credit_rights_value, overdue_value, pdd_value")
-        .eq("fidc_id", id).eq("is_current_version", true)
+        .select("nav_value, quota_value, reference_month, credit_rights_value, overdue_value, pdd_value, source, version")
+        .eq("fidc_id", id)
         .lt("reference_month", ref)
-        .order("reference_month", { ascending: false }).limit(1).maybeSingle();
+        .order("reference_month", { ascending: false })
+        .order("version", { ascending: false });
       if (error) throw error;
-      return data as Record<string, unknown> | null;
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+      if (!rows.length) return null;
+      // Pega o último mês anterior (rows[0].reference_month) e resolve CVM-preferring.
+      const prevRef = rows[0].reference_month as string;
+      const same = rows.filter((r) => r.reference_month === prevRef);
+      const cvm = same.find((r) => (r.source as string) === "cvm_open_data") ?? null;
+      const manual = same.find((r) => (r.source as string) !== "cvm_open_data") ?? null;
+      return resolveReport(cvm as any, manual as any).merged as Record<string, unknown> | null;
     },
     enabled: !!id && !!latestReport?.reference_month,
   });
