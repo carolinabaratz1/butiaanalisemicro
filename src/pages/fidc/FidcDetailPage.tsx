@@ -253,6 +253,13 @@ export default function FidcDetailPage() {
     );
   })();
 
+  // Helper para fonte por métrica (CVM > Manual > Missing).
+  const metricMap = resolvedLatest?.metrics ?? {};
+  const srcOf = (key: string): DataSource => (metricMap[key]?.dataSource ?? "missing");
+  const reasonOf = (key: string): string | null => metricMap[key]?.fallbackReason ?? null;
+  const anyManualFallback = !!resolvedLatest?.anyManualFallback;
+  const metricsList = Object.values(metricMap);
+
   return (
     <div className="laminate">
       {/* Logo apenas na impressão */}
