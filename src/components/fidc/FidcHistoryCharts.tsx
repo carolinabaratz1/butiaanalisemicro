@@ -182,6 +182,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Line type="monotone" dataKey="pddAtrasoPct" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "PDD / Atrasos", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Caixa/PL e Recompras/DC" subtitle="%">
