@@ -106,29 +106,59 @@ export function CreditPortfolio(p: Props) {
         </Block>
 
         {/* 3. Inadimplência por faixa */}
-        <Block title="Inadimplência por Faixa" subtitle="Fonte: V.b + VI.b">
-          {!p.overdueByBucket?.length ? <Empty /> : (
-            <table className="w-full text-[12px]">
-              <thead className="bg-surface-2 text-muted-foreground">
-                <tr className="hairline-b">
-                  <th className="text-left px-2 py-1.5 font-medium">Faixa</th>
-                  <th className="text-right px-2 py-1.5 font-medium">Valor</th>
-                  <th className="text-right px-2 py-1.5 font-medium">% DC</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.overdueByBucket.map((o, i) => (
-                  <tr key={i} className="hairline-b">
-                    <td className="px-2 py-1.5">{o.bucket}</td>
-                    <td className="px-2 py-1.5 text-right num">{BRL(o.value, { compact: true })}</td>
-                    <td className="px-2 py-1.5 text-right num text-muted-foreground">
-                      {dc && dc > 0 ? PCT(o.value / dc, 2) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+        <Block
+          title="Inadimplência por Faixa"
+          subtitle={
+            p.overdueSource === "tab_i"
+              ? "Fonte: TAB I (sem faixa)"
+              : "Fonte: V.b + VI.b"
+          }
+        >
+          {(() => {
+            const buckets = p.overdueByBucket ?? [];
+            const unbucketed = Math.max(p.delinquencyUnbucketedValue ?? 0, 0);
+            const headline = p.overdueHeadlineValue ?? null;
+            const hasAny = buckets.length > 0 || unbucketed > 0 || (headline != null && headline > 0);
+            if (!hasAny) return <Empty />;
+            const rows: Array<Item & { isUnbucketed?: boolean }> = [...buckets];
+            if (unbucketed > 0) rows.push({ bucket: "Sem abertura por faixa", value: unbucketed, isUnbucketed: true });
+            // Se só temos TAB I (sem faixa), mostra uma única linha headline
+            if (rows.length === 0 && headline && headline > 0) {
+              rows.push({ bucket: "Sem abertura por faixa", value: headline, isUnbucketed: true });
+            }
+            return (
+              <>
+                {p.overdueBucketCoverageStatus === "sem_abertura_por_faixa" && (
+                  <div
+                    className="px-2 pt-1 pb-2 text-[10.5px] text-amber-600"
+                    title="A CVM reportou créditos vencidos/inadimplentes na TAB I, mas não trouxe abertura por faixa na TAB V/TAB VI."
+                  >
+                    ⚠ Inadimplência positiva na TAB I, sem abertura por faixa na TAB V/TAB VI.
+                  </div>
+                )}
+                <table className="w-full text-[12px]">
+                  <thead className="bg-surface-2 text-muted-foreground">
+                    <tr className="hairline-b">
+                      <th className="text-left px-2 py-1.5 font-medium">Faixa</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Valor</th>
+                      <th className="text-right px-2 py-1.5 font-medium">% DC</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((o, i) => (
+                      <tr key={i} className={`hairline-b ${o.isUnbucketed ? "text-amber-700" : ""}`}>
+                        <td className="px-2 py-1.5">{o.bucket}</td>
+                        <td className="px-2 py-1.5 text-right num">{BRL(o.value, { compact: true })}</td>
+                        <td className="px-2 py-1.5 text-right num text-muted-foreground">
+                          {dc && dc > 0 ? PCT(o.value / dc, 2) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            );
+          })()}
         </Block>
 
         {/* 4. Cedentes relevantes */}
