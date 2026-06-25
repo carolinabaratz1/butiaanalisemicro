@@ -399,6 +399,8 @@ export default function FidcDetailPage() {
                         label={`Atraso/DC${noFaixa ? " ⚠" : ""}`}
                         value={cell(ratioVal != null ? PCT(ratioVal) : null)}
                         accent={ratioVal != null && ratioVal > 0.1 ? (ratioVal > 0.2 ? "critical" : "warning") : "neutral"}
+                        source={srcOf("overdue_value")}
+                        fallbackReason={reasonOf("overdue_value")}
                       />
                     </span>
                     {noFaixa ? (
