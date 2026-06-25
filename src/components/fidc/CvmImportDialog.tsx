@@ -307,7 +307,9 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                           <Th>Status</Th><Th>CNPJ</Th><Th>FIDC</Th><Th>Pos. Butiá</Th>
                           <Th right>PL</Th><Th right>DC</Th><Th right>Caixa Ampl.</Th><Th right>PDD</Th>
                           <Th right>Atraso total</Th><Th right>30d</Th><Th right>60d</Th><Th right>90d</Th><Th right>120d</Th>
-                          <Th right>Recompras</Th><Th right>Cotistas</Th><Th right>Classes</Th><Th right>Σ PL Cotas</Th><Th right>Δ PL</Th>
+                          <Th right>Recompras</Th><Th right>Cotistas</Th>
+                          <Th>Segmento principal</Th><Th right>% Seg</Th><Th right>Fluxo líq.</Th>
+                          <Th right>Classes</Th><Th right>Σ PL Cotas</Th><Th right>Δ PL</Th>
                           <Th>Versão</Th><Th>Diagnóstico</Th>
                         </tr>
                       </thead>
