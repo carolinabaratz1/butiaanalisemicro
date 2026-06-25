@@ -123,13 +123,35 @@ function resolveColumn(headers: string[], cands: string | null): string | null {
 }
 
 // Per-CNPJ collected data, by file. Acts as the staging buffer.
+type SegmentItem = { code: string; name: string; level: number; parent?: string; value: number };
+type QuotaFlowItem = {
+  subscription_value?: number; subscription_quota_quantity?: number;
+  redemption_value?: number; redemption_quota_quantity?: number;
+  requested_redemption_value?: number; requested_redemption_quota_quantity?: number;
+  amortization_value?: number; amortization_quota_quantity?: number;
+};
+type ClassRow = {
+  name: string; normalizedName: string; type?: string;
+  pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null;
+  rawQuotaQuantity?: string; rawQuotaValue?: string;
+  parseStatus?: string; idSubclasse?: string;
+  monthlyYieldPct?: number | null; rawMonthlyReturn?: string;
+  investorsCount?: number | null;
+  flows?: QuotaFlowItem;
+};
 type FidcBuffer = {
   cnpj: string;
   name?: string;
-  rowsByFile: Record<string, Array<Record<string, string>>>;   // sample <=10 rows
+  rowsByFile: Record<string, Array<Record<string, string>>>;
   metrics: Record<string, MetricResult>;
-  classes: Array<{ name: string; type?: string; pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null; monthlyYieldPct?: number | null }>;
+  classes: ClassRow[];
+  segments: SegmentItem[];
+  segmentTotal: number | null;
 };
+
+const normalizeName = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+   .replace(/\|/g, " ").replace(/\s+/g, " ").trim();
 
 async function streamEntry(
   entry: zip.Entry,
