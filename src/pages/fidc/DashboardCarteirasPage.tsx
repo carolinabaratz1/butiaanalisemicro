@@ -144,7 +144,27 @@ export default function DashboardCarteirasPage() {
                 const mapped = s.positions.filter((p) => p.fidcId).length;
                 const fidcIdsInPort = Array.from(new Set(s.positions.map((p) => p.fidcId).filter(Boolean) as string[]));
                 const withInforme = fidcIdsInPort.filter((fid) => !!latestReportFor(fid)).length;
-                const informeOk = fidcIdsInPort.length > 0 && withInforme === fidcIdsInPort.length;
+                const statuses = fidcIdsInPort.map((fid) => reportSourceStatusFor(fid));
+                const hasErr = statuses.includes("Erro de validação");
+                const hasManualOnly = statuses.includes("Manual");
+                const hasMixed = statuses.includes("CVM + Manual");
+                const hasPartial = statuses.includes("Parcial CVM");
+                const allComplete = fidcIdsInPort.length > 0 && statuses.every((st) => st === "Completo CVM");
+                let consolidated = "Ausente";
+                let tone: "ok" | "warn" | "err" | "muted" = "muted";
+                if (hasErr) { consolidated = "Erro de validação"; tone = "err"; }
+                else if (allComplete) { consolidated = "Completo CVM"; tone = "ok"; }
+                else if (hasMixed || (hasManualOnly && withInforme > 0 && statuses.some((s) => s !== "Manual" && s !== "Ausente"))) { consolidated = "CVM + Manual"; tone = "warn"; }
+                else if (hasPartial) { consolidated = "Parcial CVM"; tone = "warn"; }
+                else if (hasManualOnly && statuses.every((s) => s === "Manual" || s === "Ausente")) { consolidated = "Manual"; tone = "warn"; }
+                else if (withInforme === 0) { consolidated = "Ausente"; tone = "muted"; }
+                else { consolidated = "Parcial CVM"; tone = "warn"; }
+                const toneCls = {
+                  ok: "bg-emerald-500/15 text-emerald-700",
+                  warn: "bg-amber-500/15 text-amber-700",
+                  err: "bg-red-500/15 text-red-700",
+                  muted: "bg-muted/40 text-muted-foreground",
+                }[tone];
                 return (
                   <tr key={s.portfolio.id} className="hairline-b hover:bg-surface-2/50">
                     <td className="px-3 py-2">
@@ -164,15 +184,10 @@ export default function DashboardCarteirasPage() {
                     </td>
                     <td className="px-3 py-2 text-right num text-muted-foreground">{withInforme}/{s.fidcCount}</td>
                     <td className="px-3 py-2">
-                      {informeOk ? (
-                        <span className="inline-flex items-center gap-1 rounded-sm bg-risk-normal/15 px-1.5 py-0.5 text-[11px] text-risk-normal">
-                          <CheckCircle2 className="h-3 w-3" /> Completo
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-sm bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                          <AlertTriangle className="h-3 w-3" /> {withInforme > 0 ? "Parcial" : "Pendente"}
-                        </span>
-                      )}
+                      <span className={cn("inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11px]", toneCls)}>
+                        {tone === "ok" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                        {consolidated}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">{fmtDate(s.valDate)}</td>
                     <td className="px-3 py-2 text-right">
