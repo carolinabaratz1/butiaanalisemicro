@@ -20,7 +20,7 @@ export default function MonitorPage() {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
   const [cvmOpen, setCvmOpen] = useState(false);
 
-  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, fidcsWithReportCount } = useFidcMonitorData();
+  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor, fidcsWithReportCount } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
 
   const rows = useMemo(() => {
