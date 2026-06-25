@@ -1,22 +1,67 @@
-// POC commit: grava os informes selecionados (vindos do diagnóstico /cvm-fidc-import)
-// em fidc_monthly_reports + fidc_monthly_quota_classes com source='cvm_open_data'.
-// O front envia os dados já agregados; aqui só persistimos.
+// Persiste informes selecionados (vindos do /cvm-fidc-import) em:
+//  - fidc_monthly_reports
+//  - fidc_monthly_quota_classes
+//  - fidc_monthly_segments
+// com source='cvm_open_data' e versionamento replace/new_version.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-type ClassItem = { name: string; type?: string; pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null; monthlyYieldPct?: number | null };
+type Flows = {
+  subscription_value?: number; subscription_quota_quantity?: number;
+  redemption_value?: number; redemption_quota_quantity?: number;
+  requested_redemption_value?: number; requested_redemption_quota_quantity?: number;
+  amortization_value?: number; amortization_quota_quantity?: number;
+};
+type ClassItem = {
+  name: string; type?: string;
+  pl?: number | null; quotaValue?: number | null; numberOfQuotas?: number | null;
+  monthlyYieldPct?: number | null;
+  rawQuotaQuantity?: string; rawQuotaValue?: string; rawMonthlyReturn?: string;
+  parseStatus?: string; idSubclasse?: string;
+  investorsCount?: number | null;
+  flows?: Flows; netFlow?: number; grossFlow?: number;
+};
+type SegmentItem = { code: string; name: string; level: number; parent?: string; value: number };
+type FlowsTotal = {
+  totalSubscriptionValue?: number; totalRedemptionValue?: number;
+  totalRequestedRedemptionValue?: number; totalAmortizationValue?: number;
+  netInvestorFlowValue?: number; grossInvestorFlowValue?: number;
+};
 type Item = {
-  fidcId: string; cnpj: string; referenceMonth: string; // YYYY-MM-DD
+  fidcId: string; cnpj: string; referenceMonth: string;
   mode: "replace" | "new_version";
-  pl: number | null; creditRights: number | null; caixaAmpliado: number | null;
-  cash: number | null; pdd: number | null;
-  overdueTotal: number | null; overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
-  repurchase: number | null; investors: number | null;
+  // Núcleo
+  pl: number | null; avgNav?: number | null;
+  totalAssets?: number | null; totalLiabilities?: number | null;
+  creditRights: number | null; creditRightsGross?: number | null;
+  caixaAmpliado: number | null; cashStrict?: number | null;
+  pdd: number | null;
+  // Atrasos
+  overdueTotal: number | null;
+  overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
+  // Aquisições / negócios
+  repurchase: number | null;
+  acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
+  substitution?: number | null; prepaid?: number | null;
+  // Cotistas
+  investors: number | null;
+  // Segmento principal
+  mainSegment?: string | null; mainSegmentValue?: number | null; mainSegmentPct?: number | null;
+  segmentTotal?: number | null; segmentValidationStatus?: string | null;
+  // Validação
   classes: ClassItem[]; sumClassesPL: number;
   plDiff: number | null; plDiffPct: number | null;
   status: string;
+  // Coleções
+  segments?: SegmentItem[];
+  flows?: FlowsTotal;
 };
 type Body = { referenceMonth: string; sourceUrl: string; fileHash: string; items: Item[] };
+
+const mapValidation = (s: string) =>
+  s === "validacao_critica" ? "invalid"
+  : s === "cotas_ausentes" ? "quota_data_missing"
+  : "valid";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -33,7 +78,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const userId = claims.claims.sub as string;
-    // Checa permissão usando função existente
     const { data: canWrite, error: roleErr } = await userClient.rpc("fidc_can_write", { _user_id: userId });
     if (roleErr || !canWrite) {
       return new Response(JSON.stringify({ error: "Permissão negada" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -45,31 +89,67 @@ Deno.serve(async (req) => {
 
     for (const it of body.items) {
       try {
-        // Versionamento: se modo replace → atualizar registro corrente; se new_version → marcar atuais como não-correntes e inserir.
         const { data: existing } = await admin
           .from("fidc_monthly_reports")
           .select("id, version, is_current_version")
           .eq("fidc_id", it.fidcId).eq("reference_month", it.referenceMonth);
 
-        const baseRow = {
+        const flows = it.flows ?? {};
+        const segBreakdown = (it.segments ?? []).map((s) => ({
+          code: s.code, name: s.name, level: s.level, parent: s.parent ?? null,
+          value: s.value, pct: it.segmentTotal && it.segmentTotal > 0 ? s.value / it.segmentTotal : null,
+        }));
+
+        const baseRow: Record<string, unknown> = {
           fidc_id: it.fidcId,
           reference_month: it.referenceMonth,
           nav_value: it.pl,
+          avg_nav_value: it.avgNav ?? null,
+          total_assets: it.totalAssets ?? null,
+          total_liabilities: it.totalLiabilities ?? null,
           credit_rights_value: it.creditRights,
-          cash_value: (it.cash ?? 0) + (it.caixaAmpliado != null && it.cash != null ? (it.caixaAmpliado - it.cash) : 0) || it.caixaAmpliado,
+          credit_rights_gross_value: it.creditRightsGross ?? null,
+          cash_value: it.caixaAmpliado,
+          cash_strict_value: it.cashStrict ?? null,
           pdd_value: it.pdd,
           overdue_value: it.overdueTotal,
           overdue_30d_value: it.overdue30, overdue_60d_value: it.overdue60,
           overdue_90d_value: it.overdue90, overdue_120d_value: it.overdue120,
+          delinquency_30_plus_value: it.overdue30,
+          delinquency_60_plus_value: it.overdue60,
+          delinquency_90_plus_value: it.overdue90,
+          delinquency_120_plus_value: it.overdue120,
           repurchase_value: it.repurchase,
+          acquisition_with_risk_value: it.acquisitionWithRisk ?? null,
+          acquisition_without_risk_value: it.acquisitionWithoutRisk ?? null,
+          substitution_value: it.substitution ?? null,
+          prepaid_value: it.prepaid ?? null,
           investors_count: it.investors,
+          // Segmento principal
+          main_segment: it.mainSegment ?? null,
+          main_segment_value: it.mainSegmentValue ?? null,
+          main_segment_pct: it.mainSegmentPct ?? null,
+          segment_portfolio_value: it.segmentTotal ?? null,
+          segment_validation_status: it.segmentValidationStatus ?? null,
+          segment_breakdown: segBreakdown.length ? segBreakdown : null,
+          // Fluxos consolidados
+          total_subscription_value: flows.totalSubscriptionValue ?? null,
+          total_redemption_value: flows.totalRedemptionValue ?? null,
+          total_requested_redemption_value: flows.totalRequestedRedemptionValue ?? null,
+          total_amortization_value: flows.totalAmortizationValue ?? null,
+          net_investor_flow_value: flows.netInvestorFlowValue ?? null,
+          gross_investor_flow_value: flows.grossInvestorFlowValue ?? null,
+          // Validação
           quota_total_nav_value: it.sumClassesPL,
           quota_validation_difference: it.plDiff,
           quota_validation_difference_percentage: it.plDiffPct,
-          quota_validation_status: it.status === "validacao_critica" ? "invalid" : it.status === "cotas_ausentes" ? "quota_data_missing" : "valid",
+          quota_validation_status: mapValidation(it.status),
           quota_classes_found_count: it.classes.length,
           subordinated_calculation_status: it.classes.length > 1 ? "calculated" : "single_class",
-          raw_data: { source: "cvm_open_data", url: body.sourceUrl, classes: it.classes, status: it.status } as Record<string, unknown>,
+          raw_data: {
+            source: "cvm_open_data", url: body.sourceUrl,
+            classes: it.classes, segments: it.segments ?? [], flows, status: it.status,
+          } as Record<string, unknown>,
           source: "cvm_open_data",
           source_url: body.sourceUrl,
           file_hash: body.fileHash,
@@ -84,10 +164,10 @@ Deno.serve(async (req) => {
           const { error } = await admin.from("fidc_monthly_reports").update(baseRow).eq("id", current.id);
           if (error) throw error;
           reportId = current.id;
-          // limpa cotas antigas desse report
           await admin.from("fidc_monthly_quota_classes").delete().eq("fidc_monthly_report_id", reportId);
+          await admin.from("fidc_monthly_segments").delete()
+            .eq("fidc_id", it.fidcId).eq("reference_month", it.referenceMonth);
         } else {
-          // marca anteriores como não-correntes
           if (existing && existing.length) {
             await admin.from("fidc_monthly_reports")
               .update({ is_current_version: false })
@@ -102,18 +182,62 @@ Deno.serve(async (req) => {
 
         // Cotas
         if (it.classes.length) {
-          const rows = it.classes.map((c) => ({
-            fidc_monthly_report_id: reportId,
-            class_name: c.name,
-            quota_type: c.type ?? null,
-            nav_value: c.pl ?? null,
-            quota_value: c.quotaValue ?? null,
-            number_of_quotas: c.numberOfQuotas ?? null,
-            monthly_yield_pct: c.monthlyYieldPct ?? null,
-            matching_status: "cvm_import",
-            source: "cvm_open_data",
-          }));
+          const rows = it.classes.map((c) => {
+            const f = c.flows ?? {};
+            const yieldPct = c.monthlyYieldPct ?? null;
+            return {
+              fidc_monthly_report_id: reportId,
+              cnpj_fundo_classe: it.cnpj,
+              reference_month: it.referenceMonth,
+              class_name: c.name,
+              quota_type: c.type ?? null,
+              id_subclasse: c.idSubclasse ?? null,
+              nav_value: c.pl ?? null,
+              quota_value: c.quotaValue ?? null,
+              number_of_quotas: c.numberOfQuotas ?? null,
+              raw_quota_quantity: c.rawQuotaQuantity ?? null,
+              raw_quota_value: c.rawQuotaValue ?? null,
+              parse_status: c.parseStatus ?? "ok",
+              monthly_yield_pct: yieldPct,
+              monthly_return_pct: yieldPct,
+              monthly_return_decimal: yieldPct != null ? yieldPct / 100 : null,
+              raw_monthly_return: c.rawMonthlyReturn ?? null,
+              investors_count: c.investorsCount ?? null,
+              subscription_value: f.subscription_value ?? null,
+              subscription_quota_quantity: f.subscription_quota_quantity ?? null,
+              redemption_value: f.redemption_value ?? null,
+              redemption_quota_quantity: f.redemption_quota_quantity ?? null,
+              requested_redemption_value: f.requested_redemption_value ?? null,
+              requested_redemption_quota_quantity: f.requested_redemption_quota_quantity ?? null,
+              amortization_value: f.amortization_value ?? null,
+              amortization_quota_quantity: f.amortization_quota_quantity ?? null,
+              net_quota_flow_value: c.netFlow ?? null,
+              gross_quota_flow_value: c.grossFlow ?? null,
+              matching_status: "cvm_import",
+              source: "cvm_open_data",
+            };
+          });
           const { error } = await admin.from("fidc_monthly_quota_classes").insert(rows);
+          if (error) throw error;
+        }
+
+        // Segmentos
+        if (it.segments && it.segments.length) {
+          const segRows = it.segments.map((s) => ({
+            fidc_id: it.fidcId,
+            cnpj_fundo_classe: it.cnpj,
+            reference_month: it.referenceMonth,
+            segment_group: s.level === 1 ? s.name : (s.parent ?? null),
+            segment_name: s.name,
+            segment_code: s.code,
+            segment_level: s.level,
+            parent_segment: s.parent ?? null,
+            value: s.value,
+            pct_of_segment_portfolio: it.segmentTotal && it.segmentTotal > 0 ? s.value / it.segmentTotal : null,
+            source: "cvm_open_data",
+            source_file: `inf_mensal_fidc_tab_II_${it.referenceMonth.slice(0, 7).replace("-", "")}.csv`,
+          }));
+          const { error } = await admin.from("fidc_monthly_segments").insert(segRows);
           if (error) throw error;
         }
 
