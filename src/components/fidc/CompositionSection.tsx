@@ -186,6 +186,12 @@ export function CompositionSection({ portfolioSummaries, latestReportFor }: Prop
           b.meta = { tone: st.tone };
           break;
         }
+        case "segmento": {
+          const r = p.fidcId ? latestReportFor(p.fidcId) : null;
+          const lbl = (r?.main_segment || "").trim() || "Sem segmento (CVM)";
+          add(lbl, lbl, p);
+          break;
+        }
       }
     });
     return Array.from(map.values()).sort((a, b) => b.value - a.value);
