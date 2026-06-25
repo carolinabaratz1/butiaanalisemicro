@@ -136,6 +136,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Line type="monotone" dataKey="cota" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Valor da cota", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Direitos Creditórios" subtitle="R$">
