@@ -387,6 +387,58 @@ Deno.serve(async (req) => {
       extractMetrics(buf, mappings as MappingRow[], filesIndex);
     }
 
+    // === Derivações cross-file (TAB V + TAB VI) ===
+    // overdue_value, delinquency_30_plus, ..., 120_plus, prepaid_value
+    const derive = (buf: FidcBuffer, name: string, parts: string[], sourceFiles: string[]) => {
+      let total = 0; let anyFound = false; let anyMissingCol = false;
+      const rawValues: Record<string, unknown> = {};
+      for (const p of parts) {
+        const m = buf.metrics[p];
+        if (!m) { anyMissingCol = true; continue; }
+        rawValues[p] = m.value;
+        if (m.status === "found_value" || m.status === "found_zero") {
+          if (typeof m.value === "number") { total += m.value; anyFound = true; }
+        } else if (m.status === "missing_column") {
+          anyMissingCol = true;
+        }
+      }
+      buf.metrics[name] = {
+        metric: name,
+        value: anyFound ? total : null,
+        status: anyFound ? (total === 0 ? "found_zero" : "found_value") : (anyMissingCol ? "missing_column" : "missing_row"),
+        sourceFile: sourceFiles.join("+"),
+        rule: `derived:sum(${parts.join(",")})`,
+        rawValues,
+      };
+    };
+    for (const buf of buffer.values()) {
+      // totais
+      derive(buf, "overdue_value", ["tab_v_overdue_total", "tab_vi_overdue_total"], ["TAB_V", "TAB_VI"]);
+      derive(buf, "prepaid_value", ["tab_v_prepaid_total", "tab_vi_prepaid_total"], ["TAB_V", "TAB_VI"]);
+      // buckets consolidados
+      const bks = ["30","60","90","120","150","180","360","720","1080","1080p"];
+      for (const b of bks) {
+        derive(buf, `delinquency_${b}_value`, [`tab_v_overdue_${b}`, `tab_vi_overdue_${b}`], ["TAB_V","TAB_VI"]);
+      }
+      // 30+, 60+, 90+, 120+
+      derive(buf, "delinquency_30_plus_value",  bks.slice(1).map((b) => `delinquency_${b}_value`), ["derived"]);
+      derive(buf, "delinquency_60_plus_value",  bks.slice(2).map((b) => `delinquency_${b}_value`), ["derived"]);
+      derive(buf, "delinquency_90_plus_value",  bks.slice(3).map((b) => `delinquency_${b}_value`), ["derived"]);
+      derive(buf, "delinquency_120_plus_value", bks.slice(4).map((b) => `delinquency_${b}_value`), ["derived"]);
+      // DC bruto = DC + PDD
+      const dc = buf.metrics["credit_rights_value"];
+      const pdd = buf.metrics["pdd_value"];
+      if (dc && pdd && (dc.status === "found_value" || dc.status === "found_zero") &&
+          (pdd.status === "found_value" || pdd.status === "found_zero")) {
+        const gross = (dc.value as number) + (pdd.value as number);
+        buf.metrics["credit_rights_gross_value"] = {
+          metric: "credit_rights_gross_value", value: gross,
+          status: gross === 0 ? "found_zero" : "found_value",
+          rule: "derived:DC+PDD", sourceFile: "TAB_I",
+        };
+      }
+    }
+
     // Resumo final por FIDC
     const referenceISO = `${ref.slice(0, 4)}-${ref.slice(4, 6)}-01`;
     const fidcs = Array.from(buffer.values()).map((buf) => {
@@ -419,14 +471,23 @@ Deno.serve(async (req) => {
         classes: buf.classes,
         rowsByFile: Object.fromEntries(Object.entries(buf.rowsByFile).map(([k, v]) => [k, v.slice(0, 5)])),
         pl, creditRights: dc,
+        creditRightsGross: value("credit_rights_gross_value"),
+        totalAssets: value("total_assets"),
+        totalLiabilities: value("total_liabilities"),
+        avgNav: value("avg_nav_value"),
         caixaAmpliado: value("cash_value"),
+        cashStrict: value("cash_strict_value"),
         pdd: value("pdd_value"),
         overdueTotal: value("overdue_value"),
-        overdue30: value("delinquency_30_value"),
-        overdue60: value("delinquency_60_value"),
-        overdue90: value("delinquency_90_value"),
-        overdue120: value("delinquency_120_value"),
+        overdue30: value("delinquency_30_plus_value"),
+        overdue60: value("delinquency_60_plus_value"),
+        overdue90: value("delinquency_90_plus_value"),
+        overdue120: value("delinquency_120_plus_value"),
+        prepaid: value("prepaid_value"),
         repurchase: value("repurchase_value"),
+        substitution: value("substitution_value"),
+        acquisitionWithRisk: value("acquisition_with_risk_value"),
+        acquisitionWithoutRisk: value("acquisition_without_risk_value"),
         investors: value("investors_count"),
         sumClassesPL, plDiff: diff, plDiffPct: diffPct,
         missingMetrics: missing,
