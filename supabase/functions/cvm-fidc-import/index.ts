@@ -323,18 +323,146 @@ function extractMetrics(buf: FidcBuffer, mappings: MappingRow[], filesIndex: Map
     }
   }
 
-  // Classes (X2): coleta lista (não é mapeamento simples)
+  // Classes (X2): nomes reais da CVM
   const x2Key = Object.keys(buf.rowsByFile).find((fn) => /_tab_x[_.]?2[_.]/.test(fn.toLowerCase()));
   if (x2Key) {
     for (const row of buf.rowsByFile[x2Key]) {
-      const name = row["DENOM_CLASSE"] || row["DENOM_CLASSE_COTA"] || row["TP_CLASSE"] || row["CLASSE"] || "Classe única";
+      const name = row["TAB_X_CLASSE_SERIE"] || row["DENOM_CLASSE"] || row["DENOM_CLASSE_COTA"] || "Classe única";
+      const rawQt = row["TAB_X_QT_COTA"] ?? "";
+      const rawVl = row["TAB_X_VL_COTA"] ?? "";
+      // Detecta múltiplos separadores em quantidade (Excel-corrupted)
+      const dotsQt = (rawQt.match(/\./g) || []).length;
+      const dotsVl = (rawVl.match(/\./g) || []).length;
+      let parseStatus = "ok";
+      if (dotsQt > 1) parseStatus = "parse_warning_multiple_separators_quantity";
+      else if (dotsVl > 1) parseStatus = "parse_warning_multiple_separators_value";
+      const qt = parseBR(rawQt);
+      const vl = parseBR(rawVl);
+      const pl = (qt != null && vl != null) ? qt * vl : null;
+      // quota_type
+      const lower = name.toLowerCase();
+      let type = "unknown";
+      if (/s[eê]nior/.test(lower)) type = "senior";
+      else if (/mezanino/.test(lower)) type = "mezzanine";
+      else if (/subordinad/.test(lower)) type = "subordinated";
+      else if (/[uú]nica/.test(lower)) type = "unique";
       buf.classes.push({
-        name,
-        type: row["TP_CLASSE"] || row["TP_SERIE"] || "",
-        pl: parseBR(row["VL_PATRIM_LIQ"] || row["VL_PL"] || row["VL_TOTAL"]),
-        quotaValue: parseBR(row["VL_COTA"] || row["VL_QUOTA"]),
-        numberOfQuotas: parseBR(row["QT_COTA"] || row["QT_QUOTA"]),
+        name, normalizedName: normalizeName(name), type,
+        pl, quotaValue: vl, numberOfQuotas: qt,
+        rawQuotaQuantity: rawQt, rawQuotaValue: rawVl,
+        parseStatus, idSubclasse: row["ID_SUBCLASSE"] || undefined,
       });
+    }
+  }
+
+  // === TAB II — Carteira por segmento ===
+  const x2II = Object.keys(buf.rowsByFile).find((fn) => /_tab_ii_/.test(fn.toLowerCase()));
+  if (x2II) {
+    const row = buf.rowsByFile[x2II][0];
+    if (row) {
+      buf.segmentTotal = parseBR(row["TAB_II_VL_CARTEIRA"]);
+      const mainSegs: Array<{ code: string; name: string; col: string }> = [
+        { code: "A", name: "Indústria",       col: "TAB_II_A_VL_INDUST" },
+        { code: "B", name: "Imobiliário",     col: "TAB_II_B_VL_IMOBIL" },
+        { code: "C", name: "Comercial",       col: "TAB_II_C_VL_COMERC" },
+        { code: "D", name: "Serviços",        col: "TAB_II_D_VL_SERV" },
+        { code: "E", name: "Agronegócio",     col: "TAB_II_E_VL_AGRONEG" },
+        { code: "F", name: "Financeiro",      col: "TAB_II_F_VL_FINANC" },
+        { code: "G", name: "Crédito",         col: "TAB_II_G_VL_CREDITO" },
+        { code: "H", name: "Factoring",       col: "TAB_II_H_VL_FACTOR" },
+        { code: "I", name: "Setor Público",   col: "TAB_II_I_VL_SETOR_PUBLICO" },
+        { code: "J", name: "Judicial",        col: "TAB_II_J_VL_JUDICIAL" },
+        { code: "K", name: "Marcas",          col: "TAB_II_K_VL_MARCA" },
+      ];
+      for (const s of mainSegs) {
+        const v = parseBR(row[s.col]);
+        if (v != null && v > 0) buf.segments.push({ code: s.code, name: s.name, level: 1, value: v });
+      }
+      // Subsegmentos relevantes
+      const subSegs: Array<{ code: string; parent: string; name: string; col: string }> = [
+        { code: "C1", parent: "C", name: "Comercial geral",    col: "TAB_II_C1_VL_COMERC" },
+        { code: "C2", parent: "C", name: "Varejo",              col: "TAB_II_C2_VL_VAREJO" },
+        { code: "C3", parent: "C", name: "Arrendamento",        col: "TAB_II_C3_VL_ARREND" },
+        { code: "D1", parent: "D", name: "Serviços geral",      col: "TAB_II_D1_VL_SERV" },
+        { code: "D2", parent: "D", name: "Utilidade pública",   col: "TAB_II_D2_VL_SERV_PUBLICO" },
+        { code: "D3", parent: "D", name: "Educação",            col: "TAB_II_D3_VL_SERV_EDUC" },
+        { code: "D4", parent: "D", name: "Entretenimento",      col: "TAB_II_D4_VL_ENTRET" },
+        { code: "F1", parent: "F", name: "Crédito Pessoal",     col: "TAB_II_F1_VL_CRED_PESSOA" },
+        { code: "F2", parent: "F", name: "Consignado",          col: "TAB_II_F2_VL_CRED_PESSOA_CONSIG" },
+        { code: "F3", parent: "F", name: "Crédito Corporativo", col: "TAB_II_F3_VL_CRED_CORP" },
+        { code: "F4", parent: "F", name: "Middle Market",       col: "TAB_II_F4_VL_MIDMARKET" },
+        { code: "F5", parent: "F", name: "Veículos",            col: "TAB_II_F5_VL_VEICULO" },
+        { code: "F6", parent: "F", name: "Imobiliário Empresa", col: "TAB_II_F6_VL_IMOBIL_EMPRESA" },
+        { code: "F7", parent: "F", name: "Imobiliário Resid.",  col: "TAB_II_F7_VL_IMOBIL_RESID" },
+        { code: "F8", parent: "F", name: "Financeiro outros",   col: "TAB_II_F8_VL_OUTRO" },
+        { code: "H1", parent: "H", name: "Factoring Pessoa",    col: "TAB_II_H1_VL_PESSOA" },
+        { code: "H2", parent: "H", name: "Factoring Corp.",     col: "TAB_II_H2_VL_CORP" },
+        { code: "I1", parent: "I", name: "Precatórios",         col: "TAB_II_I1_VL_PRECAT" },
+        { code: "I2", parent: "I", name: "Tributário",          col: "TAB_II_I2_VL_TRIBUT" },
+        { code: "I3", parent: "I", name: "Royalties",           col: "TAB_II_I3_VL_ROYALTIES" },
+        { code: "I4", parent: "I", name: "Setor Público outros", col: "TAB_II_I4_VL_OUTRO" },
+      ];
+      for (const s of subSegs) {
+        const v = parseBR(row[s.col]);
+        if (v != null && v > 0) buf.segments.push({ code: s.code, name: s.name, level: 2, parent: s.parent, value: v });
+      }
+    }
+  }
+
+  // === TAB X_1 — Cotistas por classe ===
+  const x1Key = Object.keys(buf.rowsByFile).find((fn) => /_tab_x[_.]?1[_.]/.test(fn.toLowerCase()));
+  if (x1Key) {
+    for (const row of buf.rowsByFile[x1Key]) {
+      const className = row["TAB_X_CLASSE_SERIE"] || "";
+      if (!className) continue;
+      const n = normalizeName(className);
+      const inv = parseBR(row["TAB_X_NR_COTST"]);
+      const cls = buf.classes.find((c) => c.normalizedName === n);
+      if (cls) { cls.investorsCount = inv ?? null; if (!cls.idSubclasse) cls.idSubclasse = row["ID_SUBCLASSE"] || undefined; }
+    }
+  }
+
+  // === TAB X_3 — Rentabilidade mensal por classe ===
+  const x3Key = Object.keys(buf.rowsByFile).find((fn) => /_tab_x[_.]?3[_.]/.test(fn.toLowerCase()));
+  if (x3Key) {
+    for (const row of buf.rowsByFile[x3Key]) {
+      const className = row["TAB_X_CLASSE_SERIE"] || "";
+      if (!className) continue;
+      const n = normalizeName(className);
+      const raw = row["TAB_X_VL_RENTAB_MES"] ?? "";
+      const v = parseBR(raw);
+      const cls = buf.classes.find((c) => c.normalizedName === n);
+      if (cls) { cls.monthlyYieldPct = v ?? null; cls.rawMonthlyReturn = raw; }
+    }
+  }
+
+  // === TAB X_4 — Fluxos por classe (pivot por TAB_X_TP_OPER) ===
+  const x4Key = Object.keys(buf.rowsByFile).find((fn) => /_tab_x[_.]?4[_.]/.test(fn.toLowerCase()));
+  if (x4Key) {
+    const mapOp: Record<string, [keyof QuotaFlowItem, keyof QuotaFlowItem]> = {
+      "captacoes no mes":       ["subscription_value", "subscription_quota_quantity"],
+      "captacao no mes":        ["subscription_value", "subscription_quota_quantity"],
+      "resgates no mes":        ["redemption_value",   "redemption_quota_quantity"],
+      "resgates solicitados":   ["requested_redemption_value", "requested_redemption_quota_quantity"],
+      "amortizacoes":           ["amortization_value", "amortization_quota_quantity"],
+      "amortizacao":            ["amortization_value", "amortization_quota_quantity"],
+    };
+    for (const row of buf.rowsByFile[x4Key]) {
+      const op = normalizeName(row["TAB_X_TP_OPER"] || "");
+      const className = row["TAB_X_CLASSE_SERIE"] || "";
+      if (!op || !className) continue;
+      const mapping = mapOp[op];
+      if (!mapping) continue;
+      const [valueKey, qtKey] = mapping;
+      const vTotal = parseBR(row["TAB_X_VL_TOTAL"]);
+      const vQt = parseBR(row["TAB_X_QT_COTA"]);
+      const n = normalizeName(className);
+      const cls = buf.classes.find((c) => c.normalizedName === n);
+      if (cls) {
+        cls.flows ??= {};
+        if (vTotal != null) (cls.flows[valueKey] as number) = ((cls.flows[valueKey] as number) ?? 0) + vTotal;
+        if (vQt != null) (cls.flows[qtKey] as number) = ((cls.flows[qtKey] as number) ?? 0) + vQt;
+      }
     }
   }
 }
