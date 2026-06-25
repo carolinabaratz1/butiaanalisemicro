@@ -562,10 +562,10 @@ Deno.serve(async (req) => {
       };
     };
     for (const buf of buffer.values()) {
-      // totais
-      derive(buf, "overdue_value", ["tab_v_overdue_total", "tab_vi_overdue_total"], ["TAB_V", "TAB_VI"]);
+      // Totais por fonte
+      derive(buf, "overdue_value_tab_v_vi", ["tab_v_overdue_total", "tab_vi_overdue_total"], ["TAB_V", "TAB_VI"]);
       derive(buf, "prepaid_value", ["tab_v_prepaid_total", "tab_vi_prepaid_total"], ["TAB_V", "TAB_VI"]);
-      // buckets consolidados
+      // buckets consolidados (V + VI)
       const bks = ["30","60","90","120","150","180","360","720","1080","1080p"];
       for (const b of bks) {
         derive(buf, `delinquency_${b}_value`, [`tab_v_overdue_${b}`, `tab_vi_overdue_${b}`], ["TAB_V","TAB_VI"]);
@@ -575,18 +575,80 @@ Deno.serve(async (req) => {
       derive(buf, "delinquency_60_plus_value",  bks.slice(2).map((b) => `delinquency_${b}_value`), ["derived"]);
       derive(buf, "delinquency_90_plus_value",  bks.slice(3).map((b) => `delinquency_${b}_value`), ["derived"]);
       derive(buf, "delinquency_120_plus_value", bks.slice(4).map((b) => `delinquency_${b}_value`), ["derived"]);
+
+      // === Atraso headline: prioriza TAB I, com fallback p/ TAB V+VI ===
+      const numFrom = (k: string): number | null => {
+        const m = buf.metrics[k];
+        if (!m) return null;
+        if (m.status === "found_value" || m.status === "found_zero") return Number(m.value) || 0;
+        return null;
+      };
+      const valI = numFrom("overdue_value_tab_i");
+      const valVVI = numFrom("overdue_value_tab_v_vi");
+      const hasI = valI != null;
+      const hasVVI = valVVI != null;
+      const vI = valI ?? 0;
+      const vVVI = valVVI ?? 0;
+      let overdueValue = 0;
+      let overdueSource: "tab_i" | "tab_v_vi" | "none" = "none";
+      if (vI > 0) { overdueValue = vI; overdueSource = "tab_i"; }
+      else if (vVVI > 0) { overdueValue = vVVI; overdueSource = "tab_v_vi"; }
+      let coverage: "com_abertura_por_faixa" | "sem_abertura_por_faixa" | "somente_tab_v_vi" | "sem_inadimplencia_reportada";
+      if (vI > 0 && vVVI === 0) coverage = "sem_abertura_por_faixa";
+      else if (vI > 0 && vVVI > 0) coverage = "com_abertura_por_faixa";
+      else if (vI === 0 && vVVI > 0) coverage = "somente_tab_v_vi";
+      else coverage = "sem_inadimplencia_reportada";
+      const unbucketed = Math.max(overdueValue - vVVI, 0);
+
+      // Mantém métrica "overdue_value" com origem consolidada
+      buf.metrics["overdue_value"] = {
+        metric: "overdue_value",
+        value: hasI || hasVVI ? overdueValue : null,
+        status: !hasI && !hasVVI ? "missing_row" : (overdueValue === 0 ? "found_zero" : "found_value"),
+        rule: `derived(${overdueSource}; coverage=${coverage})`,
+        sourceFile: "TAB_I+V+VI",
+        rawValues: { overdue_value_tab_i: vI, overdue_value_tab_v_vi: vVVI },
+      };
+
       // DC bruto = DC + PDD
-      const dc = buf.metrics["credit_rights_value"];
-      const pdd = buf.metrics["pdd_value"];
-      if (dc && pdd && (dc.status === "found_value" || dc.status === "found_zero") &&
-          (pdd.status === "found_value" || pdd.status === "found_zero")) {
-        const gross = (dc.value as number) + (pdd.value as number);
+      const dcMeta = buf.metrics["credit_rights_value"];
+      const pddMeta = buf.metrics["pdd_value"];
+      if (dcMeta && pddMeta && (dcMeta.status === "found_value" || dcMeta.status === "found_zero") &&
+          (pddMeta.status === "found_value" || pddMeta.status === "found_zero")) {
+        const gross = (dcMeta.value as number) + (pddMeta.value as number);
         buf.metrics["credit_rights_gross_value"] = {
           metric: "credit_rights_gross_value", value: gross,
           status: gross === 0 ? "found_zero" : "found_value",
           rule: "derived:DC+PDD", sourceFile: "TAB_I",
         };
       }
+
+      // Ratios (somente quando faz sentido)
+      const grossMeta = buf.metrics["credit_rights_gross_value"];
+      const gross = grossMeta && (grossMeta.status === "found_value" || grossMeta.status === "found_zero")
+        ? Number(grossMeta.value) || 0 : 0;
+      const overdueRatio = gross > 0 && (hasI || hasVVI) ? overdueValue / gross : null;
+      const pddVal = pddMeta && (pddMeta.status === "found_value" || pddMeta.status === "found_zero")
+        ? Math.abs(Number(pddMeta.value) || 0) : null;
+      const pddOverdueRatio = pddVal != null && overdueValue > 0 ? pddVal / overdueValue : null;
+
+      // Anexa metadados úteis no buf p/ payload (acessado abaixo)
+      (buf as FidcBuffer & {
+        derived?: {
+          overdueValue: number; overdueSource: string; coverage: string; unbucketed: number;
+          overdueValueTabI: number | null; overdueValueTabVVi: number | null;
+          overdueToCreditRightsRatio: number | null; pddToOverdueRatio: number | null;
+        };
+      }).derived = {
+        overdueValue,
+        overdueSource,
+        coverage,
+        unbucketed,
+        overdueValueTabI: hasI ? vI : null,
+        overdueValueTabVVi: hasVVI ? vVVI : null,
+        overdueToCreditRightsRatio: overdueRatio,
+        pddToOverdueRatio: pddOverdueRatio,
+      };
     }
 
     // Resumo final por FIDC
@@ -679,6 +741,17 @@ Deno.serve(async (req) => {
         overdue60: value("delinquency_60_plus_value"),
         overdue90: value("delinquency_90_plus_value"),
         overdue120: value("delinquency_120_plus_value"),
+        // Atraso/inadimplência detalhado (TAB I + TAB V/VI)
+        overdueExistingCreditRightsValue: value("overdue_existing_credit_rights_value"),
+        defaultedCreditRightsValue: value("defaulted_credit_rights_value"),
+        overdueInstallmentsValue: value("overdue_installments_value"),
+        overdueValueTabI: (buf as FidcBuffer & { derived?: { overdueValueTabI: number | null } }).derived?.overdueValueTabI ?? null,
+        overdueValueTabVVi: (buf as FidcBuffer & { derived?: { overdueValueTabVVi: number | null } }).derived?.overdueValueTabVVi ?? null,
+        overdueSource: (buf as FidcBuffer & { derived?: { overdueSource: string } }).derived?.overdueSource ?? "none",
+        overdueBucketCoverageStatus: (buf as FidcBuffer & { derived?: { coverage: string } }).derived?.coverage ?? "sem_inadimplencia_reportada",
+        delinquencyUnbucketedValue: (buf as FidcBuffer & { derived?: { unbucketed: number } }).derived?.unbucketed ?? 0,
+        overdueToCreditRightsRatio: (buf as FidcBuffer & { derived?: { overdueToCreditRightsRatio: number | null } }).derived?.overdueToCreditRightsRatio ?? null,
+        pddToOverdueRatio: (buf as FidcBuffer & { derived?: { pddToOverdueRatio: number | null } }).derived?.pddToOverdueRatio ?? null,
         prepaid: value("prepaid_value"),
         repurchase: value("repurchase_value"),
         substitution: value("substitution_value"),

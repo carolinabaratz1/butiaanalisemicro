@@ -39,6 +39,16 @@ type Item = {
   // Atrasos
   overdueTotal: number | null;
   overdue30: number | null; overdue60: number | null; overdue90: number | null; overdue120: number | null;
+  overdueExistingCreditRightsValue?: number | null;
+  defaultedCreditRightsValue?: number | null;
+  overdueInstallmentsValue?: number | null;
+  overdueValueTabI?: number | null;
+  overdueValueTabVVi?: number | null;
+  overdueSource?: string | null;
+  overdueBucketCoverageStatus?: string | null;
+  delinquencyUnbucketedValue?: number | null;
+  overdueToCreditRightsRatio?: number | null;
+  pddToOverdueRatio?: number | null;
   // Aquisições / negócios
   repurchase: number | null;
   acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
@@ -119,6 +129,16 @@ Deno.serve(async (req) => {
           delinquency_60_plus_value: it.overdue60,
           delinquency_90_plus_value: it.overdue90,
           delinquency_120_plus_value: it.overdue120,
+          overdue_existing_credit_rights_value: it.overdueExistingCreditRightsValue ?? null,
+          defaulted_credit_rights_value: it.defaultedCreditRightsValue ?? null,
+          overdue_installments_value: it.overdueInstallmentsValue ?? null,
+          overdue_value_tab_i: it.overdueValueTabI ?? null,
+          overdue_value_tab_v_vi: it.overdueValueTabVVi ?? null,
+          overdue_source: it.overdueSource ?? null,
+          overdue_bucket_coverage_status: it.overdueBucketCoverageStatus ?? null,
+          delinquency_unbucketed_value: it.delinquencyUnbucketedValue ?? null,
+          overdue_to_credit_rights_ratio: it.overdueToCreditRightsRatio ?? null,
+          pdd_to_overdue_ratio: it.pddToOverdueRatio ?? null,
           repurchase_value: it.repurchase,
           acquisition_with_risk_value: it.acquisitionWithRisk ?? null,
           acquisition_without_risk_value: it.acquisitionWithoutRisk ?? null,

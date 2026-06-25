@@ -322,11 +322,47 @@ export default function FidcDetailPage() {
               <MetricCard label="Direitos Creditórios" value={cell(dc != null ? BRL(dc, { compact: true }) : null)} />
               <MetricCard label="DC/PL" value={cell(ratio(dc, nav) != null ? PCT(ratio(dc, nav)!) : null)} />
               <MetricCard label="Caixa/PL" value={cell(ratio(cash, nav) != null ? PCT(ratio(cash, nav)!) : null)} accent={ratio(cash, nav) != null && ratio(cash, nav)! < 0.02 ? "warning" : "neutral"} />
-              <MetricCard label="Atraso/DC" value={cell(ratio(overdue, dc) != null ? PCT(ratio(overdue, dc)!) : null)} accent={ratio(overdue, dc) != null && ratio(overdue, dc)! > 0.1 ? (ratio(overdue, dc)! > 0.2 ? "critical" : "warning") : "neutral"} />
-              <MetricCard label="≤30d/DC" value={cell(ratio(n("overdue_30d_value"), dc) != null ? PCT(ratio(n("overdue_30d_value"), dc)!) : null)} />
-              <MetricCard label="≤60d/DC" value={cell(ratio(n("overdue_60d_value"), dc) != null ? PCT(ratio(n("overdue_60d_value"), dc)!) : null)} />
-              <MetricCard label="≤90d/DC" value={cell(ratio(n("overdue_90d_value"), dc) != null ? PCT(ratio(n("overdue_90d_value"), dc)!) : null)} />
-              <MetricCard label="≤120d/DC" value={cell(ratio(n("overdue_120d_value"), dc) != null ? PCT(ratio(n("overdue_120d_value"), dc)!) : null)} />
+              {(() => {
+                const overdueSrc = r?.overdue_source ? String(r.overdue_source) : null;
+                const coverage = r?.overdue_bucket_coverage_status ? String(r.overdue_bucket_coverage_status) : null;
+                const vTabI = r?.overdue_value_tab_i != null ? Number(r.overdue_value_tab_i) : null;
+                const vTabVVI = r?.overdue_value_tab_v_vi != null ? Number(r.overdue_value_tab_v_vi) : null;
+                const tipParts = [
+                  vTabI != null ? `TAB I: ${BRL(vTabI, { compact: true })}` : `TAB I: —`,
+                  vTabVVI != null ? `TAB V/VI: ${BRL(vTabVVI, { compact: true })}` : `TAB V/VI: —`,
+                  overdueSrc ? `Fonte: ${overdueSrc === "tab_i" ? "TAB I (créditos vencidos/inadimplentes)" : overdueSrc === "tab_v_vi" ? "TAB V/VI (faixas)" : "sem inadimplência reportada"}` : "",
+                  coverage === "sem_abertura_por_faixa" ? "Aviso: inadimplência positiva na TAB I, sem abertura por faixa na TAB V/VI." : "",
+                ].filter(Boolean).join(" · ");
+                const ratioVal = ratio(overdue, dc);
+                const noFaixa = coverage === "sem_abertura_por_faixa";
+                const ndTooltip = "A CVM reportou créditos vencidos/inadimplentes na TAB I, mas não trouxe abertura por faixa na TAB V/TAB VI.";
+                return (
+                  <>
+                    <span title={tipParts}>
+                      <MetricCard
+                        label={`Atraso/DC${noFaixa ? " ⚠" : ""}`}
+                        value={cell(ratioVal != null ? PCT(ratioVal) : null)}
+                        accent={ratioVal != null && ratioVal > 0.1 ? (ratioVal > 0.2 ? "critical" : "warning") : "neutral"}
+                      />
+                    </span>
+                    {noFaixa ? (
+                      <>
+                        <span title={ndTooltip}><MetricCard label="≤30d/DC" value={<span className="text-muted-foreground">N/D</span>} /></span>
+                        <span title={ndTooltip}><MetricCard label="≤60d/DC" value={<span className="text-muted-foreground">N/D</span>} /></span>
+                        <span title={ndTooltip}><MetricCard label="≤90d/DC" value={<span className="text-muted-foreground">N/D</span>} /></span>
+                        <span title={ndTooltip}><MetricCard label="≤120d/DC" value={<span className="text-muted-foreground">N/D</span>} /></span>
+                      </>
+                    ) : (
+                      <>
+                        <MetricCard label="≤30d/DC" value={cell(ratio(n("overdue_30d_value"), dc) != null ? PCT(ratio(n("overdue_30d_value"), dc)!) : null)} />
+                        <MetricCard label="≤60d/DC" value={cell(ratio(n("overdue_60d_value"), dc) != null ? PCT(ratio(n("overdue_60d_value"), dc)!) : null)} />
+                        <MetricCard label="≤90d/DC" value={cell(ratio(n("overdue_90d_value"), dc) != null ? PCT(ratio(n("overdue_90d_value"), dc)!) : null)} />
+                        <MetricCard label="≤120d/DC" value={cell(ratio(n("overdue_120d_value"), dc) != null ? PCT(ratio(n("overdue_120d_value"), dc)!) : null)} />
+                      </>
+                    )}
+                  </>
+                );
+              })()}
               <MetricCard label="PDD/DC" value={cell(ratio(pdd != null ? Math.abs(pdd) : null, dc) != null ? PCT(ratio(Math.abs(pdd!), dc)!) : null)} accent={ratio(pdd != null ? Math.abs(pdd) : null, dc) != null && ratio(Math.abs(pdd!), dc)! > 0.05 ? "warning" : "neutral"} />
               <MetricCard label="PDD/Atrasos" value={cell(overdue && overdue !== 0 && pdd != null ? PCT(Math.abs(pdd) / overdue) : null)} />
               <MetricCard label="Recompras/DC" value={cell(ratio(rep, dc) != null ? PCT(ratio(rep, dc)!) : null)} />
@@ -487,11 +523,20 @@ export default function FidcDetailPage() {
             ? delBuckets
             : ((latestReport?.overdue_breakdown as { bucket: string; value: number }[] | null) ?? null);
 
+          const overdueHeadline = latestReport?.overdue_value != null ? Number(latestReport.overdue_value) : null;
+          const overdueSource = latestReport?.overdue_source ? String(latestReport.overdue_source) : null;
+          const coverageStatus = latestReport?.overdue_bucket_coverage_status ? String(latestReport.overdue_bucket_coverage_status) : null;
+          const unbucketed = latestReport?.delinquency_unbucketed_value != null ? Number(latestReport.delinquency_unbucketed_value) : 0;
+
           return (
             <CreditPortfolio
               segments={segments}
               maturity={maturity}
               overdueByBucket={overdueByBucket}
+              overdueHeadlineValue={overdueHeadline}
+              overdueSource={overdueSource}
+              overdueBucketCoverageStatus={coverageStatus}
+              delinquencyUnbucketedValue={unbucketed}
               assignors={(latestReport?.assignors_breakdown as { bucket: string; value: number }[] | null) ?? null}
               guaranteesValue={latestReport?.guarantees_value != null ? Number(latestReport.guarantees_value) : null}
               guaranteesPctDc={latestReport?.guarantees_pct_dc != null ? Number(latestReport.guarantees_pct_dc) : null}
