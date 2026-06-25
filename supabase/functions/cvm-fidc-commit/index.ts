@@ -62,6 +62,17 @@ type Item = {
   classes: ClassItem[]; sumClassesPL: number;
   plDiff: number | null; plDiffPct: number | null;
   status: string;
+  // Subordinação por senioridade + limites
+  subordination?: {
+    seniorNav: number; mezzNav: number; subNav: number; uniqueNav: number; unknownNav: number;
+    seniorPct: number | null; mezzPct: number | null; subPct: number | null;
+    seniorRatio: number | null; mezzRatio: number | null;
+    seniorLimit: number | null; mezzLimit: number | null;
+    seniorExcess: number | null; mezzExcess: number | null;
+    seniorStatus: string; mezzStatus: string; qualityFlag: string | null;
+    quotaSum: number; navDiff: number | null; navDiffPct: number | null;
+    validation: "ok" | "alert" | "critical";
+  } | null;
   // Coleções
   segments?: SegmentItem[];
   flows?: FlowsTotal;
