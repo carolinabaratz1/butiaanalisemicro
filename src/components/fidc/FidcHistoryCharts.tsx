@@ -40,7 +40,6 @@ function moneyTickFormatter(values: (number | null)[]) {
 }
 
 const pctTickFormatter = (v: number) => `${(v * 100).toFixed(1)}%`;
-const intTickFormatter = (v: number) => Number(v).toLocaleString("pt-BR");
 
 export function FidcHistoryCharts({ history }: { history: Row[] }) {
   const data = useMemo(() => {
@@ -63,7 +62,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
         pl: nav,
         cota: num(r.quota_value),
         dc,
-        investidores: num(r.investors_count),
+        amortizacao: num(r.total_amortization_value),
         atrasoPct: ratio(overdue, dc),
         pddPct: ratio(pdd, dc),
         pddAtrasoPct: overdue && overdue !== 0 && pdd != null ? pdd / overdue : null,
@@ -114,6 +113,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Area type="monotone" dataKey="pl" stroke="hsl(var(--primary))" strokeWidth={1.6} fill="url(#gPL)" />
           </AreaChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Patrimônio Líquido", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Valor da Cota" subtitle="R$ por cota">
@@ -136,6 +136,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Line type="monotone" dataKey="cota" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Valor da cota", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Direitos Creditórios" subtitle="R$">
@@ -154,6 +155,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Area type="monotone" dataKey="dc" stroke="#10b981" strokeWidth={1.6} fill="url(#gDC)" />
           </AreaChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Direitos creditórios", color: "#10b981" }]} />
       </ChartCard>
 
       <ChartCard title="Inadimplência e PDD" subtitle="% sobre Direitos Creditórios">
@@ -180,6 +182,7 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             <Line type="monotone" dataKey="pddAtrasoPct" stroke="hsl(var(--primary))" strokeWidth={1.6} dot={{ r: 2 }} />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "PDD / Atrasos", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
       <ChartCard title="Caixa/PL e Recompras/DC" subtitle="%">
@@ -209,18 +212,32 @@ export function FidcHistoryCharts({ history }: { history: Row[] }) {
             />
           </LineChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Subordinação / PL", color: "hsl(var(--primary))" }]} />
       </ChartCard>
 
-      <ChartCard title="Número de Investidores" subtitle="cotistas">
+
+      <ChartCard title="Amortização Total no Mês" subtitle="R$">
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, left: 8, bottom: 8 }}>
+            <defs>
+              <linearGradient id="gAmort" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
             <XAxis {...xAxisProps} />
-            <YAxis {...axisStyle} width={56} tickFormatter={intTickFormatter} domain={["auto", "auto"]} allowDecimals={false} />
-            <Tooltip {...tooltipStyle} formatter={(v: number) => Number(v).toLocaleString("pt-BR")} />
-            <Line type="monotone" dataKey="investidores" stroke="#6366f1" strokeWidth={1.6} dot={{ r: 2 }} />
-          </LineChart>
+            <YAxis
+              {...axisStyle}
+              width={64}
+              tickFormatter={moneyTickFormatter(data.map((d) => d.amortizacao))}
+              domain={[0, "auto"]}
+            />
+            <Tooltip {...tooltipStyle} formatter={(v: number) => BRL(v, { compact: true })} />
+            <Area type="monotone" dataKey="amortizacao" name="Amortização" stroke="#6366f1" strokeWidth={1.6} fill="url(#gAmort)" />
+          </AreaChart>
         </ResponsiveContainer>
+        <Legend items={[{ label: "Amortização total no mês", color: "#6366f1" }]} />
       </ChartCard>
     </div>
   );
