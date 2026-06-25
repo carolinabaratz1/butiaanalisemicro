@@ -302,6 +302,9 @@ export default function FidcDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2" data-print="hide">
+            <Button size="sm" variant="outline" onClick={() => setSourceDlgOpen(true)} className="h-8 text-[11.5px]">
+              Ver origem dos dados
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="h-8 text-[11.5px]">
               <Upload className="h-3.5 w-3.5 mr-1.5" /> Importar Informe Mensal
             </Button>
