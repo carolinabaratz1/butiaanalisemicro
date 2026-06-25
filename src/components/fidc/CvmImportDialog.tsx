@@ -369,7 +369,7 @@ export function CvmImportDialog({ open, onOpenChange }: Props) {
                             </tr>
                           );
                         })}
-                        {!diag.fidcs.length && <tr><td colSpan={21} className="py-10 text-center text-muted-foreground">Nenhum FIDC do Cadastro Mestre encontrado neste informe.</td></tr>}
+                        {!diag.fidcs.length && <tr><td colSpan={24} className="py-10 text-center text-muted-foreground">Nenhum FIDC do Cadastro Mestre encontrado neste informe.</td></tr>}
                       </tbody>
                     </table>
                   </div>
