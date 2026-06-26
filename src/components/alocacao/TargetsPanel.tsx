@@ -425,7 +425,7 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       switch (sortKey) {
         case "nome": av = a.nome ?? ""; bv = b.nome ?? ""; break;
         case "grupo": av = a.grupo_economico ?? ""; bv = b.grupo_economico ?? ""; break;
-        case "rating": av = a.rating ?? ""; bv = b.rating ?? ""; break;
+        case "rating": av = getResolved(a.cnpj).rating ?? ""; bv = getResolved(b.cnpj).rating ?? ""; break;
         case "target": {
           const ra = drafts[a.cnpj]; const rb = drafts[b.cnpj];
           av = ra == null || ra.trim() === "" ? -Infinity : Number(ra.replace(",", "."));
