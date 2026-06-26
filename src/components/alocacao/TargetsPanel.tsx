@@ -15,6 +15,8 @@ import {
   useAllocationSetorTargets,
 } from "./useAllocationData";
 import { FUNDOS, FundoKey, fmtPct } from "./allocationUtils";
+import { useResolvedRatings } from "@/lib/ratings/useResolvedRating";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
 
 const EDITOR_ROLES = new Set(["Gestor", "Coordenação/Especialista"]);
 
