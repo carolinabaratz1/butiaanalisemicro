@@ -64,6 +64,8 @@ export default function EmpresaDetailPage() {
   const [novoValDate, setNovoValDate] = useState<Date>();
   const [novoFidcClasse, setNovoFidcClasse] = useState<string>('');
   const [novoFidcTipo, setNovoFidcTipo] = useState<string>('');
+  const [ratingHistOpen, setRatingHistOpen] = useState(false);
+
 
   // ── Fetch empresa from DB ──
   const { data: emissor, isLoading: loadingEmpresa } = useQuery({
