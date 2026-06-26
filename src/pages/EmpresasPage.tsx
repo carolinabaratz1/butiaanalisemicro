@@ -44,6 +44,7 @@ export default function EmpresasPage() {
   // Rating edit state
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
   const [editRatingValue, setEditRatingValue] = useState('');
+  const [historyFor, setHistoryFor] = useState<{ cnpj: string; nome: string } | null>(null);
 
   const canEdit = currentUser?.funcao === 'Gestor' || currentUser?.funcao === 'Coordenação/Especialista';
 
