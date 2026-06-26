@@ -10,6 +10,7 @@ import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
 import { STATUS_BADGE_CLASS as ANALISE_BADGE } from "@/utils/analiseStatus";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
 
 interface Props { fundo: FundoKey; valDate?: string | null }
 
