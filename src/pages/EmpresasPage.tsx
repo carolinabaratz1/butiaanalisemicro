@@ -332,11 +332,11 @@ export default function EmpresasPage() {
                               className="h-6 w-20 text-xs bg-background"
                               autoFocus
                               onKeyDown={ev => {
-                                if (ev.key === 'Enter') updateRatingMutation.mutate({ id: e.id, rating: editRatingValue });
+                                if (ev.key === 'Enter') updateRatingMutation.mutate({ id: e.id, cnpj: e.cnpj, rating: editRatingValue });
                                 if (ev.key === 'Escape') setEditingRatingId(null);
                               }}
                             />
-                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updateRatingMutation.mutate({ id: e.id, rating: editRatingValue })}>
+                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updateRatingMutation.mutate({ id: e.id, cnpj: e.cnpj, rating: editRatingValue })}>
                               <Check className="h-3 w-3 text-primary" />
                             </Button>
                             <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingRatingId(null)}>
@@ -344,14 +344,13 @@ export default function EmpresasPage() {
                             </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">{e.rating || '—'}</span>
-                            {canEdit && (
-                              <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={() => { setEditingRatingId(e.id); setEditRatingValue(e.rating || ''); }}>
-                                <Pencil className="h-3 w-3 text-muted-foreground" />
-                              </Button>
-                            )}
-                          </div>
+                          <RatingCell
+                            cnpj={e.cnpj}
+                            currentRating={e.rating}
+                            canEdit={!!canEdit}
+                            onEdit={() => { setEditingRatingId(e.id); setEditRatingValue(e.rating || ''); }}
+                            onOpenHistory={() => setHistoryFor({ cnpj: e.cnpj, nome: e.nome })}
+                          />
                         )}
                       </TableCell>
                       <TableCell className="py-2">
