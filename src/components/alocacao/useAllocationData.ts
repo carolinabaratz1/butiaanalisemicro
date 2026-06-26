@@ -287,6 +287,22 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         : { data: [] as any };
       const empresas = (empresasRes.data ?? []) as any[];
 
+      // Resolve ratings via RPC (hierarchy: ticker → emissor → grupo → N/R).
+      // Overwrite empresa.rating with the resolved value so the existing
+      // downstream code automatically uses ticker/issuer/group fallback,
+      // while exposing the source for badge rendering.
+      const ratingResolvedMap = empresas.length
+        ? await resolveRatingsBatch(empresas.map((e) => ({ cnpj: e.cnpj })))
+        : new Map();
+      const ratingByCnpj = new Map<string, { rating: string | null; source: RatingSource; agencia: string | null; data_rating: string | null }>();
+      for (const e of empresas) {
+        const r = ratingResolvedMap.get(ratingKey(e.cnpj));
+        if (r) {
+          ratingByCnpj.set(e.cnpj, r);
+          if (r.rating) e.rating = r.rating; // keep legacy field in sync
+        }
+      }
+
       // Buscar TODOS os tickers (em carteira ou não) dos emissores envolvidos
       const tradeAtivosGrupoRes = cnpjsNeeded.length
         ? await supabase
