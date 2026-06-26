@@ -1783,6 +1783,48 @@ export type Database = {
         }
         Relationships: []
       }
+      issuer_ratings: {
+        Row: {
+          agencia: string | null
+          cnpj: string
+          created_at: string
+          created_by: string | null
+          data_rating: string | null
+          id: string
+          observacao: string | null
+          outlook: string | null
+          rating: string
+          report_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          agencia?: string | null
+          cnpj: string
+          created_at?: string
+          created_by?: string | null
+          data_rating?: string | null
+          id?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating: string
+          report_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agencia?: string | null
+          cnpj?: string
+          created_at?: string
+          created_by?: string | null
+          data_rating?: string | null
+          id?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating?: string
+          report_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pipeline_eventos: {
         Row: {
           acao: string
@@ -2354,6 +2396,17 @@ export type Database = {
         }
         Relationships: []
       }
+      v_issuer_rating_current: {
+        Row: {
+          agencia: string | null
+          cnpj: string | null
+          data_rating: string | null
+          outlook: string | null
+          rating: string | null
+          source_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_forward_fill: { Args: never; Returns: number }
@@ -2439,6 +2492,15 @@ export type Database = {
           id: string
           nome: string
           status: string
+        }[]
+      }
+      get_resolved_rating: {
+        Args: { p_cnpj: string; p_ticker?: string }
+        Returns: {
+          agencia: string
+          data_rating: string
+          rating: string
+          source: string
         }[]
       }
       get_trade_summary: {
