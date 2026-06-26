@@ -641,6 +641,34 @@ export default function EmpresaDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <IssuerRatingHistoryDialog
+        open={ratingHistOpen}
+        onOpenChange={setRatingHistOpen}
+        cnpj={emissor.cnpj}
+        emissorNome={emissor.nome}
+      />
     </div>
   );
 }
+
+function EmpresaRatingCell({ cnpj, onOpenHistory }: { cnpj: string; onOpenHistory: () => void }) {
+  const { data, isLoading } = useResolvedRating(cnpj);
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase">Rating</p>
+      <div className="flex items-center gap-2 mt-0.5">
+        <RatingBadge
+          loading={isLoading}
+          rating={data?.rating}
+          source={data?.source}
+          agencia={data?.agencia}
+          data={data?.data_rating}
+        />
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onOpenHistory} title="Histórico de rating">
+          <History className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
