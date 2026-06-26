@@ -604,10 +604,31 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           if (s) { statusAnalise = s; break; }
         }
 
+        // Representação da fonte do rating no nível do grupo:
+        // 'grupo' se algum emissor foi resolvido por grupo, senão 'emissor' se houver
+        // ao menos um com rating cadastrado, caso contrário 'nr'. Para soberano força 'emissor'.
+        let groupSource: RatingSource = "nr";
+        let groupAgencia: string | null = null;
+        let groupDate: string | null = null;
+        if (g.isSoberano) {
+          groupSource = "emissor";
+        } else {
+          const sources = g.emissores.map(e => e.ratingSource ?? "nr");
+          if (sources.some(s => s === "grupo")) groupSource = "grupo";
+          else if (sources.some(s => s === "ticker")) groupSource = "ticker";
+          else if (sources.some(s => s === "emissor")) groupSource = "emissor";
+          const ref = g.emissores.find(e => e.ratingSource === groupSource);
+          groupAgencia = ref?.ratingAgencia ?? null;
+          groupDate = ref?.ratingDate ?? null;
+        }
+
         return {
           ...g,
           pct: totalFundo > 0 ? (g.total / totalFundo) * 100 : 0,
           ratingBucket: g.isSoberano ? "AAA" : worstRating(g.emissores.map(e => ratingBucket(e.rating))),
+          ratingSource: groupSource,
+          ratingAgencia: groupAgencia,
+          ratingDate: groupDate,
           ativos,
           statusAnalise,
         };
