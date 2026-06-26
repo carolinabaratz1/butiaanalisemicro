@@ -14,6 +14,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { fetchAllPaged } from '@/utils/analiseStatus';
+import { RatingBadge } from '@/components/ratings/RatingBadge';
+import { useResolvedRatings } from '@/lib/ratings/useResolvedRating';
+import { IssuerRatingHistoryDialog } from '@/components/ratings/IssuerRatingHistoryDialog';
+import { History } from 'lucide-react';
 
 const TIPOS = ['FINANCEIRO', 'CORPORATIVO', 'FIDC', 'CRA', 'CDB', 'Fundo', 'Título Público'];
 
