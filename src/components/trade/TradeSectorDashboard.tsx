@@ -117,21 +117,38 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const sectorChartRef = useRef<HTMLDivElement>(null);
   const emissorChartRef = useRef<HTMLDivElement>(null);
 
+  // Resolve ratings via RPC hierarchy (ticker → emissor → grupo → N/R)
+  // para todos os ativos atualmente carregados.
+  const { data: resolvedRatings } = useQuery({
+    queryKey: ["trade-resolved-ratings", data.length, mode],
+    queryFn: async () =>
+      resolveRatingsBatch(
+        data.map((t) => ({ cnpj: t.emissor_cnpj, ticker: t.ticker })),
+      ),
+    enabled: data.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Enriquecer cada ativo com setor / nome de emissor a partir do CNPJ.
   const enriched = useMemo(() => {
     return data
       .filter((t) => t.anos_venc != null && t.anos_venc > 0 && t.last_val != null)
       .map((t) => {
         const info = t.emissor_cnpj ? byCnpj.get(t.emissor_cnpj) : null;
+        const resolved = resolvedRatings?.get(ratingKey(t.emissor_cnpj, t.ticker));
+        const effectiveRating = resolved?.rating ?? t.rating;
         return {
           ...t,
           setor: info?.setor ?? "Sem setor",
           emissor_label: info?.nome ?? t.emissor_nome ?? "—",
           grupo_economico: info?.grupo_economico ?? null,
-          rating_norm: normRating(t.rating),
+          rating_norm: normRating(effectiveRating),
+          rating_source: (resolved?.source ?? "nr") as RatingSource,
+          rating_agencia: resolved?.agencia ?? null,
+          rating_date: resolved?.data_rating ?? null,
         };
       });
-  }, [data, byCnpj]);
+  }, [data, byCnpj, resolvedRatings]);
 
   // Setores disponíveis ordenados por nº de emissões.
   const setores = useMemo(() => {
