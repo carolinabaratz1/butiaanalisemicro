@@ -21,6 +21,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
+import { RatingBadge } from '@/components/ratings/RatingBadge';
+import { useResolvedRating } from '@/lib/ratings/useResolvedRating';
+import { IssuerRatingHistoryDialog } from '@/components/ratings/IssuerRatingHistoryDialog';
+import { History } from 'lucide-react';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
