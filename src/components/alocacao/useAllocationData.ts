@@ -155,8 +155,14 @@ export interface AtivoInfo {
 
 export interface IssuerRow {
   grupo: string;
-  emissores: { nome: string; cnpj: string; empresaId: string | null; rating: string | null }[];
+  emissores: {
+    nome: string; cnpj: string; empresaId: string | null; rating: string | null;
+    ratingSource?: RatingSource; ratingAgencia?: string | null; ratingDate?: string | null;
+  }[];
   ratingBucket: string;
+  ratingSource?: RatingSource;
+  ratingAgencia?: string | null;
+  ratingDate?: string | null;
   total: number;
   pct: number;
   isSoberano?: boolean;
