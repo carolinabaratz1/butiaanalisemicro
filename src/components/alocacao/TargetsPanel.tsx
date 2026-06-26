@@ -10,11 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { Save, Plus, Search, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
 import {
   useAllocationLimits, useAllocationTargets, useAllocationTargetPeriods, useAllocationEmissorTargets,
   useAllocationSetorTargets,
 } from "./useAllocationData";
 import { FUNDOS, FundoKey, fmtPct } from "./allocationUtils";
+import { useResolvedRatings } from "@/lib/ratings/useResolvedRating";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
 
 const EDITOR_ROLES = new Set(["Gestor", "Coordenação/Especialista"]);
 
@@ -380,6 +383,18 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       return data ?? [];
     },
   });
+
+  // Resolve ratings via hierarquia (ticker → emissor → grupo) para cada empresa
+  const { data: resolvedRatings } = useQuery({
+    queryKey: ["empresas-resolved-ratings", (empresas as any[]).length],
+    queryFn: async () => {
+      return await resolveRatingsBatch((empresas as any[]).map(e => ({ cnpj: e.cnpj })));
+    },
+    enabled: (empresas as any[]).length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const getResolved = (cnpj: string) =>
+    resolvedRatings?.get(ratingKey(cnpj)) ?? { rating: null, source: "nr" as const, agencia: null, data_rating: null };
   const { data: emissorTargets = [] } = useAllocationEmissorTargets(periodId, fundo);
 
   const targetByCnpj = useMemo(() => {
@@ -410,7 +425,7 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       switch (sortKey) {
         case "nome": av = a.nome ?? ""; bv = b.nome ?? ""; break;
         case "grupo": av = a.grupo_economico ?? ""; bv = b.grupo_economico ?? ""; break;
-        case "rating": av = a.rating ?? ""; bv = b.rating ?? ""; break;
+        case "rating": av = getResolved(a.cnpj).rating ?? ""; bv = getResolved(b.cnpj).rating ?? ""; break;
         case "target": {
           const ra = drafts[a.cnpj]; const rb = drafts[b.cnpj];
           av = ra == null || ra.trim() === "" ? -Infinity : Number(ra.replace(",", "."));
@@ -422,7 +437,7 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       return sortDir === "asc" ? (av - bv) : (bv - av);
     });
     return arr;
-  }, [empresas, search, sortKey, sortDir, drafts]);
+  }, [empresas, search, sortKey, sortDir, drafts, resolvedRatings]);
 
   async function saveOne(cnpj: string, raw: string) {
     if (!editable || !periodId) return;
@@ -469,7 +484,19 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
                 <TableRow key={e.cnpj}>
                   <TableCell className="font-medium">{e.nome}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{e.grupo_economico ?? "—"}</TableCell>
-                  <TableCell className="text-center font-mono text-xs">{e.rating ?? "—"}</TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const r = getResolved(e.cnpj);
+                      return (
+                        <RatingBadge
+                          rating={r.rating}
+                          source={r.source}
+                          agencia={r.agencia}
+                          data={r.data_rating}
+                        />
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Input
                       type="text"

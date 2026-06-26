@@ -17,6 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Search, Download, Image as ImageIcon, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
+import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 interface Props {
   data: TradeAtivo[];
@@ -113,21 +117,38 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
   const sectorChartRef = useRef<HTMLDivElement>(null);
   const emissorChartRef = useRef<HTMLDivElement>(null);
 
+  // Resolve ratings via RPC hierarchy (ticker → emissor → grupo → N/R)
+  // para todos os ativos atualmente carregados.
+  const { data: resolvedRatings } = useQuery({
+    queryKey: ["trade-resolved-ratings", data.length, mode],
+    queryFn: async () =>
+      resolveRatingsBatch(
+        data.map((t) => ({ cnpj: t.emissor_cnpj, ticker: t.ticker })),
+      ),
+    enabled: data.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Enriquecer cada ativo com setor / nome de emissor a partir do CNPJ.
   const enriched = useMemo(() => {
     return data
       .filter((t) => t.anos_venc != null && t.anos_venc > 0 && t.last_val != null)
       .map((t) => {
         const info = t.emissor_cnpj ? byCnpj.get(t.emissor_cnpj) : null;
+        const resolved = resolvedRatings?.get(ratingKey(t.emissor_cnpj, t.ticker));
+        const effectiveRating = resolved?.rating ?? t.rating;
         return {
           ...t,
           setor: info?.setor ?? "Sem setor",
           emissor_label: info?.nome ?? t.emissor_nome ?? "—",
           grupo_economico: info?.grupo_economico ?? null,
-          rating_norm: normRating(t.rating),
+          rating_norm: normRating(effectiveRating),
+          rating_source: (resolved?.source ?? "nr") as RatingSource,
+          rating_agencia: resolved?.agencia ?? null,
+          rating_date: resolved?.data_rating ?? null,
         };
       });
-  }, [data, byCnpj]);
+  }, [data, byCnpj, resolvedRatings]);
 
   // Setores disponíveis ordenados por nº de emissões.
   const setores = useMemo(() => {
@@ -907,12 +928,12 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                         <td className="py-1.5 px-2 truncate max-w-[220px]">{t.emissor_label}</td>
                         {isAllSectors && <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[140px]">{t.setor}</td>}
                         <td className="py-1.5 px-2">
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-                            style={{ background: (RATING_COLORS[t.rating_norm] ?? "#94a3b8") + "22", color: RATING_COLORS[t.rating_norm] ?? "#94a3b8" }}
-                          >
-                            {t.rating_norm}
-                          </span>
+                          <RatingBadge
+                            rating={t.rating_norm === "N/R" ? null : t.rating_norm}
+                            source={t.rating_source}
+                            agencia={t.rating_agencia}
+                            data={t.rating_date}
+                          />
                         </td>
                         <td className="py-1.5 px-2 text-right font-mono">{t.anos_venc?.toFixed(2)}</td>
                         <td className="py-1.5 px-2 text-right font-mono">{(t.last_val ?? 0).toFixed(3)}%</td>

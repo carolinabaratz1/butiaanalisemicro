@@ -10,6 +10,7 @@ import {
   FundoKey, computeStatus, STATUS_LABEL, STATUS_BADGE_CLASS, fmtPct,
 } from "./allocationUtils";
 import { STATUS_BADGE_CLASS as ANALISE_BADGE } from "@/utils/analiseStatus";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
 
 interface Props { fundo: FundoKey; valDate?: string | null }
 
@@ -215,7 +216,14 @@ export function IssuerExposurePanel({ fundo, valDate }: Props) {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-center font-mono text-xs">{g.ratingBucket}</TableCell>
+                    <TableCell className="text-center">
+                      <RatingBadge
+                        rating={g.ratingBucket}
+                        source={g.ratingSource ?? "emissor"}
+                        agencia={g.ratingAgencia}
+                        data={g.ratingDate}
+                      />
+                    </TableCell>
                     <TableCell className="text-right font-mono">{fmtPct(g.lim)}</TableCell>
                     <TableCell className="text-right font-mono">{fmtPct(g.pct)}</TableCell>
                     <TableCell className="text-right font-mono">{fmtPct(g.headroom)}</TableCell>

@@ -6,6 +6,8 @@ import {
   fidcTipoFromClasse, FidcClasse,
 } from "./allocationUtils";
 import { getDisplayStatus } from "@/utils/analiseStatus";
+import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 export interface FidcClassRow {
   isin: string;
@@ -153,8 +155,14 @@ export interface AtivoInfo {
 
 export interface IssuerRow {
   grupo: string;
-  emissores: { nome: string; cnpj: string; empresaId: string | null; rating: string | null }[];
+  emissores: {
+    nome: string; cnpj: string; empresaId: string | null; rating: string | null;
+    ratingSource?: RatingSource; ratingAgencia?: string | null; ratingDate?: string | null;
+  }[];
   ratingBucket: string;
+  ratingSource?: RatingSource;
+  ratingAgencia?: string | null;
+  ratingDate?: string | null;
   total: number;
   pct: number;
   isSoberano?: boolean;
@@ -278,6 +286,22 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         ? await supabase.from("empresas").select("id,cnpj,nome,grupo_economico,rating,tipo").in("cnpj", cnpjsNeeded)
         : { data: [] as any };
       const empresas = (empresasRes.data ?? []) as any[];
+
+      // Resolve ratings via RPC (hierarchy: ticker → emissor → grupo → N/R).
+      // Overwrite empresa.rating with the resolved value so the existing
+      // downstream code automatically uses ticker/issuer/group fallback,
+      // while exposing the source for badge rendering.
+      const ratingResolvedMap = empresas.length
+        ? await resolveRatingsBatch(empresas.map((e) => ({ cnpj: e.cnpj })))
+        : new Map();
+      const ratingByCnpj = new Map<string, { rating: string | null; source: RatingSource; agencia: string | null; data_rating: string | null }>();
+      for (const e of empresas) {
+        const r = ratingResolvedMap.get(ratingKey(e.cnpj));
+        if (r) {
+          ratingByCnpj.set(e.cnpj, r);
+          if (r.rating) e.rating = r.rating; // keep legacy field in sync
+        }
+      }
 
       // Buscar TODOS os tickers (em carteira ou não) dos emissores envolvidos
       const tradeAtivosGrupoRes = cnpjsNeeded.length
@@ -486,16 +510,23 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           const grupoKey = isSoberanoEff
             ? "Tesouro Nacional"
             : (empresaEff.grupo_economico?.trim() || empresaEff.nome);
+          const resolvedR = ratingByCnpj.get(empresaEff.cnpj);
+          const emissorEntry = {
+            nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating,
+            ratingSource: isSoberanoEff ? ("emissor" as RatingSource) : (resolvedR?.source ?? ("nr" as RatingSource)),
+            ratingAgencia: resolvedR?.agencia ?? null,
+            ratingDate: resolvedR?.data_rating ?? null,
+          };
           const existing = grupoMap.get(grupoKey);
           if (existing) {
             existing.total += fin;
             if (!existing.emissores.find(e => e.cnpj === empresaEff!.cnpj)) {
-              existing.emissores.push({ nome: empresaEff!.nome, cnpj: empresaEff!.cnpj, empresaId: empresaEff!.id, rating: empresaEff!.rating });
+              existing.emissores.push(emissorEntry);
             }
           } else {
             grupoMap.set(grupoKey, {
               grupo: grupoKey,
-              emissores: [{ nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating }],
+              emissores: [emissorEntry],
               ratingBucket: isSoberanoEff ? "AAA" : ratingB,
               total: fin,
               pct: 0,
@@ -573,10 +604,31 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           if (s) { statusAnalise = s; break; }
         }
 
+        // Representação da fonte do rating no nível do grupo:
+        // 'grupo' se algum emissor foi resolvido por grupo, senão 'emissor' se houver
+        // ao menos um com rating cadastrado, caso contrário 'nr'. Para soberano força 'emissor'.
+        let groupSource: RatingSource = "nr";
+        let groupAgencia: string | null = null;
+        let groupDate: string | null = null;
+        if (g.isSoberano) {
+          groupSource = "emissor";
+        } else {
+          const sources = g.emissores.map(e => e.ratingSource ?? "nr");
+          if (sources.some(s => s === "grupo")) groupSource = "grupo";
+          else if (sources.some(s => s === "ticker")) groupSource = "ticker";
+          else if (sources.some(s => s === "emissor")) groupSource = "emissor";
+          const ref = g.emissores.find(e => e.ratingSource === groupSource);
+          groupAgencia = ref?.ratingAgencia ?? null;
+          groupDate = ref?.ratingDate ?? null;
+        }
+
         return {
           ...g,
           pct: totalFundo > 0 ? (g.total / totalFundo) * 100 : 0,
           ratingBucket: g.isSoberano ? "AAA" : worstRating(g.emissores.map(e => ratingBucket(e.rating))),
+          ratingSource: groupSource,
+          ratingAgencia: groupAgencia,
+          ratingDate: groupDate,
           ativos,
           statusAnalise,
         };
