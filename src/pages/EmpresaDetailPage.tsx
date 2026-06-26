@@ -321,7 +321,7 @@ export default function EmpresaDetailPage() {
         <CardContent className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setor || '—'}</p></div>
           <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupo_economico || '—'}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.rating || '—'}</p></div>
+          <EmpresaRatingCell cnpj={emissor.cnpj} onOpenHistory={() => setRatingHistOpen(true)} />
           <div><p className="text-[10px] text-muted-foreground uppercase">Tipo</p><p className="text-sm font-medium">{emissor.tipo || '—'}</p></div>
         </CardContent>
       </Card>
