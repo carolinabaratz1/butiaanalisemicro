@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { safeHref } from "@/integrations/supabase/safeHref";
+// fallback for shorter path
 
 interface IssuerRatingHistoryDialogProps {
   open: boolean;
