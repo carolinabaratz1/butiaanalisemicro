@@ -1,96 +1,104 @@
-# POC CVM v2 — Schema Discovery + Mapeamento Configurável
+# PLAN — Histórico Canônico de Ratings de Emissores (v2)
 
-Reformular a POC `cvm-fidc-import` para diagnosticar corretamente o ZIP da CVM, carregar o Dicionário de Dados oficial e usar uma camada de mapeamento configurável — sem nunca tratar métrica ausente como zero, e sem mexer em upload manual, posições ou dados já gravados.
+## Ajustes incorporados
 
-## Estrutura geral
+1. **UNIQUE constraint** — Postgres do projeto é **17.6**, suporta `NULLS NOT DISTINCT` (PG ≥ 15). Vamos usar a forma nativa, sem `COALESCE`:
+   ```sql
+   UNIQUE NULLS NOT DISTINCT (cnpj, agencia, data_rating)
+   ```
+2. **Seed sem data enganosa** — `data_rating = NULL` para os ~611 registros legados. `observacao = 'Importação legada do cadastro de empresas (data original desconhecida)'`. Badge mostrará "sem data" em vez de fingir oficialidade.
+
+## Confirmações prévias mantidas
+
+- `trade_ativos` **não tem `agencia`** → resolução por ticker devolve `agencia=NULL`. OK por ora; adicionar coluna fica fora desta migration.
+- Trigger espelho `empresas.rating` marcado **temporário** via `COMMENT ON TRIGGER`.
+- `RatingBadge` com `source='grupo'` recebe visual diferenciado (outline tracejada + ícone Sparkles + sufixo "≈") indicando estimativa.
+
+## Migration (única, sequencial)
+
+### 1. Tabela `issuer_ratings`
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Modal "Importar Informes via CVM" (CvmImportDialog v2)     │
-│                                                             │
-│  [Resumo] [Arquivos ZIP] [Dicionário] [Mapeamento]          │
-│  [Pré-val. FIDC] [Diagnóstico FIDC] [Comparar Manual]       │
-└─────────────────────────────────────────────────────────────┘
-        │                    │                  │
-        ▼                    ▼                  ▼
-   cvm-fidc-import     cvm-fidc-dictionary   cvm-fidc-commit
-   (diagnóstico)       (META .zip)           (gravação final)
-        │                    │                  │
-        └────────► cvm_fidc_field_mapping ◄─────┘
-                          (DB)
-                          │
-                          ▼
-              cvm_monthly_import_staging
-                          │
-                          ▼
-              fidc_monthly_reports (somente após confirmação)
+id              uuid PK default gen_random_uuid()
+cnpj            text NOT NULL          -- normalizado (só dígitos) via trigger
+rating          text NOT NULL
+agencia         text NULL
+data_rating     date NULL
+outlook         text NULL
+observacao      text NULL
+report_url      text NULL
+created_by      uuid NULL              -- profiles.id (sem FK rígida)
+created_at      timestamptz NOT NULL default now()
+updated_at      timestamptz NOT NULL default now()
+
+CONSTRAINT issuer_ratings_unique UNIQUE NULLS NOT DISTINCT (cnpj, agencia, data_rating)
+INDEX (cnpj, data_rating DESC NULLS LAST, created_at DESC)
 ```
 
-## Banco — novas tabelas
+- GRANTs: `SELECT/INSERT/UPDATE/DELETE` → `authenticated`; `ALL` → `service_role`. Sem `anon`.
+- RLS habilitado.
+- Policies:
+  - `SELECT` para todo `authenticated`.
+  - `INSERT/UPDATE/DELETE` apenas via `fidc_can_write(auth.uid())` (Gestor + Coordenação/Especialista).
+- Trigger `BEFORE INSERT/UPDATE`: normaliza CNPJ (`regexp_replace(cnpj,'[^0-9]','','g')`) e atualiza `updated_at`.
 
-1. `cvm_fidc_field_mapping`
-   - `metric_name`, `source_file_pattern`, `source_column`, `transformation`, `is_required`, `fallback_rule`, `notes`
-   - Seed inicial com as 15 métricas pedidas (PL, Ativo, Passivo, DC, Caixa Ampliado, PDD, Atraso, Inad 30/60/90/120, Recompras, Cotistas, Classes, Rentabilidade)
-   - RLS: leitura para `authenticated`; escrita somente Gestor + Coordenação/Especialista
-2. `cvm_data_dictionary`
-   - `table_name`, `column_name`, `description`, `expected_type`, `source_meta_file`, `loaded_at`
-   - Populada pelo `cvm-fidc-dictionary`
-3. `cvm_monthly_import_staging`
-   - `reference_month`, `cnpj`, `fidc_id`, `raw_rows_by_file` (jsonb), `extracted_metrics` (jsonb), `extraction_status`, `missing_metrics` (text[]), `validation_summary` (jsonb), `source_url`, `imported_at`
-   - Unique `(reference_month, cnpj)`
+### 2. View `v_issuer_rating_current`
 
-## Edge Functions
+`SELECT DISTINCT ON (cnpj) ...` ordenando por `data_rating DESC NULLS LAST, created_at DESC` — 1 linha por CNPJ com `rating, agencia, data_rating, outlook, source_id`.
 
-### `cvm-fidc-import` (refatorado)
-- Faz streaming entry-a-entry do ZIP mensal.
-- Para CADA CSV: detecta separador (`;` / `,` / `\t`), encoding (`iso-8859-1` vs `utf-8` via heurística BOM/bytes inválidos), conta linhas/colunas, captura lista de colunas, 3 primeiras linhas, set de CNPJs únicos, exemplos.
-- Retorna bloco `files_diagnostics[]`.
-- Para cada FIDC do Cadastro Mestre: localiza linhas em cada arquivo (por CNPJ) e aplica mapeamento da tabela `cvm_fidc_field_mapping` para extrair as métricas:
-  - status por métrica: `found_value | found_zero | missing_column | missing_row | mapping_not_defined | parse_error`
-  - nunca substitui ausência por 0
-  - regras compostas (Caixa Ampliado, DC, PDD, Atraso, Inad 30/60/90/120) são executadas no servidor combinando colunas configuradas no mapping
-- Retorna `per_fidc_diagnostics[]` com raw_rows_by_file, extracted_metrics, missing, parse_errors.
+### 3. Trigger temporário de espelho
 
-### `cvm-fidc-dictionary` (novo)
-- Baixa `meta_inf_mensal_fidc_txt.zip`, lê metadados (.txt/.csv), faz upsert em `cvm_data_dictionary`.
-- Retorna estrutura para a aba "Dicionário".
+`AFTER INSERT OR UPDATE ON issuer_ratings`: aplica `UPDATE empresas SET rating = NEW.rating WHERE cnpj = NEW.cnpj` quando `NEW` é o registro corrente da view. `COMMENT ON TRIGGER` deixa explícito: temporário, remover após telas migrarem para `v_issuer_rating_current` / RPC.
 
-### `cvm-fidc-commit` (ajustado)
-- Recebe lista de FIDCs aprovados, lê do staging, grava em `fidc_monthly_reports` somente quem tem PL e CNPJ válidos.
-- Quem tem CNPJ na CVM mas sem PL → marca `mapping_error` (não grava).
+### 4. RPC `get_resolved_rating(p_cnpj text, p_ticker text DEFAULT NULL)`
 
-## Parser de Mapeamentos
-Helpers no edge function:
-- `resolveColumn(headers, source_column)` — case/accents-insensitive, suporta múltiplos candidatos separados por `|`
-- `applyTransformation(value, transformation)` — `abs`, `number_br`, `int`
-- `applyCompositeRule(rule, columns_resolved)` — `sum(a,b,...)`, `abs(a)+abs(b)`, etc.
+`SECURITY DEFINER`, `STABLE`, `search_path = public`. Retorna `(rating text, source text, agencia text, data_rating date)`:
 
-## Frontend
+1. `trade_ativos.rating` se `p_ticker` informado → `source='ticker'`, `agencia=NULL`.
+2. `v_issuer_rating_current` por `cnpj` → `source='emissor'`.
+3. Rating modal entre empresas do mesmo `grupo_economico` → `source='grupo'`.
+4. `NULL, 'nr', NULL, NULL`.
 
-- `src/hooks/useCvmDictionary.ts` — carrega/atualiza dicionário
-- `src/hooks/useCvmFieldMapping.ts` — CRUD mapeamento (Admin/Coord)
-- `src/components/fidc/cvm/` — split do dialog:
-  - `CvmImportDialog.tsx` (tabs container)
-  - `tabs/ResumoTab.tsx`
-  - `tabs/ArquivosZipTab.tsx`
-  - `tabs/DicionarioTab.tsx`
-  - `tabs/MapeamentoTab.tsx` (editável p/ Admin/Coord)
-  - `tabs/PreValidacaoTab.tsx` (lista FIDCs + botão "Ver diagnóstico")
-  - `tabs/DiagnosticoFidcTab.tsx` (drill-down por FIDC)
-  - `tabs/CompararManualTab.tsx`
+### 5. Seed inicial
 
-### Aba Resumo mostra
-mês, URL, tamanho do ZIP, # arquivos, CNPJs CVM, CNPJs mestre encontrados, CNPJs com posição, FIDCs com PL/DC, completos, parciais, com erro de mapeamento.
+```sql
+INSERT INTO issuer_ratings (cnpj, rating, agencia, data_rating, observacao)
+SELECT cnpj, rating, NULL, NULL,
+       'Importação legada do cadastro de empresas (data original desconhecida)'
+FROM empresas
+WHERE rating IS NOT NULL AND TRIM(rating) <> '';
+```
 
-## Regras críticas (não-negociáveis)
-- Métrica ausente nunca vira 0.
-- Distinguir `missing_column` (mapeamento aponta coluna inexistente) de `mapping_not_defined` (nenhum mapping para a métrica) de `missing_row` (CNPJ não está no arquivo correto).
-- Se PL ausente para CNPJ presente na CVM → classificação `mapping_error`.
-- Importação definitiva só roda após o usuário clicar "Confirmar" na aba Resumo.
-- POC atual continua coexistindo (mesmo botão no Monitor abre a nova versão; o velho fluxo é substituído pela aba "Pré-validação", mas nenhum dado anterior é apagado).
+Esperado ~611 linhas. Cobertura do `UNIQUE NULLS NOT DISTINCT` garante idempotência se a migration for re-rodada.
 
-## Entregáveis
-1. Migration: 3 tabelas novas + seed do mapping + RLS/GRANT.
-2. Edge functions: `cvm-fidc-import` (refatorado), `cvm-fidc-dictionary` (novo), `cvm-fidc-commit` (ajustado).
-3. Frontend: dialog com 7 abas + 2 hooks + componentes de tabs.
-4. Sem alterações em upload manual, posições ou dados gravados.
+## Frontend (após migration aprovada e tipos regenerados)
+
+1. **`src/lib/ratings/useResolvedRating.ts`** — hook que chama o RPC com cache por `(cnpj, ticker)`.
+2. **`src/components/ratings/RatingBadge.tsx`** — props `{rating, source, agencia, data}`:
+   - `ticker` → badge sólido neutro, tooltip "Rating do ativo · agência · data".
+   - `emissor` → badge sólido azul (semantic), tooltip "Rating do emissor · agência · data".
+   - `grupo` → outline tracejada + ícone `Sparkles` + sufixo "≈", tooltip "Estimativa pelo grupo econômico — não é rating oficial".
+   - `nr` → "N/R" muted.
+   - Quando `data_rating IS NULL` exibe "sem data" no tooltip.
+3. **Trocas de leitura direta por `<RatingBadge />`**:
+   - `EmpresasPage` (lista + detail).
+   - `TradeSectorDashboard`, `TradeMonitorPage`.
+   - `IssuerExposurePanel`, `TargetsPanel` (via `useAllocationData`).
+   - `DashboardPage` (cobertura de rating).
+   - FIDC mantém `fidc_quota_classes.current_rating` (escopo separado).
+4. **Gestão em `EmpresasPage`**: modal "Histórico de Rating" listando `issuer_ratings` do CNPJ + form "Adicionar rating" (agência, rating, data, outlook, observação, URL). Escrita restrita via RLS.
+
+## Roadmap pós-migration
+
+- Migrar telas para `v_issuer_rating_current` / RPC.
+- Após migração, dropar trigger espelho e considerar `empresas.rating` cache derivado (ou remover).
+- Avaliar adicionar `trade_ativos.agencia`.
+- Remover `src/data/emissores.ts` (sem imports ativos).
+
+## Critérios de aceite
+
+- `issuer_ratings` com ~611 linhas após seed, todas com `data_rating IS NULL` e observação de legado.
+- `v_issuer_rating_current` devolve 1 linha por CNPJ.
+- `get_resolved_rating` cobre os 4 casos (`ticker | emissor | grupo | nr`).
+- Telas listadas exibem `RatingBadge`; `source='grupo'` visualmente distinto como estimativa.
+- RLS bloqueia escrita para perfis fora de Gestor/Coordenação.
