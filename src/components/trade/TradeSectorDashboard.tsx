@@ -17,6 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Search, Download, Image as ImageIcon, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { RatingBadge } from "@/components/ratings/RatingBadge";
+import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 interface Props {
   data: TradeAtivo[];
