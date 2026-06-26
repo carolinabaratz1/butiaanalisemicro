@@ -928,12 +928,12 @@ export function TradeSectorDashboard({ data, history, mode, modeColor, onSelectT
                         <td className="py-1.5 px-2 truncate max-w-[220px]">{t.emissor_label}</td>
                         {isAllSectors && <td className="py-1.5 px-2 text-muted-foreground truncate max-w-[140px]">{t.setor}</td>}
                         <td className="py-1.5 px-2">
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold"
-                            style={{ background: (RATING_COLORS[t.rating_norm] ?? "#94a3b8") + "22", color: RATING_COLORS[t.rating_norm] ?? "#94a3b8" }}
-                          >
-                            {t.rating_norm}
-                          </span>
+                          <RatingBadge
+                            rating={t.rating_norm === "N/R" ? null : t.rating_norm}
+                            source={t.rating_source}
+                            agencia={t.rating_agencia}
+                            data={t.rating_date}
+                          />
                         </td>
                         <td className="py-1.5 px-2 text-right font-mono">{t.anos_venc?.toFixed(2)}</td>
                         <td className="py-1.5 px-2 text-right font-mono">{(t.last_val ?? 0).toFixed(3)}%</td>
