@@ -6,6 +6,8 @@ import {
   fidcTipoFromClasse, FidcClasse,
 } from "./allocationUtils";
 import { getDisplayStatus } from "@/utils/analiseStatus";
+import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 export interface FidcClassRow {
   isin: string;
