@@ -21,6 +21,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { registrarEvento } from '@/services/pipelineEventos';
+import { RatingBadge } from '@/components/ratings/RatingBadge';
+import { useResolvedRating } from '@/lib/ratings/useResolvedRating';
+import { IssuerRatingHistoryDialog } from '@/components/ratings/IssuerRatingHistoryDialog';
+import { History } from 'lucide-react';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
@@ -60,6 +64,8 @@ export default function EmpresaDetailPage() {
   const [novoValDate, setNovoValDate] = useState<Date>();
   const [novoFidcClasse, setNovoFidcClasse] = useState<string>('');
   const [novoFidcTipo, setNovoFidcTipo] = useState<string>('');
+  const [ratingHistOpen, setRatingHistOpen] = useState(false);
+
 
   // ── Fetch empresa from DB ──
   const { data: emissor, isLoading: loadingEmpresa } = useQuery({
@@ -315,7 +321,7 @@ export default function EmpresaDetailPage() {
         <CardContent className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div><p className="text-[10px] text-muted-foreground uppercase">Setor</p><p className="text-sm font-medium">{emissor.setor || '—'}</p></div>
           <div><p className="text-[10px] text-muted-foreground uppercase">Grupo Econômico</p><p className="text-sm font-medium">{emissor.grupo_economico || '—'}</p></div>
-          <div><p className="text-[10px] text-muted-foreground uppercase">Rating</p><p className="text-sm font-medium">{emissor.rating || '—'}</p></div>
+          <EmpresaRatingCell cnpj={emissor.cnpj} onOpenHistory={() => setRatingHistOpen(true)} />
           <div><p className="text-[10px] text-muted-foreground uppercase">Tipo</p><p className="text-sm font-medium">{emissor.tipo || '—'}</p></div>
         </CardContent>
       </Card>
@@ -635,6 +641,34 @@ export default function EmpresaDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <IssuerRatingHistoryDialog
+        open={ratingHistOpen}
+        onOpenChange={setRatingHistOpen}
+        cnpj={emissor.cnpj}
+        emissorNome={emissor.nome}
+      />
     </div>
   );
 }
+
+function EmpresaRatingCell({ cnpj, onOpenHistory }: { cnpj: string; onOpenHistory: () => void }) {
+  const { data, isLoading } = useResolvedRating(cnpj);
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase">Rating</p>
+      <div className="flex items-center gap-2 mt-0.5">
+        <RatingBadge
+          loading={isLoading}
+          rating={data?.rating}
+          source={data?.source}
+          agencia={data?.agencia}
+          data={data?.data_rating}
+        />
+        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={onOpenHistory} title="Histórico de rating">
+          <History className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+

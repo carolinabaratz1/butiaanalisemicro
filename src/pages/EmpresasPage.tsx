@@ -14,6 +14,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { fetchAllPaged } from '@/utils/analiseStatus';
+import { RatingBadge } from '@/components/ratings/RatingBadge';
+
+import { IssuerRatingHistoryDialog } from '@/components/ratings/IssuerRatingHistoryDialog';
+import { History } from 'lucide-react';
 
 const TIPOS = ['FINANCEIRO', 'CORPORATIVO', 'FIDC', 'CRA', 'CDB', 'Fundo', 'Título Público'];
 
@@ -40,6 +44,7 @@ export default function EmpresasPage() {
   // Rating edit state
   const [editingRatingId, setEditingRatingId] = useState<string | null>(null);
   const [editRatingValue, setEditRatingValue] = useState('');
+  const [historyFor, setHistoryFor] = useState<{ cnpj: string; nome: string } | null>(null);
 
   const canEdit = currentUser?.funcao === 'Gestor' || currentUser?.funcao === 'Coordenação/Especialista';
 
@@ -133,12 +138,31 @@ export default function EmpresasPage() {
   });
 
   const updateRatingMutation = useMutation({
-    mutationFn: async ({ id, rating }: { id: string; rating: string }) => {
-      const { error } = await supabase.from('empresas').update({ rating: rating || null }).eq('id', id);
+    mutationFn: async ({ cnpj, rating }: { id: string; cnpj: string; rating: string }) => {
+      const normCnpj = (cnpj || '').replace(/[^0-9]/g, '');
+      const trimmed = rating.trim();
+      if (!trimmed) {
+        // Clear rating: remove all issuer_ratings entries for this CNPJ + clear empresas.rating
+        const { error: delErr } = await supabase.from('issuer_ratings').delete().eq('cnpj', normCnpj);
+        if (delErr) throw delErr;
+        const { error: clearErr } = await supabase.from('empresas').update({ rating: null }).eq('cnpj', cnpj);
+        if (clearErr) throw clearErr;
+        return;
+      }
+      const { error } = await supabase.from('issuer_ratings').insert({
+        cnpj: normCnpj,
+        rating: trimmed,
+        agencia: null,
+        data_rating: new Date().toISOString().slice(0, 10),
+        observacao: 'Atualização rápida via lista de empresas',
+        created_by: currentUser?.id ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
+      queryClient.invalidateQueries({ queryKey: ['resolvedRating'] });
+      queryClient.invalidateQueries({ queryKey: ['issuer_ratings'] });
       toast.success('Rating atualizado');
       setEditingRatingId(null);
     },
@@ -309,11 +333,11 @@ export default function EmpresasPage() {
                               className="h-6 w-20 text-xs bg-background"
                               autoFocus
                               onKeyDown={ev => {
-                                if (ev.key === 'Enter') updateRatingMutation.mutate({ id: e.id, rating: editRatingValue });
+                                if (ev.key === 'Enter') updateRatingMutation.mutate({ id: e.id, cnpj: e.cnpj, rating: editRatingValue });
                                 if (ev.key === 'Escape') setEditingRatingId(null);
                               }}
                             />
-                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updateRatingMutation.mutate({ id: e.id, rating: editRatingValue })}>
+                            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => updateRatingMutation.mutate({ id: e.id, cnpj: e.cnpj, rating: editRatingValue })}>
                               <Check className="h-3 w-3 text-primary" />
                             </Button>
                             <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setEditingRatingId(null)}>
@@ -321,14 +345,13 @@ export default function EmpresasPage() {
                             </Button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">{e.rating || '—'}</span>
-                            {canEdit && (
-                              <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={() => { setEditingRatingId(e.id); setEditRatingValue(e.rating || ''); }}>
-                                <Pencil className="h-3 w-3 text-muted-foreground" />
-                              </Button>
-                            )}
-                          </div>
+                          <RatingCell
+                            cnpj={e.cnpj}
+                            currentRating={e.rating}
+                            canEdit={!!canEdit}
+                            onEdit={() => { setEditingRatingId(e.id); setEditRatingValue(e.rating || ''); }}
+                            onOpenHistory={() => setHistoryFor({ cnpj: e.cnpj, nome: e.nome })}
+                          />
                         )}
                       </TableCell>
                       <TableCell className="py-2">
@@ -368,6 +391,34 @@ export default function EmpresasPage() {
           )}
         </CardContent>
       </Card>
+
+      <IssuerRatingHistoryDialog
+        open={!!historyFor}
+        onOpenChange={(o) => { if (!o) setHistoryFor(null); }}
+        cnpj={historyFor?.cnpj || ''}
+        emissorNome={historyFor?.nome}
+      />
     </div>
   );
 }
+
+function RatingCell({ cnpj, currentRating, canEdit, onEdit, onOpenHistory }: { cnpj: string; currentRating?: string | null; canEdit: boolean; onEdit: () => void; onOpenHistory: () => void; }) {
+  // Lightweight: use empresas.rating (mirrored) for badge to avoid one RPC per row.
+  return (
+    <div className="flex items-center gap-1">
+      <RatingBadge
+        rating={currentRating || null}
+        source={currentRating ? 'emissor' : 'nr'}
+      />
+      <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={onOpenHistory} title="Histórico de rating">
+        <History className="h-3 w-3 text-muted-foreground" />
+      </Button>
+      {canEdit && (
+        <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={onEdit} title="Editar rating">
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
