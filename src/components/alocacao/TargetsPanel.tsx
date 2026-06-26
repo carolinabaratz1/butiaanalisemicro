@@ -484,7 +484,19 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
                 <TableRow key={e.cnpj}>
                   <TableCell className="font-medium">{e.nome}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{e.grupo_economico ?? "—"}</TableCell>
-                  <TableCell className="text-center font-mono text-xs">{e.rating ?? "—"}</TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const r = getResolved(e.cnpj);
+                      return (
+                        <RatingBadge
+                          rating={r.rating}
+                          source={r.source}
+                          agencia={r.agencia}
+                          data={r.data_rating}
+                        />
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Input
                       type="text"
