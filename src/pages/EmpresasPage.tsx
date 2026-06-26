@@ -391,6 +391,34 @@ export default function EmpresasPage() {
           )}
         </CardContent>
       </Card>
+
+      <IssuerRatingHistoryDialog
+        open={!!historyFor}
+        onOpenChange={(o) => { if (!o) setHistoryFor(null); }}
+        cnpj={historyFor?.cnpj || ''}
+        emissorNome={historyFor?.nome}
+      />
     </div>
   );
 }
+
+function RatingCell({ cnpj, currentRating, canEdit, onEdit, onOpenHistory }: { cnpj: string; currentRating?: string | null; canEdit: boolean; onEdit: () => void; onOpenHistory: () => void; }) {
+  // Lightweight: use empresas.rating (mirrored) for badge to avoid one RPC per row.
+  return (
+    <div className="flex items-center gap-1">
+      <RatingBadge
+        rating={currentRating || null}
+        source={currentRating ? 'emissor' : 'nr'}
+      />
+      <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={onOpenHistory} title="Histórico de rating">
+        <History className="h-3 w-3 text-muted-foreground" />
+      </Button>
+      {canEdit && (
+        <Button size="icon" variant="ghost" className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:opacity-100" onClick={onEdit} title="Editar rating">
+          <Pencil className="h-3 w-3 text-muted-foreground" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
