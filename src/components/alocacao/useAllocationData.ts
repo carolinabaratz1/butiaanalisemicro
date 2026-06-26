@@ -510,16 +510,23 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           const grupoKey = isSoberanoEff
             ? "Tesouro Nacional"
             : (empresaEff.grupo_economico?.trim() || empresaEff.nome);
+          const resolvedR = ratingByCnpj.get(empresaEff.cnpj);
+          const emissorEntry = {
+            nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating,
+            ratingSource: isSoberanoEff ? ("emissor" as RatingSource) : (resolvedR?.source ?? ("nr" as RatingSource)),
+            ratingAgencia: resolvedR?.agencia ?? null,
+            ratingDate: resolvedR?.data_rating ?? null,
+          };
           const existing = grupoMap.get(grupoKey);
           if (existing) {
             existing.total += fin;
             if (!existing.emissores.find(e => e.cnpj === empresaEff!.cnpj)) {
-              existing.emissores.push({ nome: empresaEff!.nome, cnpj: empresaEff!.cnpj, empresaId: empresaEff!.id, rating: empresaEff!.rating });
+              existing.emissores.push(emissorEntry);
             }
           } else {
             grupoMap.set(grupoKey, {
               grupo: grupoKey,
-              emissores: [{ nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating }],
+              emissores: [emissorEntry],
               ratingBucket: isSoberanoEff ? "AAA" : ratingB,
               total: fin,
               pct: 0,
