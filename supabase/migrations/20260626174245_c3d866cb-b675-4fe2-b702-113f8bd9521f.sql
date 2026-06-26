@@ -1,0 +1,1 @@
+DELETE FROM public.empresas WHERE cnpj = '99999999000199';
