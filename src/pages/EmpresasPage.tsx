@@ -137,12 +137,31 @@ export default function EmpresasPage() {
   });
 
   const updateRatingMutation = useMutation({
-    mutationFn: async ({ id, rating }: { id: string; rating: string }) => {
-      const { error } = await supabase.from('empresas').update({ rating: rating || null }).eq('id', id);
+    mutationFn: async ({ cnpj, rating }: { id: string; cnpj: string; rating: string }) => {
+      const normCnpj = (cnpj || '').replace(/[^0-9]/g, '');
+      const trimmed = rating.trim();
+      if (!trimmed) {
+        // Clear rating: remove all issuer_ratings entries for this CNPJ + clear empresas.rating
+        const { error: delErr } = await supabase.from('issuer_ratings').delete().eq('cnpj', normCnpj);
+        if (delErr) throw delErr;
+        const { error: clearErr } = await supabase.from('empresas').update({ rating: null }).eq('cnpj', cnpj);
+        if (clearErr) throw clearErr;
+        return;
+      }
+      const { error } = await supabase.from('issuer_ratings').insert({
+        cnpj: normCnpj,
+        rating: trimmed,
+        agencia: null,
+        data_rating: new Date().toISOString().slice(0, 10),
+        observacao: 'Atualização rápida via lista de empresas',
+        created_by: currentUser?.id ?? null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
+      queryClient.invalidateQueries({ queryKey: ['resolvedRating'] });
+      queryClient.invalidateQueries({ queryKey: ['issuer_ratings'] });
       toast.success('Rating atualizado');
       setEditingRatingId(null);
     },
