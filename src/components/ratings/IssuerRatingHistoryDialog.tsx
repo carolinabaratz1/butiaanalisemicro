@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-// safeHref imported from lib
 import { format } from "date-fns";
 import { Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,8 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { safeHref } from "@/integrations/supabase/safeHref";
-// fallback for shorter path
+import { safeHref } from "@/lib/safeHref";
 
 interface IssuerRatingHistoryDialogProps {
   open: boolean;
