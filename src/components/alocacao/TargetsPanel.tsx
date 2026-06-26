@@ -383,6 +383,18 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       return data ?? [];
     },
   });
+
+  // Resolve ratings via hierarquia (ticker → emissor → grupo) para cada empresa
+  const { data: resolvedRatings } = useQuery({
+    queryKey: ["empresas-resolved-ratings", (empresas as any[]).length],
+    queryFn: async () => {
+      return await resolveRatingsBatch((empresas as any[]).map(e => ({ cnpj: e.cnpj })));
+    },
+    enabled: (empresas as any[]).length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+  const getResolved = (cnpj: string) =>
+    resolvedRatings?.get(ratingKey(cnpj)) ?? { rating: null, source: "nr" as const, agencia: null, data_rating: null };
   const { data: emissorTargets = [] } = useAllocationEmissorTargets(periodId, fundo);
 
   const targetByCnpj = useMemo(() => {
