@@ -437,7 +437,7 @@ function EmissorTab({ fundo, periodId, editable }: { fundo: FundoKey; periodId: 
       return sortDir === "asc" ? (av - bv) : (bv - av);
     });
     return arr;
-  }, [empresas, search, sortKey, sortDir, drafts]);
+  }, [empresas, search, sortKey, sortDir, drafts, resolvedRatings]);
 
   async function saveOne(cnpj: string, raw: string) {
     if (!editable || !periodId) return;
