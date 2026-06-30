@@ -11,6 +11,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { FundoDashboard } from '@/components/posicoes/FundoDashboard';
+import { ExposicaoGrupoEmissorTab } from '@/components/posicoes/ExposicaoGrupoEmissorTab';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
