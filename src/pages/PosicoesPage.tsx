@@ -11,6 +11,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { FundoDashboard } from '@/components/posicoes/FundoDashboard';
+import { ExposicaoGrupoEmissorTab } from '@/components/posicoes/ExposicaoGrupoEmissorTab';
 import { toast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 
@@ -727,6 +728,7 @@ export default function PosicoesPage() {
           <TabsTrigger value="tabela" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Tabela</TabsTrigger>
           <TabsTrigger value="analitico" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Painel Analítico</TabsTrigger>
           <TabsTrigger value="dashboard" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Dashboard do Fundo</TabsTrigger>
+          <TabsTrigger value="exposicao" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Exposição por Grupo / Emissor</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
@@ -1081,6 +1083,14 @@ export default function PosicoesPage() {
 
         <TabsContent value="dashboard" className="mt-3">
           <FundoDashboard />
+        </TabsContent>
+
+        <TabsContent value="exposicao" className="mt-3">
+          <ExposicaoGrupoEmissorTab
+            valDate={selectedDate}
+            availableDates={availableDates}
+            onValDateChange={(d) => { setDateFilter(d); setPage(0); }}
+          />
         </TabsContent>
       </Tabs>
 
