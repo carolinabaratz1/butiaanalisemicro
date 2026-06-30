@@ -727,6 +727,7 @@ export default function PosicoesPage() {
           <TabsTrigger value="tabela" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Tabela</TabsTrigger>
           <TabsTrigger value="analitico" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Painel Analítico</TabsTrigger>
           <TabsTrigger value="dashboard" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Dashboard do Fundo</TabsTrigger>
+          <TabsTrigger value="exposicao" className="text-xs data-[state=active]:bg-primary/15 data-[state=active]:text-primary">Exposição por Grupo / Emissor</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tabela" className="space-y-3 mt-3">
