@@ -1083,6 +1083,14 @@ export default function PosicoesPage() {
         <TabsContent value="dashboard" className="mt-3">
           <FundoDashboard />
         </TabsContent>
+
+        <TabsContent value="exposicao" className="mt-3">
+          <ExposicaoGrupoEmissorTab
+            valDate={selectedDate}
+            availableDates={availableDates}
+            onValDateChange={(d) => { setDateFilter(d); setPage(0); }}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Drill-down Modal */}
