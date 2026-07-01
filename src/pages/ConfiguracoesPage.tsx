@@ -284,7 +284,7 @@ export default function ConfiguracoesPage() {
                 <TableHead className="text-muted-foreground">E-mail</TableHead>
                 <TableHead className="text-muted-foreground">Função</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
-                {permissions.canManageUsers && <TableHead className="text-muted-foreground text-right">Ações</TableHead>}
+                {(permissions.canManageUsers || canResetMfa) && <TableHead className="text-muted-foreground text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
