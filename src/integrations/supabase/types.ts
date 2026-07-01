@@ -1825,6 +1825,45 @@ export type Database = {
         }
         Relationships: []
       }
+      mfa_reset_log: {
+        Row: {
+          created_at: string
+          factors_removed: number
+          id: string
+          note: string | null
+          performed_by: string
+          performed_by_email: string | null
+          performed_by_nome: string | null
+          target_user_email: string | null
+          target_user_id: string
+          target_user_nome: string | null
+        }
+        Insert: {
+          created_at?: string
+          factors_removed?: number
+          id?: string
+          note?: string | null
+          performed_by: string
+          performed_by_email?: string | null
+          performed_by_nome?: string | null
+          target_user_email?: string | null
+          target_user_id: string
+          target_user_nome?: string | null
+        }
+        Update: {
+          created_at?: string
+          factors_removed?: number
+          id?: string
+          note?: string | null
+          performed_by?: string
+          performed_by_email?: string | null
+          performed_by_nome?: string | null
+          target_user_email?: string | null
+          target_user_id?: string
+          target_user_nome?: string | null
+        }
+        Relationships: []
+      }
       pipeline_eventos: {
         Row: {
           acao: string

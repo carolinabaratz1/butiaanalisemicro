@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound, Check, X } from 'lucide-react';
+import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound, Check, X, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ProfileUser {
@@ -48,6 +48,12 @@ export default function ConfiguracoesPage() {
   const [resetDialog, setResetDialog] = useState<{ userId: string; userName: string } | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [mfaDialog, setMfaDialog] = useState<{ userId: string; userName: string } | null>(null);
+  const [mfaNote, setMfaNote] = useState('');
+  const [mfaResetting, setMfaResetting] = useState(false);
+
+  const canResetMfa =
+    currentUser?.funcao === 'Gestor' || currentUser?.funcao === 'Risco e Compliance';
 
   const fetchUsers = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome');
@@ -125,6 +131,32 @@ export default function ConfiguracoesPage() {
     setResetDialog(null);
     setResetPassword('');
   };
+
+  const handleResetMfa = async () => {
+    if (!mfaDialog) return;
+    setMfaResetting(true);
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'reset-mfa', userId: mfaDialog.userId, note: mfaNote || null },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao resetar autenticador');
+      } else {
+        const removed = res.data?.factors_removed ?? 0;
+        toast.success(
+          removed > 0
+            ? `Autenticador resetado (${removed} fator${removed > 1 ? 'es' : ''} removido${removed > 1 ? 's' : ''}). O usuário fará novo cadastro no próximo login.`
+            : 'Usuário não possuía fator MFA ativo. Poderá cadastrar um novo no próximo login.'
+        );
+      }
+    } catch {
+      toast.error('Erro ao resetar autenticador');
+    }
+    setMfaResetting(false);
+    setMfaDialog(null);
+    setMfaNote('');
+  };
+
 
   const handleCreateUser = async () => {
     if (!newUser.nome || !newUser.email || !newUser.senha) {
@@ -252,7 +284,7 @@ export default function ConfiguracoesPage() {
                 <TableHead className="text-muted-foreground">E-mail</TableHead>
                 <TableHead className="text-muted-foreground">Função</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
-                {permissions.canManageUsers && <TableHead className="text-muted-foreground text-right">Ações</TableHead>}
+                {(permissions.canManageUsers || canResetMfa) && <TableHead className="text-muted-foreground text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -298,32 +330,47 @@ export default function ConfiguracoesPage() {
                         {user.status}
                       </Badge>
                     </TableCell>
-                    {permissions.canManageUsers && (
+                    {(permissions.canManageUsers || canResetMfa) && (
                       <TableCell className="text-right space-x-1">
                         {!isCurrentUser && (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                              title="Resetar senha"
-                              onClick={() => setResetDialog({ userId: user.id, userName: user.nome })}
-                            >
-                              <KeyRound className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
-                              onClick={() => setConfirmAction({
-                                userId: user.id,
-                                userName: user.nome,
-                                action: isActive ? 'deactivate' : 'reactivate',
-                              })}
-                            >
-                              {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                              {isActive ? 'Desativar' : 'Reativar'}
-                            </Button>
+                            {permissions.canManageUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                title="Resetar senha"
+                                onClick={() => setResetDialog({ userId: user.id, userName: user.nome })}
+                              >
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {canResetMfa && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                title="Resetar autenticador (MFA)"
+                                onClick={() => setMfaDialog({ userId: user.id, userName: user.nome })}
+                              >
+                                <Smartphone className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {permissions.canManageUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
+                                onClick={() => setConfirmAction({
+                                  userId: user.id,
+                                  userName: user.nome,
+                                  action: isActive ? 'deactivate' : 'reactivate',
+                                })}
+                              >
+                                {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                                {isActive ? 'Desativar' : 'Reativar'}
+                              </Button>
+                            )}
                           </>
                         )}
                       </TableCell>
@@ -407,6 +454,36 @@ export default function ConfiguracoesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reset MFA Dialog */}
+      <AlertDialog open={!!mfaDialog} onOpenChange={(open) => { if (!open) { setMfaDialog(null); setMfaNote(''); } }}>
+        <AlertDialogContent className="bg-surface-2 border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resetar autenticador (MFA) — {mfaDialog?.userName}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso remove os fatores TOTP atuais deste usuário (útil quando ele trocou de celular ou perdeu o acesso ao app autenticador).
+              No próximo login, ele será obrigado a cadastrar um novo autenticador via QR Code.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-xs">Motivo / observação (opcional)</Label>
+            <Input
+              value={mfaNote}
+              onChange={(e) => setMfaNote(e.target.value)}
+              placeholder="Ex.: trocou de celular"
+              className="bg-surface-1 border-border"
+            />
+            <p className="text-[11px] text-muted-foreground">Registrado no log de auditoria de MFA.</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mfaResetting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleResetMfa} disabled={mfaResetting}>
+              {mfaResetting ? 'Resetando...' : 'Resetar autenticador'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
