@@ -379,11 +379,14 @@ export function useFundoDashboard(fundo: string | null) {
         pctComSetor,
         pctComGrupo,
         pctSemMapeamento: pctOfCredito(plByStatus.sem_mapeamento),
+        pctCnpjNaoMapeado: pctOfCredito(plByStatus.cnpj_nao_mapeado),
+        emissoresSemRating: emissoresSemRating.size,
+        ativosCnpjNaoMapeado: countByStatus.cnpj_nao_mapeado,
         diagnostico,
       },
       rowsClassified: classified,
     };
-  }, [rows]);
+  }, [rows, ratingsByCnpj]);
 
   return {
     data: agg,
