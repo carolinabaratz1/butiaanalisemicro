@@ -6,6 +6,8 @@ import {
   type CreditClassification,
   type DataQualityStatus,
 } from '@/lib/posicoes/credit-eligibility';
+import { resolveRatingsBatch, ratingKey } from '@/lib/ratings/resolveRatingsBatch';
+import type { RatingSource } from '@/lib/ratings/useResolvedRating';
 
 export interface DashboardRow {
   ticker: string | null;
@@ -23,10 +25,19 @@ export interface DashboardRow {
   grupo_economico: string | null;
   nome_emissor: string | null;
   codigo_emissor: string | null;
+  cnpj_emissor: string | null;
+}
+
+export interface ResolvedRatingMeta {
+  rating: string | null;
+  source: RatingSource;
+  agencia: string | null;
+  data_rating: string | null;
 }
 
 export interface ClassifiedRow extends DashboardRow, CreditClassification {
   financeiro: number;
+  resolved_rating: ResolvedRatingMeta;
 }
 
 const RATING_ORDER = [
