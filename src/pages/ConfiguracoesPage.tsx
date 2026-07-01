@@ -132,6 +132,32 @@ export default function ConfiguracoesPage() {
     setResetPassword('');
   };
 
+  const handleResetMfa = async () => {
+    if (!mfaDialog) return;
+    setMfaResetting(true);
+    try {
+      const res = await supabase.functions.invoke('manage-user', {
+        body: { action: 'reset-mfa', userId: mfaDialog.userId, note: mfaNote || null },
+      });
+      if (res.error || res.data?.error) {
+        toast.error(res.data?.error || 'Erro ao resetar autenticador');
+      } else {
+        const removed = res.data?.factors_removed ?? 0;
+        toast.success(
+          removed > 0
+            ? `Autenticador resetado (${removed} fator${removed > 1 ? 'es' : ''} removido${removed > 1 ? 's' : ''}). O usuário fará novo cadastro no próximo login.`
+            : 'Usuário não possuía fator MFA ativo. Poderá cadastrar um novo no próximo login.'
+        );
+      }
+    } catch {
+      toast.error('Erro ao resetar autenticador');
+    }
+    setMfaResetting(false);
+    setMfaDialog(null);
+    setMfaNote('');
+  };
+
+
   const handleCreateUser = async () => {
     if (!newUser.nome || !newUser.email || !newUser.senha) {
       toast.error('Preencha todos os campos');
