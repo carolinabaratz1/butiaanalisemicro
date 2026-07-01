@@ -454,6 +454,36 @@ export default function ConfiguracoesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reset MFA Dialog */}
+      <AlertDialog open={!!mfaDialog} onOpenChange={(open) => { if (!open) { setMfaDialog(null); setMfaNote(''); } }}>
+        <AlertDialogContent className="bg-surface-2 border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resetar autenticador (MFA) — {mfaDialog?.userName}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso remove os fatores TOTP atuais deste usuário (útil quando ele trocou de celular ou perdeu o acesso ao app autenticador).
+              No próximo login, ele será obrigado a cadastrar um novo autenticador via QR Code.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-xs">Motivo / observação (opcional)</Label>
+            <Input
+              value={mfaNote}
+              onChange={(e) => setMfaNote(e.target.value)}
+              placeholder="Ex.: trocou de celular"
+              className="bg-surface-1 border-border"
+            />
+            <p className="text-[11px] text-muted-foreground">Registrado no log de auditoria de MFA.</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mfaResetting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleResetMfa} disabled={mfaResetting}>
+              {mfaResetting ? 'Resetando...' : 'Resetar autenticador'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+
   );
 }
