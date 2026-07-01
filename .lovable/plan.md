@@ -1,56 +1,110 @@
-## Nova aba "Exposição por Grupo / Emissor" em `/posicoes`
 
-Adicionar uma 4ª aba na página Posições, sem mexer em Tabela, Painel Analítico, Dashboard do Fundo, FIDC Monitor, sidebar ou importação. Fonte única: `posicoes` (BASE LOTE 45) cruzada com `empresas`, `emissoes`, `trade_ativos`, `analises` e ratings resolvidos.
+# Plano — Dashboard do Fundo como Lâmina Consolidada
 
-### Arquivos
+Refatorar `src/components/posicoes/FundoDashboard.tsx` e `src/hooks/useFundoDashboard.ts` para separar **Universo Total** de **Universo de Crédito**, eliminar o `N/D` poluído em rating/setor/grupo para ativos não elegíveis, e adicionar seção de Qualidade dos Dados. Sem tocar em importação, sidebar, FIDC Monitor ou dados existentes.
 
-**Novos**
-- `src/components/posicoes/ExposicaoGrupoEmissorTab.tsx` — UI principal (filtros, cards, tabela hierárquica, export).
-- `src/components/posicoes/useExposicaoData.ts` — hook que carrega posições da `val_date` selecionada, faz join com empresas/emissões/trade_ativos/analises, aplica ratings resolvidos via `resolveRatingsBatch`, calcula PL por fundo e exposições agregadas.
-- `src/components/posicoes/exposicaoExport.ts` — export XLSX (3 abas no modo Grupo, 2 no modo Emissor) reutilizando o padrão do `tradeExport.ts`.
+## 1. Classificador de elegibilidade (novo)
 
-**Editados**
-- `src/pages/PosicoesPage.tsx` — adicionar `<TabsTrigger value="exposicao">Exposição por Grupo / Emissor</TabsTrigger>` e `<TabsContent>` renderizando o novo componente, passando `valDate` e fundos disponíveis. Nada mais muda.
+Criar `src/lib/posicoes/credit-eligibility.ts`:
 
-### Modelo de dados (no hook)
+```ts
+export type DataQualityStatus =
+  | 'ok' | 'sem_rating' | 'sem_setor' | 'sem_mapeamento' | 'nao_aplicavel';
 
-1. `posicoes` filtrada por `val_date` (default = mais recente). `PL_fundo = Σ amount*financial_price` por `trading_desk_share_source` (mesma regra já usada no app — memória `calculation-rules`).
-2. Para cada posição: join `emissoes.isin` → `cnpj_emissor` → `empresas` (nome, grupo_economico, setor, rating bruto); `trade_ativos.ticker` para taxa/venc/duration/rating de ticker; `analises` mais recente por CNPJ.
-3. Ratings: `resolveRatingsBatch` para todos os CNPJs únicos (ticker > emissor > grupo > N/R), mantendo o `<RatingBadge />` padrão.
-4. Status análise: `getDisplayStatus` já existente; adicionar bucket "Sem Análise" quando não há registro e mapear severidade conforme spec.
+export interface CreditClassification {
+  credit_analytics_eligible: boolean;
+  non_credit_reason: string | null;
+  data_quality_status: DataQualityStatus;
+}
 
-### Agregações
+export function classifyCreditEligibility(row): CreditClassification
+```
 
-- **Modo Grupo**: chave `grupo_economico` (fallback "Grupo não mapeado"). Soma exposição dos emissores; rating = rating do grupo se existir senão pior rating dos emissores com posição; setor = maior exposição; status = mais severo entre emissores.
-- **Modo Emissor**: chave `cnpj`. Mantém grupo como coluna auxiliar.
-- Para cada nó: `exposureByFundo[fundo] = { value, pct = value/PL_fundo }`, `totalButia`, `consolidatedPct = totalButia / Σ PL_fundos_filtrados`, `weightedAvgRate` (ignora taxas ausentes; N/D se nenhuma).
+Regra baseada em `product_class` (normalizado, upper, sem acento):
 
-### UI
+- **Elegíveis**: Debênture, CRI, CRA, Letra Financeira/LF, CDB, DPGE, FIDC, Nota Comercial/NC/Commercial Paper, LCA/LCI (privados com emissor identificável).
+- **Não elegíveis** (`non_credit_reason = "Não aplicável para análise de crédito"`): LFT, LTN, NTN-B/F, Tesouro, Título Público, Termo, DAP, DI Future, Futuro, Compromissada, Caixa, Fundo/Cotas de Fundo (exceto FIDC), Derivativos, Opções, Swap.
+- Regra de segurança: se `product_class` desconhecido mas há `cnpj_emissor` + `rating` ou `setor` → elegível. Caso contrário não elegível com razão "Tipo de ativo não classificado".
 
-- Toggle "Agrupar por: Grupo Econômico | Emissor" no topo.
-- Linha de filtros: Data ref, Fundo (multi), Grupo, Emissor, Status, Rating, Setor, Tipo de ativo, Vencida (Todos/Sim/Não), Com posição (Todos/Sim/Não), busca livre.
-- 6 cards de resumo conforme spec (mudam de label conforme modo).
-- Tabela densa com header fixo, 1ª coluna fixa, expansão hierárquica (Grupo → Emissor → Ativos no modo Grupo; Emissor → Ativos no modo Emissor).
-- Células de exposição por fundo: `R$ | %` + barra horizontal proporcional ao limite do fundo (10% como referência visual, igual ao padrão Excel antigo).
-- Badges de status com cores conforme spec; linhas Vencido com fundo `bg-status-danger/5` e borda esquerda vermelha; "Sem análise" badge cinza; "não mapeado" badge âmbar.
-- Título dinâmico: "Exposição por Grupo Econômico" / "Exposição por Emissor".
-- Botão "Exportar Exposição .xlsx".
+`data_quality_status` para elegíveis: `sem_rating` se rating vazio/S/R, `sem_setor` se setor vazio, `sem_mapeamento` se sem grupo/emissor, senão `ok`. Para não elegíveis: sempre `nao_aplicavel`.
 
-### Validações
+## 2. Hook `useFundoDashboard` — dois universos
 
-Painel discreto (colapsável) "Validações" mostrando:
-- Σ exposições do modo = Σ posições filtradas (com diff em R$).
-- Nº emissores não mapeados, nº grupos não mapeados.
-- Nº ativos sem taxa (apenas informativo).
+Adicionar ao retorno:
 
-### Cores e padrões visuais
+- `total.*` (universo total): `byTipo`, `byIndexador`, `byDuration`, `byVencimento`, `topPosicoes`, `totalPL`, `totalAtivos`, `durationMedia`.
+- `credito.*` (só elegíveis): `byRating`, `bySetor`, `byGrupo`, `byEmissor`, `plCredito`, `pctCredito`, `qualidadeMedia` (rating ponderado).
+- `qualidade.*`: contadores e valores por `data_quality_status` + `elegivel/nao_elegivel`, mais linhas do diagnóstico.
+- `rowsClassified`: cada `DashboardRow` enriquecida com a classificação (para tabela Top Posições e filtros).
 
-Reaproveitar tokens `status-success/warning/danger/info` do `index.css` (memória de design). Sem hex hardcoded fora dos tokens já em uso na página.
+Categorias de fallback nos gráficos de crédito: `"Sem rating"`, `"Sem setor"`, `"Grupo não mapeado"` — usadas apenas quando o ativo é elegível e o campo falta. Ativos não elegíveis **não entram** nesses três gráficos.
 
-### Critérios de aceite cobertos
+`byTipo` e `byIndexador` continuam somando todos os ativos.
 
-Itens 1–18 da spec atendidos via componentização única e dados derivados em tempo real do `posicoes` filtrado por `val_date`.
+## 3. Novo layout de `FundoDashboard.tsx`
 
----
+Estrutura estilo lâmina (parecido com FIDC Monitor):
 
-**Confirma que sigo essa abordagem?** Se sim, implemento os 3 arquivos novos + 1 edição em `PosicoesPage.tsx` direto.
+```text
+[ Header do fundo ]
+  Nome · Data ref · Fonte BASE LOTE 45
+  PL · #Ativos · Duration · Taxa média pond. · Maior posição · Rating médio (crédito)
+
+[ Cards principais (8) ]
+  PL total | #Ativos | Duration | Taxa média
+  Maior concentração | Exposição crédito privado (R$) | % PL em crédito | Análises vencidas
+
+[ Filtros globais ]
+  Visão: Total / Crédito / Não aplicável
+  Tipo · Indexador · Rating · Setor · Status análise · Elegível (Todos/Sim/Não)
+
+[ Seção A — Composição Total da Carteira ]
+  Subtítulo: "Base: todos os ativos da posição importada."
+  - Distribuição por Tipo de Ativo (pie)
+  - Distribuição por Indexador (pie)
+  - Distribuição por Duration (bar)
+  - Top 10 Posições (bar horizontal)
+
+[ Seção B — Análise de Crédito ]
+  Subtítulo: "Base: apenas ativos elegíveis para análise de emissor..."
+  - Distribuição por Rating (bar) — só elegíveis
+  - Distribuição por Setor Top 10 (bar) — só elegíveis
+  - Top 10 Grupos Econômicos (bar)
+  - Top 10 Emissores (bar)
+  - Status das análises (donut) + Análises vencidas por exposição (bar)
+  Empty state: "Este fundo não possui ativos elegíveis para análise de crédito/emissor nesta data."
+
+[ Seção C — Qualidade dos Dados ]
+  Cards: % elegível · % não aplicável · % crédito c/ rating · c/ setor · c/ grupo · s/ mapeamento
+  Tabela "Diagnóstico de Cobertura": Categoria | Valor R$ | % PL | Observação
+    Linhas: Elegível crédito · Não aplicável · Elegível s/ rating · s/ setor · s/ grupo · Mapeado OK
+
+[ Tabela Top Posições do Fundo ]
+  Ativo · Ticker · Tipo · Emissor · Grupo · Valor · %PL · Rating · Setor
+  · Status análise · Elegível crédito? (Sim/Não) · Observação
+  Para não elegíveis: Elegível=Não, Observação="Não aplicável para análise de crédito"
+  Para elegíveis com faltas: badges "Sem rating"/"Sem setor"/"Grupo não mapeado"
+```
+
+Cada gráfico ganha subtítulo com a base de cálculo. Badges suaves; tooltips explicando universo. Sem `N/D` em rating/setor/grupo.
+
+## 4. Filtros
+
+Filtros locais controlam cards, gráficos e tabela. `Visão` alterna qual universo entra nas tabelas/Top Posições (gráficos das seções A/B mantêm seus universos fixos por definição).
+
+## 5. Fora de escopo
+
+- Sem mudanças em `get_posicoes_dashboard_fundo`, importadores, sidebar, FIDC Monitor.
+- Sem alterar `useResolvedRating`/`resolveRatingsBatch` — usar rating já vindo da RPC. Se quiser, adicionamos `resolveRatingsBatch` para emissores elegíveis em fase 2.
+- Sem persistência nova; toda classificação é derivada em runtime.
+
+## Critérios de aceite
+
+Todos os 13 itens da especificação (separação total/crédito, Termo/LFT/Compromissada/DAP/Fundos BR fora dos gráficos de rating/setor/grupo, seção Qualidade, tabela Top Posições com coluna Elegível, empty states, visual de lâmina).
+
+## Arquivos afetados
+
+- `src/lib/posicoes/credit-eligibility.ts` (novo)
+- `src/hooks/useFundoDashboard.ts` (expandido)
+- `src/components/posicoes/FundoDashboard.tsx` (reescrito por seções)
+- possivelmente `src/components/posicoes/FundoDashboardFilters.tsx` e `TopPosicoesTable.tsx` (extração para manter arquivos focados)
