@@ -74,10 +74,14 @@ export interface TopPosicao {
   nome: string;
   tipo: string;
   emissor: string;
+  cnpj_emissor: string | null;
   grupo: string;
   financeiro: number;
   pctPL: number;
   rating: string;
+  ratingSource: RatingSource;
+  ratingAgencia: string | null;
+  ratingDate: string | null;
   setor: string;
   eligible: boolean;
   observacao: string;
