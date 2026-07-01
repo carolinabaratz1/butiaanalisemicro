@@ -330,32 +330,47 @@ export default function ConfiguracoesPage() {
                         {user.status}
                       </Badge>
                     </TableCell>
-                    {permissions.canManageUsers && (
+                    {(permissions.canManageUsers || canResetMfa) && (
                       <TableCell className="text-right space-x-1">
                         {!isCurrentUser && (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                              title="Resetar senha"
-                              onClick={() => setResetDialog({ userId: user.id, userName: user.nome })}
-                            >
-                              <KeyRound className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
-                              onClick={() => setConfirmAction({
-                                userId: user.id,
-                                userName: user.nome,
-                                action: isActive ? 'deactivate' : 'reactivate',
-                              })}
-                            >
-                              {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                              {isActive ? 'Desativar' : 'Reativar'}
-                            </Button>
+                            {permissions.canManageUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                title="Resetar senha"
+                                onClick={() => setResetDialog({ userId: user.id, userName: user.nome })}
+                              >
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {canResetMfa && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                title="Resetar autenticador (MFA)"
+                                onClick={() => setMfaDialog({ userId: user.id, userName: user.nome })}
+                              >
+                                <Smartphone className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {permissions.canManageUsers && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={`h-7 text-xs gap-1 ${isActive ? 'text-red-400 hover:text-red-300' : 'text-green-400 hover:text-green-300'}`}
+                                onClick={() => setConfirmAction({
+                                  userId: user.id,
+                                  userName: user.nome,
+                                  action: isActive ? 'deactivate' : 'reactivate',
+                                })}
+                              >
+                                {isActive ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
+                                {isActive ? 'Desativar' : 'Reativar'}
+                              </Button>
+                            )}
                           </>
                         )}
                       </TableCell>
