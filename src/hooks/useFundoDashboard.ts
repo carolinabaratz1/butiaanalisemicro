@@ -250,19 +250,31 @@ export function useFundoDashboard(fundo: string | null) {
     const bySetor = groupSum(eligible, r => (r.setor?.trim() || 'Sem setor')).slice(0, 10);
     const byGrupo = groupSum(eligible, r => (r.grupo_economico?.trim() || 'Grupo não mapeado')).slice(0, 10);
 
-    // Emissores
+    // Emissores (agregados por CNPJ do emissor, rating resolvido por CNPJ)
     type Acc = {
-      codigo: string; nome: string; rating: string; setor: string; grupo: string;
+      codigo: string; nome: string; cnpj: string | null; rating: string;
+      ratingSource: RatingSource; ratingAgencia: string | null; ratingDate: string | null;
+      setor: string; grupo: string;
       financeiro: number; durWeighted: number; produtos: Set<string>;
     };
     const emiMap = new Map<string, Acc>();
     for (const r of eligible) {
-      const codigo = (r.codigo_emissor && r.codigo_emissor.trim()) || (r.nome_emissor ?? 'N/D');
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const codigo = cnpj
+        || (r.codigo_emissor && r.codigo_emissor.trim())
+        || (r.nome_emissor ?? 'N/D');
       const dur = Number(r.duration_du) || 0;
+      const nrLabel = !cnpj
+        ? 'CNPJ emissor não mapeado'
+        : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
       const acc = emiMap.get(codigo) ?? {
         codigo,
         nome: r.nome_emissor?.trim() || codigo,
-        rating: normalizeRating(r.rating) ?? 'Sem rating',
+        cnpj: cnpj || null,
+        rating: nrLabel,
+        ratingSource: r.resolved_rating.source,
+        ratingAgencia: r.resolved_rating.agencia,
+        ratingDate: r.resolved_rating.data_rating,
         setor: r.setor?.trim() || 'Sem setor',
         grupo: r.grupo_economico?.trim() || 'Grupo não mapeado',
         financeiro: 0,
@@ -304,25 +316,41 @@ export function useFundoDashboard(fundo: string | null) {
 
     // ---- Qualidade dos dados ----
     const plByStatus: Record<DataQualityStatus, number> = {
-      ok: 0, sem_rating: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
+      ok: 0, sem_rating: 0, cnpj_nao_mapeado: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
+    };
+    const countByStatus: Record<DataQualityStatus, number> = {
+      ok: 0, sem_rating: 0, cnpj_nao_mapeado: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
     };
     for (const r of classified) {
       plByStatus[r.data_quality_status] += r.financeiro;
+      countByStatus[r.data_quality_status] += 1;
     }
     const pctOf = (v: number) => (totalPL > 0 ? v / totalPL : 0);
     const pctOfCredito = (v: number) => (plCredito > 0 ? v / plCredito : 0);
 
-    const pctComRating = pctOfCredito(plByStatus.ok + plByStatus.sem_setor + plByStatus.sem_mapeamento);
+    const plComRating = plByStatus.ok + plByStatus.sem_setor + plByStatus.sem_mapeamento;
+    const pctComRating = pctOfCredito(plComRating);
     const pctComSetor  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_mapeamento);
     const pctComGrupo  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_setor);
 
+    // Emissores elegíveis sem rating por CNPJ / sem CNPJ mapeado
+    const emissoresSemRating = new Set<string>();
+    const emissoresSemCnpj = new Set<string>();
+    for (const r of eligible) {
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const nome = r.nome_emissor?.trim() || r.ticker?.trim() || 'sem-nome';
+      if (!cnpj) emissoresSemCnpj.add(nome);
+      else if (!normalizeRating(r.resolved_rating.rating)) emissoresSemRating.add(cnpj);
+    }
+
     const diagnostico: DiagnosticoRow[] = [
-      { key: 'elegivel',       categoria: 'Elegível para análise de crédito', valor: plCredito,             pct: pctOf(plCredito),             observacao: 'Ativos privados com emissor identificável' },
-      { key: 'nao_aplicavel',  categoria: 'Não aplicável para análise',       valor: plNaoAplicavel,        pct: pctOf(plNaoAplicavel),        observacao: 'LFT, Termo, DAP, Compromissada, Fundos, etc.' },
-      { key: 'sem_rating',     categoria: 'Elegível sem rating',              valor: plByStatus.sem_rating, pct: pctOf(plByStatus.sem_rating), observacao: 'Elegível para crédito mas sem rating informado' },
-      { key: 'sem_setor',      categoria: 'Elegível sem setor',               valor: plByStatus.sem_setor,  pct: pctOf(plByStatus.sem_setor),  observacao: 'Elegível para crédito mas sem setor mapeado' },
-      { key: 'sem_mapeamento', categoria: 'Elegível sem grupo/emissor',       valor: plByStatus.sem_mapeamento, pct: pctOf(plByStatus.sem_mapeamento), observacao: 'Ativo elegível sem grupo econômico mapeado' },
-      { key: 'ok',             categoria: 'Mapeado corretamente',             valor: plByStatus.ok,         pct: pctOf(plByStatus.ok),         observacao: 'Rating + setor + grupo/emissor presentes' },
+      { key: 'elegivel',        categoria: 'Elegível para análise de crédito', valor: plCredito,                       pct: pctOf(plCredito),                       observacao: 'Ativos privados com emissor identificável' },
+      { key: 'nao_aplicavel',   categoria: 'Não aplicável para análise',       valor: plNaoAplicavel,                  pct: pctOf(plNaoAplicavel),                  observacao: 'LFT, Termo, DAP, Compromissada, Fundos, etc.' },
+      { key: 'cnpj_nao_mapeado',categoria: 'CNPJ emissor não mapeado',         valor: plByStatus.cnpj_nao_mapeado,     pct: pctOf(plByStatus.cnpj_nao_mapeado),     observacao: 'Elegível sem CNPJ do emissor vinculado ao ISIN' },
+      { key: 'sem_rating',      categoria: 'Sem rating para o CNPJ',           valor: plByStatus.sem_rating,           pct: pctOf(plByStatus.sem_rating),           observacao: 'CNPJ mapeado mas sem rating cadastrado' },
+      { key: 'sem_setor',       categoria: 'Elegível sem setor',               valor: plByStatus.sem_setor,            pct: pctOf(plByStatus.sem_setor),            observacao: 'Elegível para crédito mas sem setor mapeado' },
+      { key: 'sem_mapeamento',  categoria: 'Elegível sem grupo/emissor',       valor: plByStatus.sem_mapeamento,       pct: pctOf(plByStatus.sem_mapeamento),       observacao: 'Ativo elegível sem grupo econômico mapeado' },
+      { key: 'ok',              categoria: 'Mapeado corretamente',             valor: plByStatus.ok,                   pct: pctOf(plByStatus.ok),                   observacao: 'Rating + setor + grupo/emissor presentes' },
     ];
 
     return {
