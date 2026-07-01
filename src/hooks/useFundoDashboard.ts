@@ -106,6 +106,9 @@ function durationBucket(d: number | null): string {
 }
 const BUCKET_ORDER = ['0–1a', '1–3a', '3–5a', '5–7a', '>7a', 'S/D'];
 
+const NR_META: ResolvedRatingMeta = { rating: null, source: 'nr', agencia: null, data_rating: null };
+const normCnpj = (c?: string | null) => (c ?? '').replace(/[^0-9]/g, '');
+
 export function useFundoDashboard(fundo: string | null) {
   const q = useQuery({
     queryKey: ['fundo-dashboard', fundo],
@@ -116,21 +119,43 @@ export function useFundoDashboard(fundo: string | null) {
         p_fundo: fundo,
       } as never);
       if (error) throw error;
-      return (data ?? []) as unknown as DashboardRow[];
+      const rows = (data ?? []) as unknown as DashboardRow[];
+
+      // Resolve ratings por CNPJ (não por ticker). O RPC get_resolved_rating
+      // faz o fallback CNPJ -> grupo econômico.
+      const uniqueCnpjs = Array.from(
+        new Set(rows.map(r => normCnpj(r.cnpj_emissor)).filter(Boolean)),
+      );
+      const resolvedMap = await resolveRatingsBatch(
+        uniqueCnpjs.map(cnpj => ({ cnpj, ticker: null })),
+      );
+      const byCnpj = new Map<string, ResolvedRatingMeta>();
+      for (const cnpj of uniqueCnpjs) {
+        byCnpj.set(cnpj, resolvedMap.get(ratingKey(cnpj, null)) ?? NR_META);
+      }
+      return { rows, ratingsByCnpj: byCnpj };
     },
   });
 
-  const rows = q.data ?? [];
+  const rows = q.data?.rows ?? [];
+  const ratingsByCnpj = q.data?.ratingsByCnpj ?? new Map<string, ResolvedRatingMeta>();
 
   const agg = useMemo(() => {
     const posVal = (r: DashboardRow) =>
       (Number(r.amount) || 0) * (Number(r.financial_price) || 0);
 
-    const classified: ClassifiedRow[] = rows.map(r => ({
-      ...r,
-      ...classifyCreditEligibility(r),
-      financeiro: posVal(r),
-    }));
+    const classified: ClassifiedRow[] = rows.map(r => {
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const resolved = cnpj ? (ratingsByCnpj.get(cnpj) ?? NR_META) : NR_META;
+      // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar
+      const rowForClassify = { ...r, rating: resolved.rating ?? null };
+      return {
+        ...r,
+        ...classifyCreditEligibility(rowForClassify),
+        financeiro: posVal(r),
+        resolved_rating: resolved,
+      };
+    });
 
     const totalPL = classified.reduce((s, r) => s + r.financeiro, 0);
     const totalAtivos = new Set(classified.map(r => r.ticker || r.isin).filter(Boolean)).size;
@@ -175,18 +200,26 @@ export function useFundoDashboard(fundo: string | null) {
       if (cur) {
         cur.financeiro += r.financeiro;
       } else {
+        const cnpj = normCnpj(r.cnpj_emissor);
+        const ratingLabel = !r.credit_analytics_eligible
+          ? '—'
+          : !cnpj
+            ? 'CNPJ emissor não mapeado'
+            : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
           key,
           ticker: r.ticker?.trim() || '—',
           nome,
           tipo: r.product_class?.trim() || '—',
           emissor: r.nome_emissor?.trim() || (r.credit_analytics_eligible ? 'Sem mapeamento' : '—'),
+          cnpj_emissor: cnpj || null,
           grupo: r.grupo_economico?.trim() || (r.credit_analytics_eligible ? 'Grupo não mapeado' : '—'),
           financeiro: r.financeiro,
           pctPL: 0,
-          rating: r.credit_analytics_eligible
-            ? (normalizeRating(r.rating) ?? 'Sem rating')
-            : '—',
+          rating: ratingLabel,
+          ratingSource: r.resolved_rating.source,
+          ratingAgencia: r.resolved_rating.agencia,
+          ratingDate: r.resolved_rating.data_rating,
           setor: r.credit_analytics_eligible
             ? (r.setor?.trim() || 'Sem setor')
             : '—',
@@ -205,9 +238,10 @@ export function useFundoDashboard(fundo: string | null) {
     // ---- Universo CRÉDITO ----
     const ratingMap = new Map<string, number>();
     for (const r of eligible) {
-      const nr = normalizeRating(r.rating);
+      const nr = normalizeRating(r.resolved_rating.rating);
       const k = nr ?? 'Sem rating';
       ratingMap.set(k, (ratingMap.get(k) ?? 0) + r.financeiro);
+
     }
     const byRating = [...RATING_ORDER, 'Sem rating']
       .map(name => ({ name, value: ratingMap.get(name) ?? 0 }))
