@@ -120,7 +120,9 @@ export function classifyCreditEligibility(row: ClassifiableAsset): CreditClassif
 }
 
 function pickQualityStatus(row: ClassifiableAsset): DataQualityStatus {
+  const cnpj = (row.cnpj_emissor ?? '').replace(/[^0-9]/g, '');
   const rating = row.rating?.trim();
+  if (!cnpj) return 'cnpj_nao_mapeado';
   if (!rating || rating.toUpperCase() === 'S/R' || rating.toUpperCase() === 'N/R') {
     return 'sem_rating';
   }
@@ -131,7 +133,8 @@ function pickQualityStatus(row: ClassifiableAsset): DataQualityStatus {
 
 export const CREDIT_ELIGIBILITY_LABELS: Record<DataQualityStatus, string> = {
   ok: 'Mapeado corretamente',
-  sem_rating: 'Sem rating',
+  sem_rating: 'Sem rating para o CNPJ',
+  cnpj_nao_mapeado: 'CNPJ emissor não mapeado',
   sem_setor: 'Sem setor',
   sem_mapeamento: 'Grupo não mapeado',
   nao_aplicavel: 'Não aplicável para análise de crédito',
