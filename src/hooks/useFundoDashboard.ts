@@ -238,12 +238,12 @@ export function useFundoDashboard(fundo: string | null) {
     // ---- Universo CRÉDITO ----
     const ratingMap = new Map<string, number>();
     for (const r of eligible) {
+      const cnpj = normCnpj(r.cnpj_emissor);
       const nr = normalizeRating(r.resolved_rating.rating);
-      const k = nr ?? 'Sem rating';
+      const k = nr ?? (cnpj ? 'Sem rating para o CNPJ' : 'CNPJ não mapeado');
       ratingMap.set(k, (ratingMap.get(k) ?? 0) + r.financeiro);
-
     }
-    const byRating = [...RATING_ORDER, 'Sem rating']
+    const byRating = [...RATING_ORDER, 'Sem rating para o CNPJ', 'CNPJ não mapeado']
       .map(name => ({ name, value: ratingMap.get(name) ?? 0 }))
       .filter(d => d.value > 0);
 
