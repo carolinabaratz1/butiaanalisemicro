@@ -3,7 +3,8 @@
 
 export type DataQualityStatus =
   | 'ok'
-  | 'sem_rating'
+  | 'sem_rating'          // elegível, tem CNPJ, mas sem rating encontrado
+  | 'cnpj_nao_mapeado'    // elegível, mas sem CNPJ do emissor mapeado
   | 'sem_setor'
   | 'sem_mapeamento'
   | 'nao_aplicavel';
@@ -21,6 +22,7 @@ export interface ClassifiableAsset {
   grupo_economico?: string | null;
   nome_emissor?: string | null;
   codigo_emissor?: string | null;
+  cnpj_emissor?: string | null;
   ticker?: string | null;
   isin?: string | null;
 }
