@@ -344,13 +344,15 @@ export function FundoDashboard() {
               subtitle="Cobertura de rating, setor e grupo econômico no universo elegível a crédito."
               icon={<AlertCircle className="w-4 h-4 text-primary mt-0.5" />}
             />
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-3 mb-3">
               <Kpi label="% Elegível" value={fmtPct(data.qualidade.pctElegivel)} />
               <Kpi label="% Não Aplicável" value={fmtPct(data.qualidade.pctNaoAplicavel)} />
-              <Kpi label="% Crédito c/ Rating" value={fmtPct(data.qualidade.pctComRating)} />
+              <Kpi label="% Crédito c/ Rating (CNPJ)" value={fmtPct(data.qualidade.pctComRating)} hint="Cobertura de rating no universo de crédito, buscado pelo CNPJ do emissor." />
               <Kpi label="% Crédito c/ Setor" value={fmtPct(data.qualidade.pctComSetor)} />
               <Kpi label="% Crédito c/ Grupo" value={fmtPct(data.qualidade.pctComGrupo)} />
-              <Kpi label="% Sem Mapeamento" value={fmtPct(data.qualidade.pctSemMapeamento)} />
+              <Kpi label="% CNPJ não mapeado" value={fmtPct(data.qualidade.pctCnpjNaoMapeado)} hint="Ativos elegíveis sem CNPJ do emissor vinculado ao ISIN." />
+              <Kpi label="Emissores sem rating" value={data.qualidade.emissoresSemRating.toLocaleString('pt-BR')} hint="CNPJs elegíveis sem rating cadastrado (via cadastro de emissores/grupo)." />
+              <Kpi label="Ativos s/ CNPJ mapeado" value={data.qualidade.ativosCnpjNaoMapeado.toLocaleString('pt-BR')} />
             </div>
             <Card className="bg-surface-1 border-border">
               <CardHeader className="pb-2">
