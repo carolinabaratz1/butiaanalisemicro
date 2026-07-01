@@ -48,6 +48,12 @@ export default function ConfiguracoesPage() {
   const [resetDialog, setResetDialog] = useState<{ userId: string; userName: string } | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [mfaDialog, setMfaDialog] = useState<{ userId: string; userName: string } | null>(null);
+  const [mfaNote, setMfaNote] = useState('');
+  const [mfaResetting, setMfaResetting] = useState(false);
+
+  const canResetMfa =
+    currentUser?.funcao === 'Gestor' || currentUser?.funcao === 'Risco e Compliance';
 
   const fetchUsers = async () => {
     const { data } = await supabase.from('profiles').select('*').order('nome');
