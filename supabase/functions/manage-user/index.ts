@@ -36,22 +36,34 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Check caller is Gestor
+    // Check caller role
     const { data: callerRole } = await adminClient
       .from("user_roles")
       .select("role")
       .eq("user_id", caller.id)
       .single();
 
-    if (!callerRole || callerRole.role !== "Gestor") {
+    const body = await req.json();
+    const { action, userId, newRole, newStatus, newPassword, note } = body;
+
+    // Reset MFA: permitido para Gestor e Risco e Compliance
+    const isGestor = callerRole?.role === "Gestor";
+    const isRisco = callerRole?.role === "Risco e Compliance";
+    const canResetMfa = isGestor || isRisco;
+
+    if (action !== "reset-mfa" && !isGestor) {
       return new Response(JSON.stringify({ error: "Apenas Gestores podem gerenciar usuários" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const body = await req.json();
-    const { action, userId, newRole, newStatus, newPassword } = body;
+    if (action === "reset-mfa" && !canResetMfa) {
+      return new Response(JSON.stringify({ error: "Apenas Gestor ou Risco e Compliance podem resetar o MFA" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (!action || !userId) {
       return new Response(JSON.stringify({ error: "action e userId são obrigatórios" }), {
