@@ -2455,6 +2455,7 @@ export type Database = {
         Args: { p_fundo: string }
         Returns: {
           amount: number
+          cnpj_emissor: string
           codigo_emissor: string
           duration_du: number
           financial_price: number

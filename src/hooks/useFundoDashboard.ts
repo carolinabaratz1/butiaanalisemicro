@@ -6,6 +6,8 @@ import {
   type CreditClassification,
   type DataQualityStatus,
 } from '@/lib/posicoes/credit-eligibility';
+import { resolveRatingsBatch, ratingKey } from '@/lib/ratings/resolveRatingsBatch';
+import type { RatingSource } from '@/lib/ratings/useResolvedRating';
 
 export interface DashboardRow {
   ticker: string | null;
@@ -23,10 +25,19 @@ export interface DashboardRow {
   grupo_economico: string | null;
   nome_emissor: string | null;
   codigo_emissor: string | null;
+  cnpj_emissor: string | null;
+}
+
+export interface ResolvedRatingMeta {
+  rating: string | null;
+  source: RatingSource;
+  agencia: string | null;
+  data_rating: string | null;
 }
 
 export interface ClassifiedRow extends DashboardRow, CreditClassification {
   financeiro: number;
+  resolved_rating: ResolvedRatingMeta;
 }
 
 const RATING_ORDER = [
@@ -63,10 +74,14 @@ export interface TopPosicao {
   nome: string;
   tipo: string;
   emissor: string;
+  cnpj_emissor: string | null;
   grupo: string;
   financeiro: number;
   pctPL: number;
   rating: string;
+  ratingSource: RatingSource;
+  ratingAgencia: string | null;
+  ratingDate: string | null;
   setor: string;
   eligible: boolean;
   observacao: string;
@@ -91,6 +106,9 @@ function durationBucket(d: number | null): string {
 }
 const BUCKET_ORDER = ['0–1a', '1–3a', '3–5a', '5–7a', '>7a', 'S/D'];
 
+const NR_META: ResolvedRatingMeta = { rating: null, source: 'nr', agencia: null, data_rating: null };
+const normCnpj = (c?: string | null) => (c ?? '').replace(/[^0-9]/g, '');
+
 export function useFundoDashboard(fundo: string | null) {
   const q = useQuery({
     queryKey: ['fundo-dashboard', fundo],
@@ -101,21 +119,43 @@ export function useFundoDashboard(fundo: string | null) {
         p_fundo: fundo,
       } as never);
       if (error) throw error;
-      return (data ?? []) as unknown as DashboardRow[];
+      const rows = (data ?? []) as unknown as DashboardRow[];
+
+      // Resolve ratings por CNPJ (não por ticker). O RPC get_resolved_rating
+      // faz o fallback CNPJ -> grupo econômico.
+      const uniqueCnpjs = Array.from(
+        new Set(rows.map(r => normCnpj(r.cnpj_emissor)).filter(Boolean)),
+      );
+      const resolvedMap = await resolveRatingsBatch(
+        uniqueCnpjs.map(cnpj => ({ cnpj, ticker: null })),
+      );
+      const byCnpj = new Map<string, ResolvedRatingMeta>();
+      for (const cnpj of uniqueCnpjs) {
+        byCnpj.set(cnpj, resolvedMap.get(ratingKey(cnpj, null)) ?? NR_META);
+      }
+      return { rows, ratingsByCnpj: byCnpj };
     },
   });
 
-  const rows = q.data ?? [];
+  const rows = q.data?.rows ?? [];
+  const ratingsByCnpj = q.data?.ratingsByCnpj ?? new Map<string, ResolvedRatingMeta>();
 
   const agg = useMemo(() => {
     const posVal = (r: DashboardRow) =>
       (Number(r.amount) || 0) * (Number(r.financial_price) || 0);
 
-    const classified: ClassifiedRow[] = rows.map(r => ({
-      ...r,
-      ...classifyCreditEligibility(r),
-      financeiro: posVal(r),
-    }));
+    const classified: ClassifiedRow[] = rows.map(r => {
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const resolved = cnpj ? (ratingsByCnpj.get(cnpj) ?? NR_META) : NR_META;
+      // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar
+      const rowForClassify = { ...r, rating: resolved.rating ?? null };
+      return {
+        ...r,
+        ...classifyCreditEligibility(rowForClassify),
+        financeiro: posVal(r),
+        resolved_rating: resolved,
+      };
+    });
 
     const totalPL = classified.reduce((s, r) => s + r.financeiro, 0);
     const totalAtivos = new Set(classified.map(r => r.ticker || r.isin).filter(Boolean)).size;
@@ -160,18 +200,26 @@ export function useFundoDashboard(fundo: string | null) {
       if (cur) {
         cur.financeiro += r.financeiro;
       } else {
+        const cnpj = normCnpj(r.cnpj_emissor);
+        const ratingLabel = !r.credit_analytics_eligible
+          ? '—'
+          : !cnpj
+            ? 'CNPJ emissor não mapeado'
+            : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
           key,
           ticker: r.ticker?.trim() || '—',
           nome,
           tipo: r.product_class?.trim() || '—',
           emissor: r.nome_emissor?.trim() || (r.credit_analytics_eligible ? 'Sem mapeamento' : '—'),
+          cnpj_emissor: cnpj || null,
           grupo: r.grupo_economico?.trim() || (r.credit_analytics_eligible ? 'Grupo não mapeado' : '—'),
           financeiro: r.financeiro,
           pctPL: 0,
-          rating: r.credit_analytics_eligible
-            ? (normalizeRating(r.rating) ?? 'Sem rating')
-            : '—',
+          rating: ratingLabel,
+          ratingSource: r.resolved_rating.source,
+          ratingAgencia: r.resolved_rating.agencia,
+          ratingDate: r.resolved_rating.data_rating,
           setor: r.credit_analytics_eligible
             ? (r.setor?.trim() || 'Sem setor')
             : '—',
@@ -190,30 +238,43 @@ export function useFundoDashboard(fundo: string | null) {
     // ---- Universo CRÉDITO ----
     const ratingMap = new Map<string, number>();
     for (const r of eligible) {
-      const nr = normalizeRating(r.rating);
-      const k = nr ?? 'Sem rating';
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const nr = normalizeRating(r.resolved_rating.rating);
+      const k = nr ?? (cnpj ? 'Sem rating para o CNPJ' : 'CNPJ não mapeado');
       ratingMap.set(k, (ratingMap.get(k) ?? 0) + r.financeiro);
     }
-    const byRating = [...RATING_ORDER, 'Sem rating']
+    const byRating = [...RATING_ORDER, 'Sem rating para o CNPJ', 'CNPJ não mapeado']
       .map(name => ({ name, value: ratingMap.get(name) ?? 0 }))
       .filter(d => d.value > 0);
 
     const bySetor = groupSum(eligible, r => (r.setor?.trim() || 'Sem setor')).slice(0, 10);
     const byGrupo = groupSum(eligible, r => (r.grupo_economico?.trim() || 'Grupo não mapeado')).slice(0, 10);
 
-    // Emissores
+    // Emissores (agregados por CNPJ do emissor, rating resolvido por CNPJ)
     type Acc = {
-      codigo: string; nome: string; rating: string; setor: string; grupo: string;
+      codigo: string; nome: string; cnpj: string | null; rating: string;
+      ratingSource: RatingSource; ratingAgencia: string | null; ratingDate: string | null;
+      setor: string; grupo: string;
       financeiro: number; durWeighted: number; produtos: Set<string>;
     };
     const emiMap = new Map<string, Acc>();
     for (const r of eligible) {
-      const codigo = (r.codigo_emissor && r.codigo_emissor.trim()) || (r.nome_emissor ?? 'N/D');
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const codigo = cnpj
+        || (r.codigo_emissor && r.codigo_emissor.trim())
+        || (r.nome_emissor ?? 'N/D');
       const dur = Number(r.duration_du) || 0;
+      const nrLabel = !cnpj
+        ? 'CNPJ emissor não mapeado'
+        : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
       const acc = emiMap.get(codigo) ?? {
         codigo,
         nome: r.nome_emissor?.trim() || codigo,
-        rating: normalizeRating(r.rating) ?? 'Sem rating',
+        cnpj: cnpj || null,
+        rating: nrLabel,
+        ratingSource: r.resolved_rating.source,
+        ratingAgencia: r.resolved_rating.agencia,
+        ratingDate: r.resolved_rating.data_rating,
         setor: r.setor?.trim() || 'Sem setor',
         grupo: r.grupo_economico?.trim() || 'Grupo não mapeado',
         financeiro: 0,
@@ -255,25 +316,41 @@ export function useFundoDashboard(fundo: string | null) {
 
     // ---- Qualidade dos dados ----
     const plByStatus: Record<DataQualityStatus, number> = {
-      ok: 0, sem_rating: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
+      ok: 0, sem_rating: 0, cnpj_nao_mapeado: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
+    };
+    const countByStatus: Record<DataQualityStatus, number> = {
+      ok: 0, sem_rating: 0, cnpj_nao_mapeado: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
     };
     for (const r of classified) {
       plByStatus[r.data_quality_status] += r.financeiro;
+      countByStatus[r.data_quality_status] += 1;
     }
     const pctOf = (v: number) => (totalPL > 0 ? v / totalPL : 0);
     const pctOfCredito = (v: number) => (plCredito > 0 ? v / plCredito : 0);
 
-    const pctComRating = pctOfCredito(plByStatus.ok + plByStatus.sem_setor + plByStatus.sem_mapeamento);
+    const plComRating = plByStatus.ok + plByStatus.sem_setor + plByStatus.sem_mapeamento;
+    const pctComRating = pctOfCredito(plComRating);
     const pctComSetor  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_mapeamento);
     const pctComGrupo  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_setor);
 
+    // Emissores elegíveis sem rating por CNPJ / sem CNPJ mapeado
+    const emissoresSemRating = new Set<string>();
+    const emissoresSemCnpj = new Set<string>();
+    for (const r of eligible) {
+      const cnpj = normCnpj(r.cnpj_emissor);
+      const nome = r.nome_emissor?.trim() || r.ticker?.trim() || 'sem-nome';
+      if (!cnpj) emissoresSemCnpj.add(nome);
+      else if (!normalizeRating(r.resolved_rating.rating)) emissoresSemRating.add(cnpj);
+    }
+
     const diagnostico: DiagnosticoRow[] = [
-      { key: 'elegivel',       categoria: 'Elegível para análise de crédito', valor: plCredito,             pct: pctOf(plCredito),             observacao: 'Ativos privados com emissor identificável' },
-      { key: 'nao_aplicavel',  categoria: 'Não aplicável para análise',       valor: plNaoAplicavel,        pct: pctOf(plNaoAplicavel),        observacao: 'LFT, Termo, DAP, Compromissada, Fundos, etc.' },
-      { key: 'sem_rating',     categoria: 'Elegível sem rating',              valor: plByStatus.sem_rating, pct: pctOf(plByStatus.sem_rating), observacao: 'Elegível para crédito mas sem rating informado' },
-      { key: 'sem_setor',      categoria: 'Elegível sem setor',               valor: plByStatus.sem_setor,  pct: pctOf(plByStatus.sem_setor),  observacao: 'Elegível para crédito mas sem setor mapeado' },
-      { key: 'sem_mapeamento', categoria: 'Elegível sem grupo/emissor',       valor: plByStatus.sem_mapeamento, pct: pctOf(plByStatus.sem_mapeamento), observacao: 'Ativo elegível sem grupo econômico mapeado' },
-      { key: 'ok',             categoria: 'Mapeado corretamente',             valor: plByStatus.ok,         pct: pctOf(plByStatus.ok),         observacao: 'Rating + setor + grupo/emissor presentes' },
+      { key: 'elegivel',        categoria: 'Elegível para análise de crédito', valor: plCredito,                       pct: pctOf(plCredito),                       observacao: 'Ativos privados com emissor identificável' },
+      { key: 'nao_aplicavel',   categoria: 'Não aplicável para análise',       valor: plNaoAplicavel,                  pct: pctOf(plNaoAplicavel),                  observacao: 'LFT, Termo, DAP, Compromissada, Fundos, etc.' },
+      { key: 'cnpj_nao_mapeado',categoria: 'CNPJ emissor não mapeado',         valor: plByStatus.cnpj_nao_mapeado,     pct: pctOf(plByStatus.cnpj_nao_mapeado),     observacao: 'Elegível sem CNPJ do emissor vinculado ao ISIN' },
+      { key: 'sem_rating',      categoria: 'Sem rating para o CNPJ',           valor: plByStatus.sem_rating,           pct: pctOf(plByStatus.sem_rating),           observacao: 'CNPJ mapeado mas sem rating cadastrado' },
+      { key: 'sem_setor',       categoria: 'Elegível sem setor',               valor: plByStatus.sem_setor,            pct: pctOf(plByStatus.sem_setor),            observacao: 'Elegível para crédito mas sem setor mapeado' },
+      { key: 'sem_mapeamento',  categoria: 'Elegível sem grupo/emissor',       valor: plByStatus.sem_mapeamento,       pct: pctOf(plByStatus.sem_mapeamento),       observacao: 'Ativo elegível sem grupo econômico mapeado' },
+      { key: 'ok',              categoria: 'Mapeado corretamente',             valor: plByStatus.ok,                   pct: pctOf(plByStatus.ok),                   observacao: 'Rating + setor + grupo/emissor presentes' },
     ];
 
     return {
@@ -302,11 +379,14 @@ export function useFundoDashboard(fundo: string | null) {
         pctComSetor,
         pctComGrupo,
         pctSemMapeamento: pctOfCredito(plByStatus.sem_mapeamento),
+        pctCnpjNaoMapeado: pctOfCredito(plByStatus.cnpj_nao_mapeado),
+        emissoresSemRating: emissoresSemRating.size,
+        ativosCnpjNaoMapeado: countByStatus.cnpj_nao_mapeado,
         diagnostico,
       },
       rowsClassified: classified,
     };
-  }, [rows]);
+  }, [rows, ratingsByCnpj]);
 
   return {
     data: agg,

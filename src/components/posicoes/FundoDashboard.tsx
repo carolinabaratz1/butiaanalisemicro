@@ -344,13 +344,15 @@ export function FundoDashboard() {
               subtitle="Cobertura de rating, setor e grupo econômico no universo elegível a crédito."
               icon={<AlertCircle className="w-4 h-4 text-primary mt-0.5" />}
             />
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-4 gap-3 mb-3">
               <Kpi label="% Elegível" value={fmtPct(data.qualidade.pctElegivel)} />
               <Kpi label="% Não Aplicável" value={fmtPct(data.qualidade.pctNaoAplicavel)} />
-              <Kpi label="% Crédito c/ Rating" value={fmtPct(data.qualidade.pctComRating)} />
+              <Kpi label="% Crédito c/ Rating (CNPJ)" value={fmtPct(data.qualidade.pctComRating)} hint="Cobertura de rating no universo de crédito, buscado pelo CNPJ do emissor." />
               <Kpi label="% Crédito c/ Setor" value={fmtPct(data.qualidade.pctComSetor)} />
               <Kpi label="% Crédito c/ Grupo" value={fmtPct(data.qualidade.pctComGrupo)} />
-              <Kpi label="% Sem Mapeamento" value={fmtPct(data.qualidade.pctSemMapeamento)} />
+              <Kpi label="% CNPJ não mapeado" value={fmtPct(data.qualidade.pctCnpjNaoMapeado)} hint="Ativos elegíveis sem CNPJ do emissor vinculado ao ISIN." />
+              <Kpi label="Emissores sem rating" value={data.qualidade.emissoresSemRating.toLocaleString('pt-BR')} hint="CNPJs elegíveis sem rating cadastrado (via cadastro de emissores/grupo)." />
+              <Kpi label="Ativos s/ CNPJ mapeado" value={data.qualidade.ativosCnpjNaoMapeado.toLocaleString('pt-BR')} />
             </div>
             <Card className="bg-surface-1 border-border">
               <CardHeader className="pb-2">
@@ -423,9 +425,40 @@ export function FundoDashboard() {
                         <TableCell className="py-1.5 text-right tabular-nums">{fmtBRL(p.financeiro)}</TableCell>
                         <TableCell className="py-1.5 text-right tabular-nums">{fmtPct(p.pctPL)}</TableCell>
                         <TableCell className="py-1.5">
-                          {p.rating === 'Sem rating'
-                            ? <Badge variant="outline" className="text-[10px] font-normal border-amber-500/50 text-amber-600">Sem rating</Badge>
-                            : p.rating}
+                          {p.rating === '—' ? '—' : (
+                            <TooltipProvider><UiTooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  {p.rating === 'Sem rating para o CNPJ' || p.rating === 'CNPJ emissor não mapeado'
+                                    ? <Badge variant="outline" className="text-[10px] font-normal border-amber-500/50 text-amber-600">{p.rating}</Badge>
+                                    : (
+                                      <span className="inline-flex items-center gap-1">
+                                        {p.rating}
+                                        {p.ratingSource === 'grupo' && (
+                                          <Badge variant="outline" className="text-[9px] font-normal border-dashed border-muted-foreground/60 text-muted-foreground">grupo</Badge>
+                                        )}
+                                      </span>
+                                    )}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                {p.rating === 'Sem rating para o CNPJ' && p.cnpj_emissor && (
+                                  <>CNPJ {p.cnpj_emissor} mapeado, sem rating cadastrado.</>
+                                )}
+                                {p.rating === 'CNPJ emissor não mapeado' && (
+                                  <>Ativo elegível sem CNPJ do emissor vinculado ao ISIN.</>
+                                )}
+                                {p.rating !== 'Sem rating para o CNPJ' && p.rating !== 'CNPJ emissor não mapeado' && (
+                                  <div className="space-y-0.5">
+                                    <div>Rating do CNPJ do emissor.</div>
+                                    {p.ratingAgencia && <div>Agência: {p.ratingAgencia}</div>}
+                                    {p.ratingDate && <div>Data: {new Date(p.ratingDate).toLocaleDateString('pt-BR')}</div>}
+                                    <div className="text-muted-foreground">Fonte: {p.ratingSource === 'grupo' ? 'estimativa por grupo econômico' : p.ratingSource === 'ticker' ? 'ticker' : 'cadastro de emissores'}</div>
+                                  </div>
+                                )}
+                              </TooltipContent>
+                            </UiTooltip></TooltipProvider>
+                          )}
                         </TableCell>
                         <TableCell className="py-1.5">
                           {p.setor === 'Sem setor'

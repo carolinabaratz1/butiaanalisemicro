@@ -3,7 +3,8 @@
 
 export type DataQualityStatus =
   | 'ok'
-  | 'sem_rating'
+  | 'sem_rating'          // elegível, tem CNPJ, mas sem rating encontrado
+  | 'cnpj_nao_mapeado'    // elegível, mas sem CNPJ do emissor mapeado
   | 'sem_setor'
   | 'sem_mapeamento'
   | 'nao_aplicavel';
@@ -21,6 +22,7 @@ export interface ClassifiableAsset {
   grupo_economico?: string | null;
   nome_emissor?: string | null;
   codigo_emissor?: string | null;
+  cnpj_emissor?: string | null;
   ticker?: string | null;
   isin?: string | null;
 }
@@ -118,7 +120,9 @@ export function classifyCreditEligibility(row: ClassifiableAsset): CreditClassif
 }
 
 function pickQualityStatus(row: ClassifiableAsset): DataQualityStatus {
+  const cnpj = (row.cnpj_emissor ?? '').replace(/[^0-9]/g, '');
   const rating = row.rating?.trim();
+  if (!cnpj) return 'cnpj_nao_mapeado';
   if (!rating || rating.toUpperCase() === 'S/R' || rating.toUpperCase() === 'N/R') {
     return 'sem_rating';
   }
@@ -129,7 +133,8 @@ function pickQualityStatus(row: ClassifiableAsset): DataQualityStatus {
 
 export const CREDIT_ELIGIBILITY_LABELS: Record<DataQualityStatus, string> = {
   ok: 'Mapeado corretamente',
-  sem_rating: 'Sem rating',
+  sem_rating: 'Sem rating para o CNPJ',
+  cnpj_nao_mapeado: 'CNPJ emissor não mapeado',
   sem_setor: 'Sem setor',
   sem_mapeamento: 'Grupo não mapeado',
   nao_aplicavel: 'Não aplicável para análise de crédito',
