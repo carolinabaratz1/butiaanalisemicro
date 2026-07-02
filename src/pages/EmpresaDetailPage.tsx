@@ -51,8 +51,11 @@ function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) 
 export default function EmpresaDetailPage() {
   const { cnpj } = useParams<{ cnpj: string }>();
   const decodedCnpj = decodeURIComponent(cnpj || '');
+  const cnpjNorm = decodedCnpj.replace(/[^0-9]/g, '');
   const { currentUser } = useAuth();
   const { analises, criarAnalise, iniciarAnalise, concluirAnalise, getAnalisesByIsin } = useAnaliseEmissao();
+  const { data: emissoresGestao = [] } = useEmissoresGestao();
+  const gestaoRow = useMemo(() => emissoresGestao.find(r => r.cnpj_norm === cnpjNorm) ?? null, [emissoresGestao, cnpjNorm]);
 
   const queryClient = useQueryClient();
   const [solicitarModal, setSolicitarModal] = useState<string | null>(null);
