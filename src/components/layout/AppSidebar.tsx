@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, FileSearch, Kanban, Settings, Briefcase,
+  LayoutDashboard, Building2, Kanban, Settings, Briefcase,
   CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,8 +11,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 const mainItems = [
   { label: 'Dashboard',         icon: LayoutDashboard, path: '/' },
   { label: 'Posições',          icon: Briefcase,        path: '/posicoes' },
-  { label: 'Empresas',          icon: Building2,        path: '/empresas' },
-  { label: 'Análises',          icon: FileSearch,       path: '/analises' },
+  { label: 'Emissores',         icon: Building2,        path: '/emissores' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },

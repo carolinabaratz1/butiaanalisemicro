@@ -1,110 +1,93 @@
 
-# Plano — Dashboard do Fundo como Lâmina Consolidada
+# Plano: Consolidação de "Empresas" e "Análises" em "Emissores"
 
-Refatorar `src/components/posicoes/FundoDashboard.tsx` e `src/hooks/useFundoDashboard.ts` para separar **Universo Total** de **Universo de Crédito**, eliminar o `N/D` poluído em rating/setor/grupo para ativos não elegíveis, e adicionar seção de Qualidade dos Dados. Sem tocar em importação, sidebar, FIDC Monitor ou dados existentes.
+## Objetivo
+Unificar as seções **Empresas** e **Análises** em uma única seção chamada **Emissores**, preservando 100% dos dados existentes (empresas, análises, ratings, posições). A mudança é de navegação, visualização e relacionamento — **não** há migração destrutiva no banco.
 
-## 1. Classificador de elegibilidade (novo)
+## Escopo
 
-Criar `src/lib/posicoes/credit-eligibility.ts`:
+**Alterado:** menu lateral, rotas, tela de listagem, tela de detalhe do emissor, componente de nova análise.
 
-```ts
-export type DataQualityStatus =
-  | 'ok' | 'sem_rating' | 'sem_setor' | 'sem_mapeamento' | 'nao_aplicavel';
+**Não alterado:** BASE LOTE 45 / importação de posições, FIDC Monitor, Trade Monitor, Posições, tabelas `empresas`, `analises`, `emissoes`, `issuer_ratings`, `posicoes`.
 
-export interface CreditClassification {
-  credit_analytics_eligible: boolean;
-  non_credit_reason: string | null;
-  data_quality_status: DataQualityStatus;
-}
+## Mudanças
 
-export function classifyCreditEligibility(row): CreditClassification
-```
+### 1. Menu lateral (`AppSidebar.tsx`)
+- Remover itens "Empresas" e "Análises".
+- Adicionar item único **"Emissores"** (`/emissores`, ícone `Building2`).
+- Ajustar `hasAccess` em `AuthContext` para mapear a permissão antiga (`/empresas` + `/analises`) para `/emissores`.
 
-Regra baseada em `product_class` (normalizado, upper, sem acento):
+### 2. Rotas (`App.tsx`)
+- Nova rota `/emissores` → `EmissoresPage` (lista).
+- Nova rota `/emissores/:cnpj` → `EmissorDetailPage` (detalhe com abas).
+- **Redirects** (sem quebra de links):
+  - `/empresas` → `/emissores`
+  - `/empresas/:cnpj` → `/emissores/:cnpj`
+  - `/analises` → `/emissores`
+  - `/analises/:id` → `/emissores/:cnpj` (resolvendo o CNPJ via análise)
 
-- **Elegíveis**: Debênture, CRI, CRA, Letra Financeira/LF, CDB, DPGE, FIDC, Nota Comercial/NC/Commercial Paper, LCA/LCI (privados com emissor identificável).
-- **Não elegíveis** (`non_credit_reason = "Não aplicável para análise de crédito"`): LFT, LTN, NTN-B/F, Tesouro, Título Público, Termo, DAP, DI Future, Futuro, Compromissada, Caixa, Fundo/Cotas de Fundo (exceto FIDC), Derivativos, Opções, Swap.
-- Regra de segurança: se `product_class` desconhecido mas há `cnpj_emissor` + `rating` ou `setor` → elegível. Caso contrário não elegível com razão "Tipo de ativo não classificado".
+### 3. Tela `EmissoresPage` (listagem)
+Reaproveita a estrutura de `EmpresasPage.tsx` e enriquece com dados cruzados:
 
-`data_quality_status` para elegíveis: `sem_rating` se rating vazio/S/R, `sem_setor` se setor vazio, `sem_mapeamento` se sem grupo/emissor, senão `ok`. Para não elegíveis: sempre `nao_aplicavel`.
+**Cards de resumo:**
+- Total de emissores
+- Emissores com posição
+- Emissores com análise vencida
+- Emissores sem análise
+- Exposição total (R$)
+- Emissores sem CNPJ / não mapeados
 
-## 2. Hook `useFundoDashboard` — dois universos
+**Filtros no topo:**
+Busca (nome / CNPJ / ticker / grupo), Tipo, Setor, Grupo Econômico, Rating, Status da Análise, Analista, "Com posição" (Todos/Sim/Não), "Análise vencida" (Todos/Sim/Não).
 
-Adicionar ao retorno:
+**Tabela:**
+Emissor · Código · CNPJ · Rating · Tipo · Grupo · Setor · **Status da Análise** · Última Análise · Analista · Ativos em Carteira · Exposição Atual · Ações.
 
-- `total.*` (universo total): `byTipo`, `byIndexador`, `byDuration`, `byVencimento`, `topPosicoes`, `totalPL`, `totalAtivos`, `durationMedia`.
-- `credito.*` (só elegíveis): `byRating`, `bySetor`, `byGrupo`, `byEmissor`, `plCredito`, `pctCredito`, `qualidadeMedia` (rating ponderado).
-- `qualidade.*`: contadores e valores por `data_quality_status` + `elegivel/nao_elegivel`, mais linhas do diagnóstico.
-- `rowsClassified`: cada `DashboardRow` enriquecida com a classificação (para tabela Top Posições e filtros).
+**Chave:** CNPJ normalizado (`regexp_replace [^0-9]`).
+**Rating:** via `resolveRatingsBatch` (hierarquia Ticker > CNPJ > Grupo) já existente.
+**Status da Análise:** via `getDisplayStatus` (util já existente) sobre a análise mais recente do CNPJ; se não houver → "Sem análise"; se vencida → "Vencido".
+**Exposição/ativos em carteira:** join com `posicoes` na última `val_date` por CNPJ do emissor.
 
-Categorias de fallback nos gráficos de crédito: `"Sem rating"`, `"Sem setor"`, `"Grupo não mapeado"` — usadas apenas quando o ativo é elegível e o campo falta. Ativos não elegíveis **não entram** nesses três gráficos.
+**Botão "+ Novo Emissor":** reaproveita o formulário atual de nova empresa em dialog.
 
-`byTipo` e `byIndexador` continuam somando todos os ativos.
+### 4. Página `EmissorDetailPage` (`/emissores/:cnpj`)
+Reaproveita `EmpresaDetailPage` como base e reorganiza em abas via `<Tabs>`.
 
-## 3. Novo layout de `FundoDashboard.tsx`
+**Header:** nome · CNPJ · código · grupo · setor · `<RatingBadge/>` · status análise · última análise · exposição · botões *Editar Emissor*, *Novo Ativo*, *Nova Análise*.
 
-Estrutura estilo lâmina (parecido com FIDC Monitor):
+**Abas:**
+1. **Visão Geral** — cards (exposição total, nº ativos, rating, status, última análise, grupo, setor, maior fundo exposto) + tabela de exposição por fundo.
+2. **Ativos em Carteira** — posições atuais do CNPJ vindas de `posicoes` (última val_date). Empty state quando não houver.
+3. **Ativos Cadastrados** — todos os `emissoes`/`trade_ativos` cadastrados do CNPJ. Botão *+ Novo Ativo* abre dialog com os campos da spec.
+4. **Análises** — migração 1:1 da funcionalidade de `AnalisesPage.tsx` filtrada pelo CNPJ. Preserva versionamento (v1/v2/v3), botão *+ Nova Análise* abre o formulário existente com CNPJ / grupo pré-preenchidos.
+5. **Histórico de Rating** — `IssuerRatingHistoryDialog` já existente vira uma aba (agência, rating, data, validade, fonte, observações). Rating vigente = do CNPJ.
 
-```text
-[ Header do fundo ]
-  Nome · Data ref · Fonte BASE LOTE 45
-  PL · #Ativos · Duration · Taxa média pond. · Maior posição · Rating médio (crédito)
+### 5. Preservação de dados
+- Nenhum `DROP`, `DELETE` ou renomeação de tabela.
+- Nenhuma migration necessária nesta fase — todos os dados já existem em `empresas`, `analises`, `emissoes`, `trade_ativos`, `issuer_ratings`, `posicoes`.
+- Vínculo consistente via **CNPJ normalizado** (padrão já usado no projeto).
 
-[ Cards principais (8) ]
-  PL total | #Ativos | Duration | Taxa média
-  Maior concentração | Exposição crédito privado (R$) | % PL em crédito | Análises vencidas
+## Detalhes técnicos
 
-[ Filtros globais ]
-  Visão: Total / Crédito / Não aplicável
-  Tipo · Indexador · Rating · Setor · Status análise · Elegível (Todos/Sim/Não)
+**Novos arquivos:**
+- `src/pages/EmissoresPage.tsx` (evolução de `EmpresasPage`)
+- `src/pages/EmissorDetailPage.tsx` (evolução de `EmpresaDetailPage` + abas)
+- `src/components/emissores/AtivosCarteiraTab.tsx`
+- `src/components/emissores/AtivosCadastradosTab.tsx`
+- `src/components/emissores/AnalisesTab.tsx` (reaproveita `AnalisesPage`)
+- `src/components/emissores/HistoricoRatingTab.tsx`
+- `src/components/emissores/VisaoGeralTab.tsx`
 
-[ Seção A — Composição Total da Carteira ]
-  Subtítulo: "Base: todos os ativos da posição importada."
-  - Distribuição por Tipo de Ativo (pie)
-  - Distribuição por Indexador (pie)
-  - Distribuição por Duration (bar)
-  - Top 10 Posições (bar horizontal)
+**Editados:**
+- `src/App.tsx` — rotas novas + redirects
+- `src/components/layout/AppSidebar.tsx` — item único "Emissores"
+- `src/contexts/AuthContext.tsx` — `hasAccess` inclui `/emissores`
 
-[ Seção B — Análise de Crédito ]
-  Subtítulo: "Base: apenas ativos elegíveis para análise de emissor..."
-  - Distribuição por Rating (bar) — só elegíveis
-  - Distribuição por Setor Top 10 (bar) — só elegíveis
-  - Top 10 Grupos Econômicos (bar)
-  - Top 10 Emissores (bar)
-  - Status das análises (donut) + Análises vencidas por exposição (bar)
-  Empty state: "Este fundo não possui ativos elegíveis para análise de crédito/emissor nesta data."
+**Arquivos antigos (`EmpresasPage.tsx`, `EmpresaDetailPage.tsx`, `AnalisesPage.tsx`):** mantidos como fallback interno se necessário; podem ser deletados após validação.
 
-[ Seção C — Qualidade dos Dados ]
-  Cards: % elegível · % não aplicável · % crédito c/ rating · c/ setor · c/ grupo · s/ mapeamento
-  Tabela "Diagnóstico de Cobertura": Categoria | Valor R$ | % PL | Observação
-    Linhas: Elegível crédito · Não aplicável · Elegível s/ rating · s/ setor · s/ grupo · Mapeado OK
+## Não incluso (fora de escopo)
+- Alterações em Trade Monitor, FIDC Monitor, Posições, Desempenho.
+- Migrations no banco.
+- Alterações no importador BASE LOTE 45.
 
-[ Tabela Top Posições do Fundo ]
-  Ativo · Ticker · Tipo · Emissor · Grupo · Valor · %PL · Rating · Setor
-  · Status análise · Elegível crédito? (Sim/Não) · Observação
-  Para não elegíveis: Elegível=Não, Observação="Não aplicável para análise de crédito"
-  Para elegíveis com faltas: badges "Sem rating"/"Sem setor"/"Grupo não mapeado"
-```
-
-Cada gráfico ganha subtítulo com a base de cálculo. Badges suaves; tooltips explicando universo. Sem `N/D` em rating/setor/grupo.
-
-## 4. Filtros
-
-Filtros locais controlam cards, gráficos e tabela. `Visão` alterna qual universo entra nas tabelas/Top Posições (gráficos das seções A/B mantêm seus universos fixos por definição).
-
-## 5. Fora de escopo
-
-- Sem mudanças em `get_posicoes_dashboard_fundo`, importadores, sidebar, FIDC Monitor.
-- Sem alterar `useResolvedRating`/`resolveRatingsBatch` — usar rating já vindo da RPC. Se quiser, adicionamos `resolveRatingsBatch` para emissores elegíveis em fase 2.
-- Sem persistência nova; toda classificação é derivada em runtime.
-
-## Critérios de aceite
-
-Todos os 13 itens da especificação (separação total/crédito, Termo/LFT/Compromissada/DAP/Fundos BR fora dos gráficos de rating/setor/grupo, seção Qualidade, tabela Top Posições com coluna Elegível, empty states, visual de lâmina).
-
-## Arquivos afetados
-
-- `src/lib/posicoes/credit-eligibility.ts` (novo)
-- `src/hooks/useFundoDashboard.ts` (expandido)
-- `src/components/posicoes/FundoDashboard.tsx` (reescrito por seções)
-- possivelmente `src/components/posicoes/FundoDashboardFilters.tsx` e `TopPosicoesTable.tsx` (extração para manter arquivos focados)
+Confirma para eu implementar?

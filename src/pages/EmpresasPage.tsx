@@ -195,7 +195,7 @@ export default function EmpresasPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-foreground">Empresas / Emissores</h2>
+        <h2 className="text-lg font-semibold text-foreground">Emissores</h2>
         {canEdit && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
@@ -362,7 +362,7 @@ export default function EmpresasPage() {
                         )}
                       </TableCell>
                       <TableCell className="py-2 text-right">
-                        <Link to={`/empresas/${encodeURIComponent(e.cnpj)}`}>
+                        <Link to={`/emissores/${encodeURIComponent(e.cnpj)}`}>
                           <Button size="sm" variant="ghost" className="h-7 text-[11px] gap-1">
                             <ExternalLink className="h-3 w-3" /> Detalhe
                           </Button>

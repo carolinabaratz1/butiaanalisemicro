@@ -80,9 +80,13 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
-        <Route path="/empresas" element={<RouteGuard path="/empresas"><EmpresasPage /></RouteGuard>} />
-        <Route path="/empresas/:cnpj" element={<RouteGuard path="/empresas"><EmpresaDetailPage /></RouteGuard>} />
-        <Route path="/analises" element={<RouteGuard path="/analises"><AnalisesPage /></RouteGuard>} />
+        {/* Nova seção consolidada: Emissores (antigas Empresas + Análises) */}
+        <Route path="/emissores" element={<RouteGuard path="/emissores"><EmpresasPage /></RouteGuard>} />
+        <Route path="/emissores/:cnpj" element={<RouteGuard path="/emissores"><EmpresaDetailPage /></RouteGuard>} />
+        {/* Redirects legados — preservam links antigos */}
+        <Route path="/empresas" element={<Navigate to="/emissores" replace />} />
+        <Route path="/empresas/:cnpj" element={<LegacyEmpresaRedirect />} />
+        <Route path="/analises" element={<RouteGuard path="/emissores"><AnalisesPage /></RouteGuard>} />
         <Route path="/pipeline-de-research" element={<RouteGuard path="/pipeline-de-research"><PipelineResearchPage /></RouteGuard>} />
         <Route path="/configuracoes" element={<RouteGuard path="/configuracoes"><ConfiguracoesPage /></RouteGuard>} />
         <Route path="/assembleias" element={<RouteGuard path="/assembleias"><AssembleiasPage /></RouteGuard>} />
@@ -108,6 +112,12 @@ function RouteGuard({ path, children }: { path: string; children: React.ReactNod
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;
+}
+
+function LegacyEmpresaRedirect() {
+  // /empresas/:cnpj → /emissores/:cnpj
+  const path = window.location.pathname.replace(/^\/empresas\//, '/emissores/');
+  return <Navigate to={path} replace />;
 }
 
 function AppRoutes() {
