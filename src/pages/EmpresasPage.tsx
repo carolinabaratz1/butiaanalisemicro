@@ -195,7 +195,7 @@ export default function EmpresasPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-lg font-semibold text-foreground">Empresas / Emissores</h2>
+        <h2 className="text-lg font-semibold text-foreground">Emissores</h2>
         {canEdit && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
