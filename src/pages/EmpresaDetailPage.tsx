@@ -328,11 +328,21 @@ export default function EmpresaDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="emissoes">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="emissoes">Emissões ({emissoesList.length})</TabsTrigger>
-          <TabsTrigger value="historico">Histórico de Análises ({historicoPorCnpj.length})</TabsTrigger>
-          <TabsTrigger value="pipeline">Histórico de Pipeline ({pipelineEventos.length})</TabsTrigger>
+        <TabsList className="bg-muted/50 flex-wrap h-auto">
+          <TabsTrigger value="emissoes">Ativos ({emissoesList.length})</TabsTrigger>
+          <TabsTrigger value="limites">Limites e Enquadramento</TabsTrigger>
+          <TabsTrigger value="agenda">Agenda e Pendências</TabsTrigger>
+          <TabsTrigger value="historico">Análises ({historicoPorCnpj.length})</TabsTrigger>
+          <TabsTrigger value="pipeline">Pipeline ({pipelineEventos.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="limites">
+          <LimitesEnquadramentoTab row={gestaoRow} cnpjNorm={cnpjNorm} />
+        </TabsContent>
+        <TabsContent value="agenda">
+          <AgendaPendenciasTab row={gestaoRow} />
+        </TabsContent>
+
 
         {/* Tab Emissões */}
         <TabsContent value="emissoes">
