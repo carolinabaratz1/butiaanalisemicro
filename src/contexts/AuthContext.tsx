@@ -135,6 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (EXACT_MATCH_PATHS.has(path)) {
       return permissions.sections.includes(path);
     }
+    // Alias: "/emissores" consolida as antigas seções "/empresas" e "/analises".
+    // Se o perfil tinha acesso a qualquer uma delas, tem acesso a /emissores.
+    if (path === '/emissores' || path.startsWith('/emissores/')) {
+      if (permissions.sections.includes('/empresas') || permissions.sections.includes('/analises')) {
+        return true;
+      }
+    }
     return permissions.sections.some(s => {
       if (path === s) return true;
       if (s !== '/' && path.startsWith(s)) return true;
