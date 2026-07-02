@@ -1783,6 +1783,60 @@ export type Database = {
         }
         Relationships: []
       }
+      issuer_limits: {
+        Row: {
+          approved_by: string | null
+          cnpj_emissor: string
+          committee_date: string | null
+          created_at: string
+          created_by: string | null
+          effective_from: string | null
+          effective_to: string | null
+          grupo_economico: string | null
+          id: string
+          limit_pct_nav: number | null
+          limit_type: string
+          limit_value: number | null
+          notes: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_by?: string | null
+          cnpj_emissor: string
+          committee_date?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          grupo_economico?: string | null
+          id?: string
+          limit_pct_nav?: number | null
+          limit_type?: string
+          limit_value?: number | null
+          notes?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_by?: string | null
+          cnpj_emissor?: string
+          committee_date?: string | null
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          grupo_economico?: string | null
+          id?: string
+          limit_pct_nav?: number | null
+          limit_type?: string
+          limit_value?: number | null
+          notes?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       issuer_ratings: {
         Row: {
           agencia: string | null
@@ -2462,6 +2516,41 @@ export type Database = {
           id: string
           nome: string
           status: string
+        }[]
+      }
+      get_emissores_gestao: {
+        Args: never
+        Returns: {
+          alerts: Json
+          analise_data_conclusao: string
+          analise_data_validade: string
+          analise_id: string
+          analise_recomendacao: string
+          analise_status: string
+          analise_vencida: boolean
+          analista_id: string
+          cnpj: string
+          cnpj_norm: string
+          consolidated_pct: number
+          exposure_total: number
+          funds_count: number
+          funds_list: Json
+          grupo_economico: string
+          largest_fund: string
+          largest_fund_pct: number
+          largest_fund_value: number
+          limit_pct_nav: number
+          limit_status: string
+          limit_type: string
+          limit_value: number
+          nome: string
+          rating: string
+          rating_agencia: string
+          rating_data: string
+          rating_source: string
+          setor: string
+          tipo: string
+          usage_ratio: number
         }[]
       }
       get_ipca_history:
