@@ -362,7 +362,7 @@ export default function EmpresasPage() {
                         )}
                       </TableCell>
                       <TableCell className="py-2 text-right">
-                        <Link to={`/empresas/${encodeURIComponent(e.cnpj)}`}>
+                        <Link to={`/emissores/${encodeURIComponent(e.cnpj)}`}>
                           <Button size="sm" variant="ghost" className="h-7 text-[11px] gap-1">
                             <ExternalLink className="h-3 w-3" /> Detalhe
                           </Button>

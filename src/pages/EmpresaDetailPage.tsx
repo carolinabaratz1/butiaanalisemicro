@@ -187,7 +187,7 @@ export default function EmpresaDetailPage() {
   if (!emissor) {
     return (
       <div className="space-y-4">
-        <Link to="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/emissores" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Voltar
         </Link>
         <p className="text-muted-foreground">Emissor não encontrado.</p>
@@ -306,7 +306,7 @@ export default function EmpresaDetailPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <Link to="/empresas" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link to="/emissores" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div>
