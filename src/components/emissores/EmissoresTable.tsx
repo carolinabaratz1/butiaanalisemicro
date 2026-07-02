@@ -129,7 +129,15 @@ export function EmissoresTable({ rows }: { rows: EmissorGestaoRow[] }) {
           <TableBody>
             {pageItems.map(r => (
               <TableRow key={r.cnpj_norm || r.cnpj} className="border-border">
-                <TableCell className="py-2 sticky left-0 bg-card z-10 font-medium text-sm max-w-[240px] truncate">{r.nome}</TableCell>
+                <TableCell className="py-2 sticky left-0 bg-card z-10 font-medium text-sm max-w-[240px] truncate">
+                  <Link
+                    to={`/emissores/${encodeURIComponent(r.cnpj)}`}
+                    title="Abrir lâmina do emissor"
+                    className="hover:text-primary hover:underline underline-offset-2 cursor-pointer transition-colors"
+                  >
+                    {r.nome}
+                  </Link>
+                </TableCell>
                 <TableCell className="py-2 text-[11px] text-muted-foreground font-mono">{r.cnpj || '—'}</TableCell>
                 <TableCell className="py-2 text-xs text-muted-foreground max-w-[140px] truncate">{r.grupo_economico || '—'}</TableCell>
                 <TableCell className="py-2 text-xs text-muted-foreground">{r.setor || '—'}</TableCell>
