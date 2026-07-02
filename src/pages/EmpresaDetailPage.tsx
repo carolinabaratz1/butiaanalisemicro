@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,9 @@ import { RatingBadge } from '@/components/ratings/RatingBadge';
 import { useResolvedRating } from '@/lib/ratings/useResolvedRating';
 import { IssuerRatingHistoryDialog } from '@/components/ratings/IssuerRatingHistoryDialog';
 import { History } from 'lucide-react';
+import { LimitesEnquadramentoTab } from '@/components/emissores/detail/LimitesEnquadramentoTab';
+import { AgendaPendenciasTab } from '@/components/emissores/detail/AgendaPendenciasTab';
+import { useEmissoresGestao } from '@/hooks/useEmissoresGestao';
 
 const statusConfig: Record<AnaliseStatus | 'sem_analise', { label: string; className: string }> = {
   sem_analise: { label: 'Sem análise', className: 'bg-muted/50 text-muted-foreground border-border' },
@@ -48,8 +51,11 @@ function getUserNome(id: string, profiles: { id: string; nome: string }[] = []) 
 export default function EmpresaDetailPage() {
   const { cnpj } = useParams<{ cnpj: string }>();
   const decodedCnpj = decodeURIComponent(cnpj || '');
+  const cnpjNorm = decodedCnpj.replace(/[^0-9]/g, '');
   const { currentUser } = useAuth();
   const { analises, criarAnalise, iniciarAnalise, concluirAnalise, getAnalisesByIsin } = useAnaliseEmissao();
+  const { data: emissoresGestao = [] } = useEmissoresGestao();
+  const gestaoRow = useMemo(() => emissoresGestao.find(r => r.cnpj_norm === cnpjNorm) ?? null, [emissoresGestao, cnpjNorm]);
 
   const queryClient = useQueryClient();
   const [solicitarModal, setSolicitarModal] = useState<string | null>(null);
@@ -328,11 +334,21 @@ export default function EmpresaDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="emissoes">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="emissoes">Emissões ({emissoesList.length})</TabsTrigger>
-          <TabsTrigger value="historico">Histórico de Análises ({historicoPorCnpj.length})</TabsTrigger>
-          <TabsTrigger value="pipeline">Histórico de Pipeline ({pipelineEventos.length})</TabsTrigger>
+        <TabsList className="bg-muted/50 flex-wrap h-auto">
+          <TabsTrigger value="emissoes">Ativos ({emissoesList.length})</TabsTrigger>
+          <TabsTrigger value="limites">Limites e Enquadramento</TabsTrigger>
+          <TabsTrigger value="agenda">Agenda e Pendências</TabsTrigger>
+          <TabsTrigger value="historico">Análises ({historicoPorCnpj.length})</TabsTrigger>
+          <TabsTrigger value="pipeline">Pipeline ({pipelineEventos.length})</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="limites">
+          <LimitesEnquadramentoTab row={gestaoRow} cnpjNorm={cnpjNorm} />
+        </TabsContent>
+        <TabsContent value="agenda">
+          <AgendaPendenciasTab row={gestaoRow} />
+        </TabsContent>
+
 
         {/* Tab Emissões */}
         <TabsContent value="emissoes">

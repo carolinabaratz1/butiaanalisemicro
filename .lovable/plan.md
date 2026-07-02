@@ -1,93 +1,140 @@
 
-# Plano: Consolidação de "Empresas" e "Análises" em "Emissores"
+# Evolução da seção Emissores — Visão de Gestor
 
-## Objetivo
-Unificar as seções **Empresas** e **Análises** em uma única seção chamada **Emissores**, preservando 100% dos dados existentes (empresas, análises, ratings, posições). A mudança é de navegação, visualização e relacionamento — **não** há migração destrutiva no banco.
+Objetivo: transformar Emissores em uma tela de gestão orientada à ação (exposição, análise, limite, alertas), mantendo CNPJ normalizado como chave principal do emissor e ticker apenas no nível de ativo. Nada é alterado em BASE LOTE 45, FIDC Monitor ou Posições.
 
-## Escopo
+---
 
-**Alterado:** menu lateral, rotas, tela de listagem, tela de detalhe do emissor, componente de nova análise.
+## 1. Backend (migrations + views)
 
-**Não alterado:** BASE LOTE 45 / importação de posições, FIDC Monitor, Trade Monitor, Posições, tabelas `empresas`, `analises`, `emissoes`, `issuer_ratings`, `posicoes`.
+### 1.1. Nova tabela `issuer_limits`
+Camada de limites por emissor (reaproveitando padrão do Trade Monitor onde já existe).
 
-## Mudanças
+- `id uuid pk`
+- `cnpj_emissor text not null` (normalizado, dígitos)
+- `grupo_economico text`
+- `limit_value numeric` (R$)
+- `limit_pct_nav numeric` (% do PL)
+- `limit_type text` ('valor' | 'percentual' | 'ambos')
+- `effective_from date`, `effective_to date`
+- `approved_by text`, `committee_date date`
+- `source text`, `notes text`
+- `created_at`, `updated_at`
+- Índice em `cnpj_emissor`
+- RLS: leitura para autenticados; escrita para Gestor + Risco e Compliance
+- GRANTs conforme padrão do projeto
 
-### 1. Menu lateral (`AppSidebar.tsx`)
-- Remover itens "Empresas" e "Análises".
-- Adicionar item único **"Emissores"** (`/emissores`, ícone `Building2`).
-- Ajustar `hasAccess` em `AuthContext` para mapear a permissão antiga (`/empresas` + `/analises`) para `/emissores`.
+### 1.2. View / RPC `get_emissores_gestao(p_val_date date default null)`
+Retorna uma linha por CNPJ normalizado consolidando:
 
-### 2. Rotas (`App.tsx`)
-- Nova rota `/emissores` → `EmissoresPage` (lista).
-- Nova rota `/emissores/:cnpj` → `EmissorDetailPage` (detalhe com abas).
-- **Redirects** (sem quebra de links):
-  - `/empresas` → `/emissores`
-  - `/empresas/:cnpj` → `/emissores/:cnpj`
-  - `/analises` → `/emissores`
-  - `/analises/:id` → `/emissores/:cnpj` (resolvendo o CNPJ via análise)
+- Identidade: `cnpj`, `nome`, `grupo_economico`, `setor`
+- Rating resolvido via `get_resolved_rating(cnpj)` (mantém hierarquia CNPJ > Grupo)
+- Análise vigente: `analise_id`, `status_analise`, `recomendacao`, `analista_id`, `analista_nome`, `data_validade`, `is_vencida`
+- Exposição (BASE LOTE 45 na última val_date por fundo):
+  - `exposure_total`, `funds_count`, `funds_list jsonb`
+  - `largest_fund`, `largest_fund_value`, `largest_fund_pct`
+  - `consolidated_pct` = total / soma PL dos fundos onde aparece
+- Limite: `limit_value`, `limit_pct_nav`, `usage_ratio`, `limit_status`
+- Flags de governança: `sem_cnpj`, `sem_grupo`, `sem_setor`, `sem_rating`, `sem_analise`, `sem_limite`, `analise_vencida_com_posicao`, `acima_do_limite`, `proximo_do_limite`, `cadastro_incompleto`
+- `alerts jsonb` — lista consolidada de alertas com severidade
 
-### 3. Tela `EmissoresPage` (listagem)
-Reaproveita a estrutura de `EmpresasPage.tsx` e enriquece com dados cruzados:
+A função é `SECURITY DEFINER`, `STABLE`, usa CTEs para não estourar timeout.
 
-**Cards de resumo:**
-- Total de emissores
-- Emissores com posição
-- Emissores com análise vencida
-- Emissores sem análise
-- Exposição total (R$)
-- Emissores sem CNPJ / não mapeados
+---
 
-**Filtros no topo:**
-Busca (nome / CNPJ / ticker / grupo), Tipo, Setor, Grupo Econômico, Rating, Status da Análise, Analista, "Com posição" (Todos/Sim/Não), "Análise vencida" (Todos/Sim/Não).
+## 2. Frontend — Tabela principal `/emissores`
 
-**Tabela:**
-Emissor · Código · CNPJ · Rating · Tipo · Grupo · Setor · **Status da Análise** · Última Análise · Analista · Ativos em Carteira · Exposição Atual · Ações.
+### 2.1. Cards de resumo (10)
+Grid responsivo no topo. Cada card respeita filtros ativos:
+Exposição total, Emissores com posição, Análise vencida, Exposição vencida, Sem análise, Exposição sem análise, Sem limite, Acima do limite, Próximo do limite, Alerta crítico.
 
-**Chave:** CNPJ normalizado (`regexp_replace [^0-9]`).
-**Rating:** via `resolveRatingsBatch` (hierarquia Ticker > CNPJ > Grupo) já existente.
-**Status da Análise:** via `getDisplayStatus` (util já existente) sobre a análise mais recente do CNPJ; se não houver → "Sem análise"; se vencida → "Vencido".
-**Exposição/ativos em carteira:** join com `posicoes` na última `val_date` por CNPJ do emissor.
+### 2.2. Filtros
+Barra de filtros compacta (Popover com seções):
+- Busca (emissor / CNPJ / grupo)
+- Selects: Grupo, Setor, Rating, Status Análise, Recomendação, Analista, Fundo
+- Toggles tri-state: Com posição, Análise vencida, Com limite, Acima do limite, Próximo do limite, Com alerta
+- Select "Ação necessária" (multi): análise vencida, sem análise, sem limite, acima do limite, próximo do limite, rating ausente, CNPJ não mapeado, cadastro incompleto
 
-**Botão "+ Novo Emissor":** reaproveita o formulário atual de nova empresa em dialog.
+### 2.3. Nova tabela
+Colunas (sem ticker): Emissor, CNPJ, Grupo, Setor, Rating (`<RatingBadge/>`), Status Análise, Recomendação, Exposição Total, % PL Consolidado, Fundos, Maior Fundo, % PL Maior Fundo, Limite, Uso do Limite (barra colorida), Próx. Vencimento Análise, Analista, Alertas (ícones + tooltip), Ações.
 
-### 4. Página `EmissorDetailPage` (`/emissores/:cnpj`)
-Reaproveita `EmpresaDetailPage` como base e reorganiza em abas via `<Tabs>`.
+Ordenação, exportação XLSX, densidade compacta.
 
-**Header:** nome · CNPJ · código · grupo · setor · `<RatingBadge/>` · status análise · última análise · exposição · botões *Editar Emissor*, *Novo Ativo*, *Nova Análise*.
+---
 
-**Abas:**
-1. **Visão Geral** — cards (exposição total, nº ativos, rating, status, última análise, grupo, setor, maior fundo exposto) + tabela de exposição por fundo.
-2. **Ativos em Carteira** — posições atuais do CNPJ vindas de `posicoes` (última val_date). Empty state quando não houver.
-3. **Ativos Cadastrados** — todos os `emissoes`/`trade_ativos` cadastrados do CNPJ. Botão *+ Novo Ativo* abre dialog com os campos da spec.
-4. **Análises** — migração 1:1 da funcionalidade de `AnalisesPage.tsx` filtrada pelo CNPJ. Preserva versionamento (v1/v2/v3), botão *+ Nova Análise* abre o formulário existente com CNPJ / grupo pré-preenchidos.
-5. **Histórico de Rating** — `IssuerRatingHistoryDialog` já existente vira uma aba (agência, rating, data, validade, fonte, observações). Rating vigente = do CNPJ.
+## 3. Página individual `/emissores/:cnpj`
 
-### 5. Preservação de dados
-- Nenhum `DROP`, `DELETE` ou renomeação de tabela.
-- Nenhuma migration necessária nesta fase — todos os dados já existem em `empresas`, `analises`, `emissoes`, `trade_ativos`, `issuer_ratings`, `posicoes`.
-- Vínculo consistente via **CNPJ normalizado** (padrão já usado no projeto).
+### 3.1. Header enriquecido
+Nome, CNPJ, Grupo, Setor, RatingBadge, Status Análise, Recomendação, Exposição atual, Uso do limite, Próximo vencimento da análise.
 
-## Detalhes técnicos
+### 3.2. Aba "Visão Geral" (aprimorada)
+10 cards + 4 gráficos: Exposição por fundo (bar), Evolução da exposição (line, últimas val_dates), Vencimentos por ano (bar), Distribuição por tipo de ativo (pie).
 
-**Novos arquivos:**
-- `src/pages/EmissoresPage.tsx` (evolução de `EmpresasPage`)
-- `src/pages/EmissorDetailPage.tsx` (evolução de `EmpresaDetailPage` + abas)
-- `src/components/emissores/AtivosCarteiraTab.tsx`
-- `src/components/emissores/AtivosCadastradosTab.tsx`
-- `src/components/emissores/AnalisesTab.tsx` (reaproveita `AnalisesPage`)
-- `src/components/emissores/HistoricoRatingTab.tsx`
-- `src/components/emissores/VisaoGeralTab.tsx`
+### 3.3. Aba **nova**: "Limites e Enquadramento"
+- Painel resumo: Limite, Exposição, Uso, Folga, Status, Fonte, Data, Comitê, Observações
+- Tabela por fundo: exposição, %PL, target (se existir), limite máximo, folga, status
+- Gráfico de barras comparando exposição × target × limite por fundo
+- Botão "Editar limite" (Gestor/Risco) abre dialog CRUD em `issuer_limits`
+- Histórico de limites (versões anteriores)
 
-**Editados:**
-- `src/App.tsx` — rotas novas + redirects
-- `src/components/layout/AppSidebar.tsx` — item único "Emissores"
-- `src/contexts/AuthContext.tsx` — `hasAccess` inclui `/emissores`
+### 3.4. Aba **nova**: "Agenda e Pendências"
+Lista derivada dos alertas + validade da análise: Pendência, Responsável, Prazo, Prioridade (alta/média/baixa por regra), Status, Observações, Ações (ex.: "Abrir análise", "Cadastrar limite").
 
-**Arquivos antigos (`EmpresasPage.tsx`, `EmpresaDetailPage.tsx`, `AnalisesPage.tsx`):** mantidos como fallback interno se necessário; podem ser deletados após validação.
+### 3.5. Aba "Rating e Mercado" (renomeada de Histórico de Rating)
+- Rating atual (CNPJ) + agência + fonte + data
+- Histórico da tabela `issuer_ratings`
+- Tickers/ativos relacionados (via `emissoes` e `trade_ativos`)
+- Spread médio (join com `trade_metricas` quando disponível)
 
-## Não incluso (fora de escopo)
-- Alterações em Trade Monitor, FIDC Monitor, Posições, Desempenho.
-- Migrations no banco.
-- Alterações no importador BASE LOTE 45.
+### 3.6. Aba "Ativos em Carteira" (mantida, enriquecida)
+Colunas: Ticker, Ativo, Tipo, ISIN, Fundo, Valor, %PL, Taxa, Vencimento, Duration, Rating emissor, Status análise, Recomendação.
 
-Confirma para eu implementar?
+### 3.7. Aba "Análises" (mantida)
+Fluxo atual preservado.
+
+---
+
+## 4. Governança de dados
+Diagnósticos gerados pela mesma RPC alimentam:
+- Cards de resumo
+- Filtro "Ação necessária"
+- Aba Agenda e Pendências
+
+---
+
+## 5. Arquivos afetados
+
+**Novos**
+- `supabase/migrations/<ts>_issuer_limits_and_gestao_rpc.sql`
+- `src/hooks/useEmissoresGestao.ts`
+- `src/components/emissores/EmissoresSummaryCards.tsx`
+- `src/components/emissores/EmissoresFilters.tsx`
+- `src/components/emissores/EmissoresTable.tsx` (nova, substitui a renderização atual)
+- `src/components/emissores/LimitUsageBar.tsx`
+- `src/components/emissores/AlertBadges.tsx`
+- `src/components/emissores/detail/LimitesEnquadramentoTab.tsx`
+- `src/components/emissores/detail/AgendaPendenciasTab.tsx`
+- `src/components/emissores/detail/RatingMercadoTab.tsx`
+- `src/components/emissores/detail/IssuerLimitDialog.tsx`
+
+**Editados**
+- `src/pages/EmpresasPage.tsx` — troca tabela por versão gestão, cards e filtros
+- `src/pages/EmpresaDetailPage.tsx` — reorganiza abas, header enriquecido, cards
+- Ajustes leves em componentes existentes de análises/ativos apenas para exibir status/recomendação já disponíveis
+
+**Não tocar**
+- Upload BASE LOTE 45, importadores, FIDC Monitor, Posições, `src/integrations/supabase/*`.
+
+---
+
+## 6. Ordem de implementação
+1. Migration: `issuer_limits` + RPC `get_emissores_gestao`
+2. Hook + tabela principal + cards + filtros
+3. Header e Visão Geral aprimorada
+4. Aba Limites e Enquadramento + dialog
+5. Aba Agenda e Pendências
+6. Aba Rating e Mercado
+7. Enriquecer Ativos em Carteira
+8. Validar critérios de aceite
+
+Escopo grande — proponho executar em duas entregas: **(A)** backend + tabela principal + cards/filtros; **(B)** página individual completa (abas novas). Confirma para eu começar pela entrega A?
