@@ -114,6 +114,12 @@ function RouteGuard({ path, children }: { path: string; children: React.ReactNod
   return <>{children}</>;
 }
 
+function LegacyEmpresaRedirect() {
+  // /empresas/:cnpj → /emissores/:cnpj
+  const path = window.location.pathname.replace(/^\/empresas\//, '/emissores/');
+  return <Navigate to={path} replace />;
+}
+
 function AppRoutes() {
   const { session, loading, currentUser, mfaStatus } = useAuth();
 
