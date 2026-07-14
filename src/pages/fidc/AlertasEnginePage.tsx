@@ -137,7 +137,7 @@ export default function AlertasEnginePage() {
       <PageHeader
         title="Alertas Engine"
         subtitle="Regras automáticas sobre ratings de FIDC (rating_fidc_class_history)."
-        actions={
+        right={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setSimOpen(true)}>
               <TestTube className="h-4 w-4 mr-1" /> Simular
