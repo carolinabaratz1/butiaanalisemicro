@@ -82,6 +82,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
+        <Route path="/positions-monitor" element={<RouteGuard path="/posicoes"><PositionsMonitorPage /></RouteGuard>} />
         {/* Nova seção consolidada: Emissores (antigas Empresas + Análises) */}
         <Route path="/emissores" element={<RouteGuard path="/emissores"><EmpresasPage /></RouteGuard>} />
         <Route path="/emissores/:cnpj" element={<RouteGuard path="/emissores"><EmpresaDetailPage /></RouteGuard>} />
