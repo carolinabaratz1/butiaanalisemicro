@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 const mainItems = [
   { label: 'Dashboard',         icon: LayoutDashboard, path: '/' },
   { label: 'Posições',          icon: Briefcase,        path: '/posicoes' },
+  { label: 'Positions Monitor', icon: BarChart3,        path: '/positions-monitor' },
   { label: 'Emissores',         icon: Building2,        path: '/emissores' },
   { label: 'Rating Resolver',   icon: Sparkles,         path: '/ratings/resolver' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
