@@ -3072,3 +3072,10 @@ CREATE VIEW public."v_issuer_rating_current" AS
    FROM issuer_ratings
   ORDER BY cnpj, data_rating DESC NULLS LAST, created_at DESC;
 GRANT SELECT ON public."v_issuer_rating_current" TO authenticated;
+
+-- ---------------------------------------------------------------------
+-- SEQUENCE OWNERSHIP (attach sequences to their table columns)
+-- ---------------------------------------------------------------------
+ALTER SEQUENCE public.trade_ntnb_id_seq       OWNED BY public.trade_ntnb.id;
+ALTER SEQUENCE public.trade_taxas_id_seq      OWNED BY public.trade_taxas.id;
+ALTER SEQUENCE public.trade_upload_log_id_seq OWNED BY public.trade_upload_log.id;
