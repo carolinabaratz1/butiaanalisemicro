@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Shield, Eye, Pencil, UserCog, Plus, UserX, UserCheck, KeyRound, Check, X, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
+import SyncExternalCard from '@/components/SyncExternalCard';
 
 interface ProfileUser {
   id: string;
@@ -270,6 +271,10 @@ export default function ConfiguracoesPage() {
           </Card>
         ))}
       </div>
+
+      {/* Sync Externo (só Gestor) */}
+      {currentUser?.funcao === 'Gestor' && <SyncExternalCard />}
+
 
       {/* Users Table */}
       <Card className="bg-surface-2 border-border">
