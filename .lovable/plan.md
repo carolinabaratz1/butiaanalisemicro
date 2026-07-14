@@ -1,61 +1,61 @@
 
-# Replicar schema no Supabase externo (wicveoufijvtqebuxxaj)
+# Sincronizar com o Supabase externo (`wicveoufijvtqebuxxaj`)
 
-Objetivo: reproduzir no seu projeto Supabase pessoal a mesma estrutura que já existe no backend do Lovable Cloud, **sem trocar o backend do app**. O app continua apontando para o Lovable Cloud; o outro projeto fica como cópia paralela do schema.
+Objetivo: garantir que o projeto externo tenha o mesmo schema do Lovable Cloud (Fases 1, 2, 3, 7) e, opcionalmente, os mesmos dados de rating já migrados. O app **continua** apontando para o Lovable Cloud — nada em `.env`, `client.ts` ou `types.ts` muda.
 
-## Escopo do que será replicado
+## Situação atual
 
-Fases já aplicadas no Lovable Cloud, que iremos empacotar num único script SQL:
+- Arquivo `supabase-external-schema.sql` já existe na raiz do projeto e contém, em versão idempotente:
+  - Extensão `pgcrypto` e função `set_updated_at`.
+  - Bloco opcional para criar `app_role`, `user_roles` e `has_role` (comentado).
+  - Tabelas `rating_issuer_history`, `rating_emission_history`, `rating_fidc_class_history` com índices, GRANTs, RLS, policies e triggers.
+  - RPC `get_resolved_rating_v2` (fidc_class → emission → issuer).
+  - Tabelas `fidc_alert_rules` e `fidc_alert_events` com índices, GRANTs, RLS, policies e trigger.
+  - Bloco opcional de backfill de `rating_issuer_history` a partir de `issuer_ratings` (comentado).
+  - Bloco alternativo de policies permissivas para authenticated (sem `has_role`).
 
-- **Fase 1** — Tabelas de histórico de rating:
-  - `rating_issuer_history (cnpj, rating_value, rating_date, source, ...)`
-  - `rating_emission_history (isin, cnpj_emissor, rating_value, rating_date, source, ...)`
-  - `rating_fidc_class_history (isin, class_code, rating_value, rating_date, source, ...)`
-  - Índices, `updated_at` trigger, GRANTs, RLS + policies (leitura autenticada; escrita para Gestor/Coordenação via `has_role`).
-- **Fase 2** — RPC `get_resolved_rating_v2(p_cnpj, p_isin, p_class_code)` com precedência fidc_class → emission → issuer.
-- **Fase 7** — Motor de alertas FIDC:
-  - `fidc_alert_rules` (nome, isin, class_code, condition jsonb, action jsonb, active, last_triggered_at, created_by, …)
-  - `fidc_alert_events` (rule_id, isin, class_code, severity, message, payload, …)
-  - Índices, GRANTs, RLS, policies e trigger `set_updated_at`.
+Nada precisa ser reescrito para o schema em si. A sincronização é operacional (executar) + opcional (dados).
 
-Não incluído (por dependerem de tabelas específicas do projeto): a Fase 3 (backfill de 610 linhas de `issuer_ratings`) e a função `has_role` — ver seção de pré-requisitos.
+## Etapas do plano
 
-## Pré-requisitos no seu Supabase externo
+### 1. Preparar o projeto externo
+Escolher, antes de rodar o SQL:
+- **A.** Manter policies com `has_role` (mais seguro). Requer que o projeto externo já tenha `app_role` + `user_roles` + `has_role`, ou descomentar o bloco 2 do script para criá-los.
+- **B.** Usar o bloco alternativo permissivo (todo `authenticated` lê/escreve). Mais simples, menos seguro. Usar só se for um projeto sandbox.
 
-Para o script rodar sem erros, o projeto de destino precisa ter:
-
-1. Extensão `pgcrypto` (para `gen_random_uuid()`) — normalmente já habilitada.
-2. Função `public.has_role(_user_id uuid, _role public.app_role)` **ou** as policies serão criadas em versão simplificada (só `authenticated` lê/escreve, sem checagem de papel).
-3. Se quiser o backfill da Fase 3, o destino também precisa da tabela `issuer_ratings` populada. Sem ela, o script cria as tabelas vazias e você popula depois.
-
-Vou perguntar isso na hora da execução (não preciso decidir agora).
-
-## Entregável
-
-Um único arquivo `supabase-external-schema.sql` na raiz do projeto contendo, em ordem:
-
-1. `CREATE TABLE` das 5 tabelas novas + índices.
-2. `GRANT` para `authenticated` / `service_role` em cada tabela.
-3. `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`.
-4. `CREATE POLICY` (versão com `has_role` **e** versão comentada sem `has_role`, para você escolher).
-5. Trigger `set_updated_at` (função criada se não existir).
-6. `CREATE OR REPLACE FUNCTION public.get_resolved_rating_v2(...)` idêntico ao Lovable Cloud.
-7. Bloco opcional de backfill de `rating_issuer_history` a partir de `issuer_ratings` (comentado por padrão).
-
-Nenhum arquivo do app é alterado. O SQL é 100% idempotente (`CREATE TABLE IF NOT EXISTS`, `CREATE POLICY IF NOT EXISTS` onde suportado, `CREATE OR REPLACE FUNCTION`).
-
-## Como você aplica
-
-1. Abrir o SQL Editor do projeto `wicveoufijvtqebuxxaj` no dashboard do Supabase.
+### 2. Aplicar o schema
+1. Abrir o SQL Editor do projeto externo `wicveoufijvtqebuxxaj`.
 2. Colar o conteúdo de `supabase-external-schema.sql`.
-3. Decidir se mantém as policies com `has_role` (precisa existir) ou usa o bloco simplificado.
-4. Executar.
-5. Opcional: rodar o bloco de backfill se `issuer_ratings` existir por lá.
+3. Descomentar o bloco 2 (app_role/has_role) se necessário — passo 1A.
+4. Executar. Como é idempotente, pode ser rodado várias vezes.
+5. Verificar no dashboard do projeto externo:
+   - Tabelas criadas em `public`.
+   - Policies ativas.
+   - Função `get_resolved_rating_v2` presente.
 
-## Observações
+### 3. (Opcional) Sincronizar dados de rating
+Se você quiser levar as 610 linhas já populadas de `rating_issuer_history` (Fase 3) e demais históricos para o projeto externo, temos duas opções:
 
-- O app aqui no Lovable **continua** usando o backend do Lovable Cloud (`oxgbtbdkvxyraxbtpdjt`). Nada muda em `.env`, `client.ts` ou `types.ts`.
-- Se depois você quiser sincronizar dados entre os dois projetos, é outro trabalho (ETL / dump-restore) — não faz parte deste plano.
-- Se quiser que eu já inclua também as demais tabelas do app (empresas, posicoes, trade_*, fidc_*, etc.), me avise antes que eu implemento — o plano atual cobre só o que foi entregue nas Fases 1–3 e 7.
+- **3a. Backfill a partir de `issuer_ratings` do próprio projeto externo** (se essa tabela existir lá): descomentar o bloco 6 do script.
+- **3b. Exportar do Lovable Cloud e importar no externo** (novo trabalho, não coberto pelo arquivo atual):
+  1. Eu exporto CSVs de `rating_issuer_history`, `rating_emission_history`, `rating_fidc_class_history`, `fidc_alert_rules`, `fidc_alert_events` do Lovable Cloud para `/mnt/documents/`.
+  2. Você baixa os CSVs e usa `Table Editor → Import CSV` no dashboard do projeto externo, ou eu gero um segundo arquivo `supabase-external-data.sql` com `INSERT`s prontos.
 
-Quando aprovar, eu gero o arquivo `supabase-external-schema.sql`.
+### 4. (Opcional) Ampliar o escopo
+Se quiser replicar também outras tabelas do app (`empresas`, `posicoes`, `trade_*`, `fidc_monthly_reports`, etc.) e suas funções (`get_emissores_gestao`, `get_posicoes_dashboard_fundo`, `recalc_trade_metricas_*`), eu gero um segundo arquivo `supabase-external-schema-full.sql` cobrindo todo o schema `public`. Não faz parte do script atual.
+
+## Perguntas antes de rodar
+
+Para eu ajustar o entregável e/ou gerar o export de dados, preciso confirmar três pontos:
+
+1. **Policies:** manter `has_role` (opção A) ou usar policies permissivas (opção B)?
+2. **Dados:** só schema, backfill local (3a) ou export do Lovable Cloud (3b)?
+3. **Escopo:** parar nas Fases 1/2/3/7 (arquivo atual) ou incluir o schema completo do app (etapa 4)?
+
+## O que muda no repositório
+
+- Se a resposta for "só schema atual": nenhuma alteração de arquivo — basta rodar o SQL existente.
+- Se for "export de dados (3b)": criar `supabase-external-data.sql` (ou CSVs em `/mnt/documents/`).
+- Se for "schema completo (4)": criar `supabase-external-schema-full.sql`.
+
+Em nenhum caso o app é alterado.
