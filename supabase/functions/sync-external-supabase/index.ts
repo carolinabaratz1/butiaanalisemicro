@@ -56,7 +56,7 @@ async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const isCron = req.headers.get("x-cron-secret") === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const isCron = req.headers.get("x-cron-secret") === Deno.env.get("EXT_SYNC_CRON_SECRET");
   if (!isCron) {
     const v = await verifyCaller(req);
     if (!v.ok) {
