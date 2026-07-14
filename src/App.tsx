@@ -84,6 +84,7 @@ function ProtectedRoutes() {
         {/* Nova seção consolidada: Emissores (antigas Empresas + Análises) */}
         <Route path="/emissores" element={<RouteGuard path="/emissores"><EmpresasPage /></RouteGuard>} />
         <Route path="/emissores/:cnpj" element={<RouteGuard path="/emissores"><EmpresaDetailPage /></RouteGuard>} />
+        <Route path="/ratings/resolver" element={<RouteGuard path="/emissores"><RatingResolverPage /></RouteGuard>} />
         {/* Redirects legados — preservam links antigos */}
         <Route path="/empresas" element={<Navigate to="/emissores" replace />} />
         <Route path="/empresas/:cnpj" element={<LegacyEmpresaRedirect />} />
