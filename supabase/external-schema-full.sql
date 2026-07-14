@@ -1617,28 +1617,28 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ativos" TO authenticated;
 GRANT ALL ON public."trade_ativos" TO service_role;
 ALTER TABLE public."trade_ativos" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ativos";
-CREATE POLICY "read_authenticated" ON public."trade_ativos" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_ativos" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_ativos";
-CREATE POLICY "write_service_role" ON public."trade_ativos" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_ativos" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ipca_ref" TO authenticated;
 GRANT ALL ON public."trade_ipca_ref" TO service_role;
 ALTER TABLE public."trade_ipca_ref" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ipca_ref";
-CREATE POLICY "read_authenticated" ON public."trade_ipca_ref" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_ipca_ref" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_ipca_ref";
-CREATE POLICY "write_service_role" ON public."trade_ipca_ref" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_ipca_ref" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_metricas" TO authenticated;
 GRANT ALL ON public."trade_metricas" TO service_role;
 ALTER TABLE public."trade_metricas" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_metricas";
-CREATE POLICY "read_authenticated" ON public."trade_metricas" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_metricas" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_metricas";
-CREATE POLICY "write_service_role" ON public."trade_metricas" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_metricas" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_monitor_view" TO authenticated;
 GRANT ALL ON public."trade_monitor_view" TO service_role;
@@ -1646,55 +1646,55 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ntnb" TO authenticated;
 GRANT ALL ON public."trade_ntnb" TO service_role;
 ALTER TABLE public."trade_ntnb" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ntnb";
-CREATE POLICY "read_authenticated" ON public."trade_ntnb" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_ntnb" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_ntnb";
-CREATE POLICY "write_service_role" ON public."trade_ntnb" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_ntnb" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_agg_diario" TO authenticated;
 GRANT ALL ON public."trade_spread_agg_diario" TO service_role;
 ALTER TABLE public."trade_spread_agg_diario" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_agg_diario";
-CREATE POLICY "read_authenticated" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_agg_diario";
-CREATE POLICY "write_service_role" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_historico" TO authenticated;
 GRANT ALL ON public."trade_spread_historico" TO service_role;
 ALTER TABLE public."trade_spread_historico" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_historico";
-CREATE POLICY "read_authenticated" ON public."trade_spread_historico" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_spread_historico" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_historico";
-CREATE POLICY "write_service_role" ON public."trade_spread_historico" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_spread_historico" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_taxas" TO authenticated;
 GRANT ALL ON public."trade_taxas" TO service_role;
 ALTER TABLE public."trade_taxas" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_taxas";
-CREATE POLICY "read_authenticated" ON public."trade_taxas" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_taxas" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_taxas";
-CREATE POLICY "write_service_role" ON public."trade_taxas" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_taxas" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ticker_snapshot" TO authenticated;
 GRANT ALL ON public."trade_ticker_snapshot" TO service_role;
 ALTER TABLE public."trade_ticker_snapshot" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ticker_snapshot";
-CREATE POLICY "read_authenticated" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_ticker_snapshot";
-CREATE POLICY "write_service_role" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_upload_log" TO authenticated;
 GRANT ALL ON public."trade_upload_log" TO service_role;
 ALTER TABLE public."trade_upload_log" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_authenticated" ON public."trade_upload_log";
-CREATE POLICY "read_authenticated" ON public."trade_upload_log" AS PERMISSIVE FOR SELECT TO 
+CREATE POLICY "read_authenticated" ON public."trade_upload_log" AS PERMISSIVE FOR SELECT TO public
   USING ((auth.role() = 'authenticated'::text));
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_upload_log";
-CREATE POLICY "write_service_role" ON public."trade_upload_log" AS PERMISSIVE FOR ALL TO 
+CREATE POLICY "write_service_role" ON public."trade_upload_log" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."user_roles" TO authenticated;
 GRANT ALL ON public."user_roles" TO service_role;
