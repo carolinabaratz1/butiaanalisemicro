@@ -11,8 +11,11 @@ interface TableReport {
   ok: boolean;
   ms: number;
   rows?: number;
+  chunks?: number;
   error?: string;
 }
+
+const CHUNK_SIZE = 250;
 
 export default function SyncExternalCard() {
   const [running, setRunning] = useState(false);
@@ -35,25 +38,57 @@ export default function SyncExternalCard() {
       if (listErr) throw listErr;
       const tables: string[] = listData.tables ?? [];
 
-      // 2) Uma invocação por tabela — evita estouro de CPU/memória
+      // 2) Uma invocação por chunk — evita estouro de CPU/memória em tabelas grandes
       const results: TableReport[] = [];
       for (let i = 0; i < tables.length; i++) {
         const table = tables[i];
         setCurrentTable(table);
         setProgress(Math.round((i / tables.length) * 100));
 
-        const { data, error } = await supabase.functions.invoke(
-          'sync-external-supabase',
-          { body: { tables: [table] } },
-        );
+        let offset = 0;
+        let totalRows = 0;
+        let totalMs = 0;
+        let chunks = 0;
+        let failed: string | null = null;
 
-        if (error) {
-          results.push({ table, ok: false, ms: 0, error: error.message });
-        } else if (data?.report?.[0]) {
-          results.push(data.report[0]);
-        } else {
-          results.push({ table, ok: false, ms: 0, error: 'sem resposta' });
+        while (true) {
+          const { data, error } = await supabase.functions.invoke(
+            'sync-external-supabase',
+            { body: { table, offset, limit: CHUNK_SIZE, reset: offset === 0 } },
+          );
+
+          if (error) {
+            failed = error.message;
+            break;
+          }
+
+          const step = data?.report?.[0];
+          if (!step) {
+            failed = 'sem resposta';
+            break;
+          }
+          if (!step.ok) {
+            failed = step.error ?? 'erro desconhecido';
+            break;
+          }
+
+          chunks += 1;
+          totalRows += step.rows ?? 0;
+          totalMs += step.ms ?? 0;
+          offset = step.next_offset ?? offset + (step.rows ?? 0);
+
+          const chunkLabel = `${table} · ${totalRows.toLocaleString('pt-BR')} linhas`;
+          setCurrentTable(chunkLabel);
+          setReport([...results, { table, ok: true, ms: totalMs, rows: totalRows, chunks }]);
+
+          if (step.done) break;
         }
+
+        results.push(
+          failed
+            ? { table, ok: false, ms: totalMs, rows: totalRows, chunks, error: failed }
+            : { table, ok: true, ms: totalMs, rows: totalRows, chunks },
+        );
         setReport([...results]);
       }
 
@@ -119,6 +154,7 @@ export default function SyncExternalCard() {
                   <tr>
                     <th className="text-left px-2 py-1">Tabela</th>
                     <th className="text-right px-2 py-1">Linhas</th>
+                    <th className="text-right px-2 py-1">Chunks</th>
                     <th className="text-right px-2 py-1">Tempo</th>
                     <th className="text-left px-2 py-1">Status</th>
                   </tr>
@@ -128,6 +164,7 @@ export default function SyncExternalCard() {
                     <tr key={r.table} className="border-t border-border">
                       <td className="px-2 py-1 font-mono">{r.table}</td>
                       <td className="px-2 py-1 text-right">{r.rows ?? '-'}</td>
+                      <td className="px-2 py-1 text-right">{r.chunks ?? '-'}</td>
                       <td className="px-2 py-1 text-right">{r.ms}ms</td>
                       <td className="px-2 py-1">
                         {r.ok ? (
