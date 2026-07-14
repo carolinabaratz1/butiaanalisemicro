@@ -711,13 +711,6 @@ CREATE TABLE IF NOT EXISTS public."profiles" (
   PRIMARY KEY ("id")
 );
 
-CREATE TABLE IF NOT EXISTS public."profiles_public" (
-  "id" uuid,
-  "nome" text,
-  "funcao" text,
-  "status" text
-);
-
 CREATE TABLE IF NOT EXISTS public."rating_emission_history" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
   "isin" text NOT NULL,
@@ -827,45 +820,6 @@ CREATE TABLE IF NOT EXISTS public."trade_metricas" (
   PRIMARY KEY ("ticker")
 );
 
-CREATE TABLE IF NOT EXISTS public."trade_monitor_view" (
-  "ticker" text,
-  "indexador" text,
-  "last_date" date,
-  "last_val" numeric(12,6),
-  "last_qtd" numeric(18,4),
-  "last_vol_fin" numeric(20,4),
-  "pu_curva" numeric(14,6),
-  "pu_indicativo" numeric(14,6),
-  "pu_ratio" numeric(10,6),
-  "avg_5d" numeric(12,6),
-  "avg_10d" numeric(12,6),
-  "avg_21d" numeric(12,6),
-  "avg_30d" numeric(12,6),
-  "avg_90d" numeric(12,6),
-  "std_90d" numeric(12,6),
-  "z_score" numeric(10,4),
-  "z_score_5d" numeric(10,4),
-  "z_score_10d" numeric(10,4),
-  "z_score_21d" numeric(10,4),
-  "change_bps" numeric(10,2),
-  "total_qtd" numeric(20,4),
-  "total_vol_fin" numeric(20,4),
-  "ntnb_ref" text,
-  "ntnb_taxa" numeric(12,6),
-  "updated_at" timestamptz,
-  "nome_completo" text,
-  "emissor_nome" text,
-  "emissor_cnpj" text,
-  "venc_date" date,
-  "anos_venc" numeric(6,2),
-  "indexador_ativo" text,
-  "sub_indexador" text,
-  "taxa_emissao" text,
-  "spread_emissao" numeric(8,4),
-  "rating" text,
-  "data_rating" date
-);
-
 CREATE TABLE IF NOT EXISTS public."trade_ntnb" (
   "id" bigint DEFAULT nextval('trade_ntnb_id_seq'::regclass) NOT NULL,
   "bond_name" text NOT NULL,
@@ -939,15 +893,6 @@ CREATE TABLE IF NOT EXISTS public."user_roles" (
   "user_id" uuid NOT NULL,
   "role" public.app_role NOT NULL,
   PRIMARY KEY ("id")
-);
-
-CREATE TABLE IF NOT EXISTS public."v_issuer_rating_current" (
-  "cnpj" text,
-  "rating" text,
-  "agencia" text,
-  "data_rating" date,
-  "outlook" text,
-  "source_id" uuid
 );
 
 -- CONSTRAINTS (unique, fk, check)
@@ -2781,8 +2726,6 @@ CREATE POLICY "Users can update own safe fields" ON public."profiles" AS PERMISS
   WITH CHECK (((auth.uid() = id)
     AND (funcao = (SELECT p.funcao FROM public.profiles p WHERE p.id = auth.uid()))
     AND (status = (SELECT p.status FROM public.profiles p WHERE p.id = auth.uid()))));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles_public" TO authenticated;
-GRANT ALL ON public."profiles_public" TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_emission_history" TO authenticated;
 GRANT ALL ON public."rating_emission_history" TO service_role;
 ALTER TABLE public."rating_emission_history" ENABLE ROW LEVEL SECURITY;
@@ -2871,8 +2814,6 @@ CREATE POLICY "read_authenticated" ON public."trade_metricas" AS PERMISSIVE FOR 
 DROP POLICY IF EXISTS "write_service_role" ON public."trade_metricas";
 CREATE POLICY "write_service_role" ON public."trade_metricas" AS PERMISSIVE FOR ALL TO public
   USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_monitor_view" TO authenticated;
-GRANT ALL ON public."trade_monitor_view" TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ntnb" TO authenticated;
 GRANT ALL ON public."trade_ntnb" TO service_role;
 ALTER TABLE public."trade_ntnb" ENABLE ROW LEVEL SECURITY;
@@ -2946,8 +2887,6 @@ CREATE POLICY "Only Gestor can update roles" ON public."user_roles" AS PERMISSIV
 DROP POLICY IF EXISTS "Users can read own roles" ON public."user_roles";
 CREATE POLICY "Users can read own roles" ON public."user_roles" AS PERMISSIVE FOR SELECT TO authenticated
   USING ((user_id = auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."v_issuer_rating_current" TO authenticated;
-GRANT ALL ON public."v_issuer_rating_current" TO service_role;
 
 -- TRIGGERS
 DROP TRIGGER IF EXISTS "t_fidc_ar_updated" ON public."alert_rules";
@@ -3010,6 +2949,7 @@ CREATE TRIGGER trg_trade_ativos_sub_indexador BEFORE INSERT OR UPDATE OF indexad
 -- ---------------------------------------------------------------------
 -- VIEWS
 -- ---------------------------------------------------------------------
+DROP TABLE IF EXISTS public."trade_monitor_view" CASCADE;
 DROP VIEW IF EXISTS public."trade_monitor_view" CASCADE;
 CREATE VIEW public."trade_monitor_view" AS
  SELECT m.ticker,
@@ -3052,6 +2992,7 @@ CREATE VIEW public."trade_monitor_view" AS
      LEFT JOIN trade_ativos a ON a.ticker = m.ticker;
 GRANT SELECT ON public."trade_monitor_view" TO authenticated;
 
+DROP TABLE IF EXISTS public."profiles_public" CASCADE;
 DROP VIEW IF EXISTS public."profiles_public" CASCADE;
 CREATE VIEW public."profiles_public" AS
  SELECT id,
@@ -3061,6 +3002,7 @@ CREATE VIEW public."profiles_public" AS
    FROM profiles;
 GRANT SELECT ON public."profiles_public" TO authenticated;
 
+DROP TABLE IF EXISTS public."v_issuer_rating_current" CASCADE;
 DROP VIEW IF EXISTS public."v_issuer_rating_current" CASCADE;
 CREATE VIEW public."v_issuer_rating_current" AS
  SELECT DISTINCT ON (cnpj) cnpj,
