@@ -142,6 +142,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
     }
+    // Alias: "/ratings/*" (ex.: Rating Resolver) segue permissão de /emissores.
+    if (path === '/ratings' || path.startsWith('/ratings/')) {
+      if (
+        permissions.sections.includes('/emissores') ||
+        permissions.sections.includes('/empresas') ||
+        permissions.sections.includes('/analises')
+      ) {
+        return true;
+      }
+    }
     return permissions.sections.some(s => {
       if (path === s) return true;
       if (s !== '/' && path.startsWith(s)) return true;
