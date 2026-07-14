@@ -33,6 +33,7 @@ import FidcPareceresPage from "./pages/fidc/PareceresPage";
 import FidcAlertasPage from "./pages/fidc/AlertasPage";
 import { FidcLayout } from "./components/fidc/FidcSubNav";
 import RatingResolverPage from "./pages/RatingResolverPage";
+import PositionsMonitorPage from "./pages/PositionsMonitorPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -81,6 +82,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
+        <Route path="/positions-monitor" element={<RouteGuard path="/posicoes"><PositionsMonitorPage /></RouteGuard>} />
         {/* Nova seção consolidada: Emissores (antigas Empresas + Análises) */}
         <Route path="/emissores" element={<RouteGuard path="/emissores"><EmpresasPage /></RouteGuard>} />
         <Route path="/emissores/:cnpj" element={<RouteGuard path="/emissores"><EmpresaDetailPage /></RouteGuard>} />
