@@ -35,6 +35,8 @@ import { FidcLayout } from "./components/fidc/FidcSubNav";
 import RatingResolverPage from "./pages/RatingResolverPage";
 import PositionsMonitorPage from "./pages/PositionsMonitorPage";
 import TradeActivityDashboardPage from "./pages/TradeActivityDashboardPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import AlertasEnginePage from "./pages/fidc/AlertasEnginePage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
