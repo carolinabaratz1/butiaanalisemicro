@@ -1142,6 +1142,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_id_role_key ON public.user_rol
 -- ---------------------------------------------------------------------
 -- FUNCTIONS
 -- ---------------------------------------------------------------------
+-- has_role(uuid,app_role)
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE user_id = _user_id
+      AND role = _role
+  )
+$function$
+;
 -- fidc_can_write(uuid)
 CREATE OR REPLACE FUNCTION public.fidc_can_write(_user_id uuid)
  RETURNS boolean
@@ -1201,21 +1216,6 @@ END;
 $function$
 ;
 
--- has_role(uuid,app_role)
-CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.user_roles
-    WHERE user_id = _user_id
-      AND role = _role
-  )
-$function$
-;
 
 -- handle_new_user()
 CREATE OR REPLACE FUNCTION public.handle_new_user()
