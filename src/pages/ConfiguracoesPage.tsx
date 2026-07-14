@@ -272,6 +272,10 @@ export default function ConfiguracoesPage() {
         ))}
       </div>
 
+      {/* Sync Externo (só Gestor) */}
+      {currentUser?.funcao === 'Gestor' && <SyncExternalCard />}
+
+
       {/* Users Table */}
       <Card className="bg-surface-2 border-border">
         <CardHeader className="pb-3">
