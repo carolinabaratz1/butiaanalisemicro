@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Kanban, Settings, Briefcase,
-  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity
+  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
