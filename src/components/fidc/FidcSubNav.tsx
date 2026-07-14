@@ -8,6 +8,7 @@ const tabs = [
   { to: "/fidc-monitor/cadastro", label: "Cadastro Mestre" },
   { to: "/fidc-monitor/pareceres", label: "Pareceres" },
   { to: "/fidc-monitor/alertas", label: "Alertas" },
+  { to: "/fidc-monitor/alertas-engine", label: "Alertas Engine" },
 ];
 
 export function FidcSubNav() {
