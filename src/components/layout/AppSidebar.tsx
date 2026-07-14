@@ -21,6 +21,7 @@ const mainItems = [
   { label: 'Trade Activity',    icon: Activity,         path: '/trade/activity' },
   { label: 'Atualizar Dados',   icon: Upload,           path: '/trade/upload' },
   { label: 'FIDC Monitor',      icon: Activity,         path: '/fidc-monitor' },
+  { label: 'Analytics',         icon: BarChart3,        path: '/analytics' },
 ];
 
 const bottomItems = [
