@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Kanban, Settings, Briefcase,
-  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity
+  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +12,7 @@ const mainItems = [
   { label: 'Dashboard',         icon: LayoutDashboard, path: '/' },
   { label: 'Posições',          icon: Briefcase,        path: '/posicoes' },
   { label: 'Emissores',         icon: Building2,        path: '/emissores' },
+  { label: 'Rating Resolver',   icon: Sparkles,         path: '/ratings/resolver' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
