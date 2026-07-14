@@ -1085,6 +1085,75 @@ CREATE INDEX IF NOT EXISTS idx_trade_taxas_ticker_data ON public.trade_taxas USI
 CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_id_role_key ON public.user_roles USING btree (user_id, role);
 
 -- ---------------------------------------------------------------------
+-- VIEWS
+-- ---------------------------------------------------------------------
+DROP TABLE IF EXISTS public."trade_monitor_view" CASCADE;
+DROP VIEW IF EXISTS public."trade_monitor_view" CASCADE;
+CREATE VIEW public."trade_monitor_view" AS
+ SELECT m.ticker,
+    m.indexador,
+    m.last_date,
+    m.last_val,
+    m.last_qtd,
+    m.last_vol_fin,
+    m.pu_curva,
+    m.pu_indicativo,
+    m.pu_ratio,
+    m.avg_5d,
+    m.avg_10d,
+    m.avg_21d,
+    m.avg_30d,
+    m.avg_90d,
+    m.std_90d,
+    m.z_score,
+    m.z_score_5d,
+    m.z_score_10d,
+    m.z_score_21d,
+    m.change_bps,
+    m.total_qtd,
+    m.total_vol_fin,
+    m.ntnb_ref,
+    m.ntnb_taxa,
+    m.updated_at,
+    a.nome_completo,
+    a.emissor_nome,
+    a.emissor_cnpj,
+    a.venc_date,
+    a.anos_venc,
+    a.indexador AS indexador_ativo,
+    a.sub_indexador,
+    a.taxa_emissao,
+    a.spread_emissao,
+    a.rating,
+    a.data_rating
+   FROM trade_metricas m
+     LEFT JOIN trade_ativos a ON a.ticker = m.ticker;
+GRANT SELECT ON public."trade_monitor_view" TO authenticated;
+
+DROP TABLE IF EXISTS public."profiles_public" CASCADE;
+DROP VIEW IF EXISTS public."profiles_public" CASCADE;
+CREATE VIEW public."profiles_public" AS
+ SELECT id,
+    nome,
+    funcao,
+    status
+   FROM profiles;
+GRANT SELECT ON public."profiles_public" TO authenticated;
+
+DROP TABLE IF EXISTS public."v_issuer_rating_current" CASCADE;
+DROP VIEW IF EXISTS public."v_issuer_rating_current" CASCADE;
+CREATE VIEW public."v_issuer_rating_current" AS
+ SELECT DISTINCT ON (cnpj) cnpj,
+    rating,
+    agencia,
+    data_rating,
+    outlook,
+    id AS source_id
+   FROM issuer_ratings
+  ORDER BY cnpj, data_rating DESC NULLS LAST, created_at DESC;
+GRANT SELECT ON public."v_issuer_rating_current" TO authenticated;
+
+-- ---------------------------------------------------------------------
 -- FUNCTIONS
 -- ---------------------------------------------------------------------
 -- has_role(uuid,app_role)
@@ -2945,75 +3014,6 @@ DROP TRIGGER IF EXISTS "trg_setores_updated_at" ON public."setores";
 CREATE TRIGGER trg_setores_updated_at BEFORE UPDATE ON public.setores FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 DROP TRIGGER IF EXISTS "trg_trade_ativos_sub_indexador" ON public."trade_ativos";
 CREATE TRIGGER trg_trade_ativos_sub_indexador BEFORE INSERT OR UPDATE OF indexador, taxa_emissao ON public.trade_ativos FOR EACH ROW EXECUTE FUNCTION tg_set_sub_indexador();
-
--- ---------------------------------------------------------------------
--- VIEWS
--- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS public."trade_monitor_view" CASCADE;
-DROP VIEW IF EXISTS public."trade_monitor_view" CASCADE;
-CREATE VIEW public."trade_monitor_view" AS
- SELECT m.ticker,
-    m.indexador,
-    m.last_date,
-    m.last_val,
-    m.last_qtd,
-    m.last_vol_fin,
-    m.pu_curva,
-    m.pu_indicativo,
-    m.pu_ratio,
-    m.avg_5d,
-    m.avg_10d,
-    m.avg_21d,
-    m.avg_30d,
-    m.avg_90d,
-    m.std_90d,
-    m.z_score,
-    m.z_score_5d,
-    m.z_score_10d,
-    m.z_score_21d,
-    m.change_bps,
-    m.total_qtd,
-    m.total_vol_fin,
-    m.ntnb_ref,
-    m.ntnb_taxa,
-    m.updated_at,
-    a.nome_completo,
-    a.emissor_nome,
-    a.emissor_cnpj,
-    a.venc_date,
-    a.anos_venc,
-    a.indexador AS indexador_ativo,
-    a.sub_indexador,
-    a.taxa_emissao,
-    a.spread_emissao,
-    a.rating,
-    a.data_rating
-   FROM trade_metricas m
-     LEFT JOIN trade_ativos a ON a.ticker = m.ticker;
-GRANT SELECT ON public."trade_monitor_view" TO authenticated;
-
-DROP TABLE IF EXISTS public."profiles_public" CASCADE;
-DROP VIEW IF EXISTS public."profiles_public" CASCADE;
-CREATE VIEW public."profiles_public" AS
- SELECT id,
-    nome,
-    funcao,
-    status
-   FROM profiles;
-GRANT SELECT ON public."profiles_public" TO authenticated;
-
-DROP TABLE IF EXISTS public."v_issuer_rating_current" CASCADE;
-DROP VIEW IF EXISTS public."v_issuer_rating_current" CASCADE;
-CREATE VIEW public."v_issuer_rating_current" AS
- SELECT DISTINCT ON (cnpj) cnpj,
-    rating,
-    agencia,
-    data_rating,
-    outlook,
-    id AS source_id
-   FROM issuer_ratings
-  ORDER BY cnpj, data_rating DESC NULLS LAST, created_at DESC;
-GRANT SELECT ON public."v_issuer_rating_current" TO authenticated;
 
 -- ---------------------------------------------------------------------
 -- SEQUENCE OWNERSHIP (attach sequences to their table columns)
