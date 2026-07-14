@@ -32,6 +32,7 @@ import FidcCadastroPage from "./pages/fidc/FidcCadastroPage";
 import FidcPareceresPage from "./pages/fidc/PareceresPage";
 import FidcAlertasPage from "./pages/fidc/AlertasPage";
 import { FidcLayout } from "./components/fidc/FidcSubNav";
+import RatingResolverPage from "./pages/RatingResolverPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
