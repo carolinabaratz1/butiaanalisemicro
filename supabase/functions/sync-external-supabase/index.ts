@@ -27,7 +27,7 @@ const TABLES_ALL = [
   "pipeline_eventos", "mfa_reset_log",
 ];
 
-const BATCH_SIZE = 2000;
+const BATCH_SIZE = 500;
 
 async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string }> {
   const auth = req.headers.get("Authorization");
