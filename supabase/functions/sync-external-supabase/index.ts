@@ -1,11 +1,10 @@
-// Espelha (TRUNCATE + INSERT) todas as tabelas do Lovable Cloud
-// para o Supabase externo. Usa COPY streaming (postgres.js).
+// Espelha (TRUNCATE + INSERT em lotes JSON) todas as tabelas do Lovable Cloud
+// para o Supabase externo. Compatível com pooler (transaction mode).
 import postgres from "npm:postgres@3.4.4";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const TABLES = [
-  // ordem indiferente — desabilitamos FKs durante o load
+const TABLES_ALL = [
   "profiles", "user_roles",
   "setores", "empresas",
   "emissoes", "trade_ativos",
@@ -27,6 +26,8 @@ const TABLES = [
   "cvm_data_dictionary", "cvm_fidc_field_mapping", "cvm_monthly_import_staging",
   "pipeline_eventos", "mfa_reset_log",
 ];
+
+const BATCH_SIZE = 2000;
 
 async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string }> {
   const auth = req.headers.get("Authorization");
@@ -76,61 +77,61 @@ Deno.serve(async (req) => {
 
   let body: { tables?: string[] } = {};
   try { body = await req.json(); } catch { /* ignore */ }
-  const list = body.tables?.length ? body.tables : TABLES;
+  const list = body.tables?.length ? body.tables : TABLES_ALL;
 
-  const src = postgres(srcUrl, { max: 1, ssl: "require", idle_timeout: 20 });
-  const dst = postgres(dstUrl, { max: 1, ssl: "require", idle_timeout: 20 });
+  // prepare:false é necessário para pooler em transaction mode (pgBouncer)
+  const src = postgres(srcUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
+  const dst = postgres(dstUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
 
   const report: Array<{ table: string; ok: boolean; ms: number; rows?: number; error?: string }> = [];
   const t0 = Date.now();
 
   try {
-    // Desliga FKs no destino durante o load
     await dst`SET session_replication_role = replica`;
 
     for (const table of list) {
       const ts = Date.now();
       try {
-        // Confere se a tabela existe nos dois lados
-        const [{ exists: srcHas }] = await src`
-          SELECT EXISTS (SELECT 1 FROM information_schema.tables
-            WHERE table_schema='public' AND table_name=${table}) AS exists`;
-        const [{ exists: dstHas }] = await dst`
-          SELECT EXISTS (SELECT 1 FROM information_schema.tables
-            WHERE table_schema='public' AND table_name=${table}) AS exists`;
-        if (!srcHas || !dstHas) {
-          report.push({ table, ok: false, ms: Date.now() - ts, error: `missing:src=${srcHas},dst=${dstHas}` });
-          continue;
-        }
-
-        // Colunas em comum (evita erro se schemas divergirem)
-        const cols = await src<{ column_name: string }[]>`
+        // Colunas em comum
+        const srcCols = await src<{ column_name: string }[]>`
           SELECT column_name FROM information_schema.columns
           WHERE table_schema='public' AND table_name=${table}
           ORDER BY ordinal_position`;
         const dstCols = await dst<{ column_name: string }[]>`
           SELECT column_name FROM information_schema.columns
           WHERE table_schema='public' AND table_name=${table}`;
+        if (srcCols.length === 0 || dstCols.length === 0) {
+          report.push({ table, ok: false, ms: Date.now() - ts, error: `missing_schema (src=${srcCols.length},dst=${dstCols.length})` });
+          continue;
+        }
         const dstSet = new Set(dstCols.map((c) => c.column_name));
-        const shared = cols.map((c) => c.column_name).filter((c) => dstSet.has(c));
+        const shared = srcCols.map((c) => c.column_name).filter((c) => dstSet.has(c));
         if (shared.length === 0) {
           report.push({ table, ok: false, ms: Date.now() - ts, error: "no_shared_columns" });
           continue;
         }
-        const colList = shared.map((c) => `"${c}"`).join(",");
+        const colListQuoted = shared.map((c) => `"${c}"`).join(",");
 
         await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
 
-        const readable = await src.unsafe(
-          `COPY (SELECT ${colList} FROM public."${table}") TO STDOUT WITH (FORMAT csv, HEADER true)`,
-        ).readable();
-        const writable = await dst.unsafe(
-          `COPY public."${table}" (${colList}) FROM STDIN WITH (FORMAT csv, HEADER true)`,
-        ).writable();
-        await readable.pipeTo(writable);
-
-        const [{ n }] = await dst.unsafe(`SELECT COUNT(*)::int AS n FROM public."${table}"`);
-        report.push({ table, ok: true, ms: Date.now() - ts, rows: n });
+        let offset = 0;
+        let total = 0;
+        while (true) {
+          const rows = await src.unsafe(
+            `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${BATCH_SIZE}`,
+          );
+          if (rows.length === 0) break;
+          // postgres.js serializa arrays JS como jsonb automaticamente
+          await dst`
+            INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
+            SELECT ${dst.unsafe(colListQuoted)}
+            FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
+          `;
+          total += rows.length;
+          offset += rows.length;
+          if (rows.length < BATCH_SIZE) break;
+        }
+        report.push({ table, ok: true, ms: Date.now() - ts, rows: total });
       } catch (e) {
         report.push({ table, ok: false, ms: Date.now() - ts, error: (e as Error).message });
       }
