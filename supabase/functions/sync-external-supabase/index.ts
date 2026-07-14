@@ -27,7 +27,7 @@ const TABLES_ALL = [
   "pipeline_eventos", "mfa_reset_log",
 ];
 
-const BATCH_SIZE = 2000;
+const BATCH_SIZE = 500;
 
 async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string }> {
   const auth = req.headers.get("Authorization");
@@ -75,8 +75,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { tables?: string[] } = {};
+  let body: { tables?: string[]; list_only?: boolean } = {};
   try { body = await req.json(); } catch { /* ignore */ }
+
+  if (body.list_only) {
+    return new Response(JSON.stringify({ tables: TABLES_ALL }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const list = body.tables?.length ? body.tables : TABLES_ALL;
 
   // prepare:false é necessário para pooler em transaction mode (pgBouncer)
