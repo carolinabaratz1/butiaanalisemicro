@@ -121,13 +121,13 @@ Deno.serve(async (req) => {
             `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${BATCH_SIZE}`,
           );
           if (rows.length === 0) break;
-          // insere em massa via jsonb_populate_recordset
-          await dst.unsafe(
-            `INSERT INTO public."${table}" (${colListQuoted})
-             SELECT ${colListQuoted}
-             FROM jsonb_populate_recordset(NULL::public."${table}", $1::jsonb)`,
-            [JSON.stringify(rows)],
-          );
+          // insere em massa via jsonb_populate_recordset (json.stringify garante array serializado)
+          const payload = JSON.stringify(rows);
+          await dst`
+            INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
+            SELECT ${dst.unsafe(colListQuoted)}
+            FROM jsonb_populate_recordset(NULL::${dst(table)}, ${payload}::jsonb)
+          `;
           total += rows.length;
           offset += rows.length;
           if (rows.length < BATCH_SIZE) break;
