@@ -890,6 +890,95 @@ export type Database = {
           },
         ]
       }
+      fidc_alert_events: {
+        Row: {
+          class_code: string | null
+          created_at: string
+          id: string
+          isin: string | null
+          message: string | null
+          payload: Json
+          rule_id: string | null
+          severity: string
+          triggered_at: string
+        }
+        Insert: {
+          class_code?: string | null
+          created_at?: string
+          id?: string
+          isin?: string | null
+          message?: string | null
+          payload?: Json
+          rule_id?: string | null
+          severity?: string
+          triggered_at?: string
+        }
+        Update: {
+          class_code?: string | null
+          created_at?: string
+          id?: string
+          isin?: string | null
+          message?: string | null
+          payload?: Json
+          rule_id?: string | null
+          severity?: string
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fidc_alert_events_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "fidc_alert_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fidc_alert_rules: {
+        Row: {
+          action: Json
+          active: boolean
+          class_code: string | null
+          condition: Json
+          created_at: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          isin: string | null
+          last_triggered_at: string | null
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          action?: Json
+          active?: boolean
+          class_code?: string | null
+          condition?: Json
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          isin?: string | null
+          last_triggered_at?: string | null
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          action?: Json
+          active?: boolean
+          class_code?: string | null
+          condition?: Json
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          isin?: string | null
+          last_triggered_at?: string | null
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fidc_classes: {
         Row: {
           classe: string
