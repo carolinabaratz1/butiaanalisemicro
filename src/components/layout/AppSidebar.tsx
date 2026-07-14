@@ -12,6 +12,7 @@ const mainItems = [
   { label: 'Dashboard',         icon: LayoutDashboard, path: '/' },
   { label: 'Posições',          icon: Briefcase,        path: '/posicoes' },
   { label: 'Emissores',         icon: Building2,        path: '/emissores' },
+  { label: 'Rating Resolver',   icon: Sparkles,         path: '/ratings/resolver' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
