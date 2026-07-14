@@ -1087,8 +1087,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_id_role_key ON public.user_rol
 -- ---------------------------------------------------------------------
 -- VIEWS
 -- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS public."trade_monitor_view" CASCADE;
 DROP VIEW IF EXISTS public."trade_monitor_view" CASCADE;
+DROP TABLE IF EXISTS public."trade_monitor_view" CASCADE;
 CREATE VIEW public."trade_monitor_view" AS
  SELECT m.ticker,
     m.indexador,
@@ -1130,8 +1130,8 @@ CREATE VIEW public."trade_monitor_view" AS
      LEFT JOIN trade_ativos a ON a.ticker = m.ticker;
 GRANT SELECT ON public."trade_monitor_view" TO authenticated;
 
-DROP TABLE IF EXISTS public."profiles_public" CASCADE;
 DROP VIEW IF EXISTS public."profiles_public" CASCADE;
+DROP TABLE IF EXISTS public."profiles_public" CASCADE;
 CREATE VIEW public."profiles_public" AS
  SELECT id,
     nome,
@@ -1140,8 +1140,8 @@ CREATE VIEW public."profiles_public" AS
    FROM profiles;
 GRANT SELECT ON public."profiles_public" TO authenticated;
 
-DROP TABLE IF EXISTS public."v_issuer_rating_current" CASCADE;
 DROP VIEW IF EXISTS public."v_issuer_rating_current" CASCADE;
+DROP TABLE IF EXISTS public."v_issuer_rating_current" CASCADE;
 CREATE VIEW public."v_issuer_rating_current" AS
  SELECT DISTINCT ON (cnpj) cnpj,
     rating,
