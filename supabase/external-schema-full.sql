@@ -19,8 +19,16 @@ CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpg
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 
 -- ---------------------------------------------------------------------
+-- SEQUENCES (must come before tables that reference them)
+-- ---------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS public.trade_ntnb_id_seq        AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+CREATE SEQUENCE IF NOT EXISTS public.trade_taxas_id_seq       AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+CREATE SEQUENCE IF NOT EXISTS public.trade_upload_log_id_seq  AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+
+-- ---------------------------------------------------------------------
 -- TABLES (columns + PK)
 -- ---------------------------------------------------------------------
+
 
 CREATE TABLE IF NOT EXISTS public."alert_rules" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -3064,3 +3072,10 @@ CREATE VIEW public."v_issuer_rating_current" AS
    FROM issuer_ratings
   ORDER BY cnpj, data_rating DESC NULLS LAST, created_at DESC;
 GRANT SELECT ON public."v_issuer_rating_current" TO authenticated;
+
+-- ---------------------------------------------------------------------
+-- SEQUENCE OWNERSHIP (attach sequences to their table columns)
+-- ---------------------------------------------------------------------
+ALTER SEQUENCE public.trade_ntnb_id_seq       OWNED BY public.trade_ntnb.id;
+ALTER SEQUENCE public.trade_taxas_id_seq      OWNED BY public.trade_taxas.id;
+ALTER SEQUENCE public.trade_upload_log_id_seq OWNED BY public.trade_upload_log.id;

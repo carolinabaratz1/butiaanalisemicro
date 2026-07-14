@@ -23,6 +23,11 @@ Auditoria completa de sintaxe SQL executada com o parser oficial do Postgres
      `trade_spread_agg_diario`, `trade_spread_historico`, `trade_taxas`,
      `trade_ticker_snapshot`, `trade_upload_log` (2 policies cada = 18 total).
 
+3. **Sequências ausentes (dependência de ordem)**
+   - Sintoma: `CREATE TABLE trade_ntnb ... DEFAULT nextval('trade_ntnb_id_seq'::regclass)` falha porque o exportador não emitiu `CREATE SEQUENCE`.
+   - Correção: adicionado bloco `CREATE SEQUENCE IF NOT EXISTS` **antes** das tabelas (bigint, start 1, increment 1) para: `trade_ntnb_id_seq`, `trade_taxas_id_seq`, `trade_upload_log_id_seq`. `ALTER SEQUENCE ... OWNED BY <tabela>.id` adicionado no final para vincular as sequências às colunas.
+
+
 ## Verificações realizadas
 
 - Parênteses balanceados em **todos os 758 statements** (checagem por statement respeitando dollar-quoting `$$...$$`).
