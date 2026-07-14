@@ -18,6 +18,7 @@ const mainItems = [
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
   { label: 'Trade Monitor',     icon: ArrowLeftRight,   path: '/trade' },
+  { label: 'Trade Activity',    icon: Activity,         path: '/trade/activity' },
   { label: 'Atualizar Dados',   icon: Upload,           path: '/trade/upload' },
   { label: 'FIDC Monitor',      icon: Activity,         path: '/fidc-monitor' },
 ];
