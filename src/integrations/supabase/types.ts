@@ -2047,6 +2047,138 @@ export type Database = {
         }
         Relationships: []
       }
+      rating_emission_history: {
+        Row: {
+          cnpj_emissor: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          isin: string
+          observacao: string | null
+          outlook: string | null
+          rating_date: string | null
+          rating_value: string
+          report_url: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj_emissor?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          isin: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj_emissor?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          isin?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value?: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rating_fidc_class_history: {
+        Row: {
+          class_code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          isin: string
+          observacao: string | null
+          outlook: string | null
+          rating_date: string | null
+          rating_value: string
+          report_url: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          class_code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          isin: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          class_code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          isin?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value?: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rating_issuer_history: {
+        Row: {
+          cnpj: string
+          created_at: string
+          created_by: string | null
+          id: string
+          observacao: string | null
+          outlook: string | null
+          rating_date: string | null
+          rating_value: string
+          report_url: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          observacao?: string | null
+          outlook?: string | null
+          rating_date?: string | null
+          rating_value?: string
+          report_url?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       setores: {
         Row: {
           ativo: boolean
@@ -2630,6 +2762,16 @@ export type Database = {
           data_rating: string
           rating: string
           source: string
+        }[]
+      }
+      get_resolved_rating_v2: {
+        Args: { p_class_code?: string; p_cnpj: string; p_isin?: string }
+        Returns: {
+          rating_date: string
+          rating_id: string
+          rating_value: string
+          source: string
+          source_level: string
         }[]
       }
       get_trade_summary: {
