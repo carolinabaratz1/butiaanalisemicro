@@ -19,8 +19,16 @@ CREATE OR REPLACE FUNCTION public.set_updated_at() RETURNS trigger LANGUAGE plpg
 BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
 
 -- ---------------------------------------------------------------------
+-- SEQUENCES (must come before tables that reference them)
+-- ---------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS public.trade_ntnb_id_seq        AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+CREATE SEQUENCE IF NOT EXISTS public.trade_taxas_id_seq       AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+CREATE SEQUENCE IF NOT EXISTS public.trade_upload_log_id_seq  AS bigint START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
+
+-- ---------------------------------------------------------------------
 -- TABLES (columns + PK)
 -- ---------------------------------------------------------------------
+
 
 CREATE TABLE IF NOT EXISTS public."alert_rules" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
