@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.get_resolved_rating_v2(text, text, text) FROM anon, PUBLIC;
