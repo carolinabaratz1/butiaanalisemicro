@@ -1547,7 +1547,9 @@ CREATE POLICY "Users can read own profile" ON public."profiles" AS PERMISSIVE FO
 DROP POLICY IF EXISTS "Users can update own safe fields" ON public."profiles";
 CREATE POLICY "Users can update own safe fields" ON public."profiles" AS PERMISSIVE FOR UPDATE TO authenticated
   USING ((auth.uid() = id))
-  WITH CHECK (((auth.uid() = id) AND (funcao = ( SELECT p.funcao);
+  WITH CHECK (((auth.uid() = id)
+    AND (funcao = (SELECT p.funcao FROM public.profiles p WHERE p.id = auth.uid()))
+    AND (status = (SELECT p.status FROM public.profiles p WHERE p.id = auth.uid()))));
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles_public" TO authenticated;
 GRANT ALL ON public."profiles_public" TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_emission_history" TO authenticated;
