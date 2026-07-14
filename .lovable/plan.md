@@ -1,140 +1,126 @@
 
-# Evolução da seção Emissores — Visão de Gestor
+# Roadmap — Rating System 3 Níveis + Dashboards (8 Fases)
 
-Objetivo: transformar Emissores em uma tela de gestão orientada à ação (exposição, análise, limite, alertas), mantendo CNPJ normalizado como chave principal do emissor e ticker apenas no nível de ativo. Nada é alterado em BASE LOTE 45, FIDC Monitor ou Posições.
+Plano macro/referência. Cada fase será executada como um prompt separado depois — aqui fica o "esqueleto" com decisões já tomadas.
 
----
-
-## 1. Backend (migrations + views)
-
-### 1.1. Nova tabela `issuer_limits`
-Camada de limites por emissor (reaproveitando padrão do Trade Monitor onde já existe).
-
-- `id uuid pk`
-- `cnpj_emissor text not null` (normalizado, dígitos)
-- `grupo_economico text`
-- `limit_value numeric` (R$)
-- `limit_pct_nav numeric` (% do PL)
-- `limit_type text` ('valor' | 'percentual' | 'ambos')
-- `effective_from date`, `effective_to date`
-- `approved_by text`, `committee_date date`
-- `source text`, `notes text`
-- `created_at`, `updated_at`
-- Índice em `cnpj_emissor`
-- RLS: leitura para autenticados; escrita para Gestor + Risco e Compliance
-- GRANTs conforme padrão do projeto
-
-### 1.2. View / RPC `get_emissores_gestao(p_val_date date default null)`
-Retorna uma linha por CNPJ normalizado consolidando:
-
-- Identidade: `cnpj`, `nome`, `grupo_economico`, `setor`
-- Rating resolvido via `get_resolved_rating(cnpj)` (mantém hierarquia CNPJ > Grupo)
-- Análise vigente: `analise_id`, `status_analise`, `recomendacao`, `analista_id`, `analista_nome`, `data_validade`, `is_vencida`
-- Exposição (BASE LOTE 45 na última val_date por fundo):
-  - `exposure_total`, `funds_count`, `funds_list jsonb`
-  - `largest_fund`, `largest_fund_value`, `largest_fund_pct`
-  - `consolidated_pct` = total / soma PL dos fundos onde aparece
-- Limite: `limit_value`, `limit_pct_nav`, `usage_ratio`, `limit_status`
-- Flags de governança: `sem_cnpj`, `sem_grupo`, `sem_setor`, `sem_rating`, `sem_analise`, `sem_limite`, `analise_vencida_com_posicao`, `acima_do_limite`, `proximo_do_limite`, `cadastro_incompleto`
-- `alerts jsonb` — lista consolidada de alertas com severidade
-
-A função é `SECURITY DEFINER`, `STABLE`, usa CTEs para não estourar timeout.
+**Decisões travadas:**
+- Opção **B + backfill** do `issuer_ratings` atual.
+- Nova RPC com **nome novo** (`get_resolved_rating_v2`). A `get_resolved_rating(p_cnpj, p_ticker)` atual **fica intocada** — RatingBadge, `useResolvedRating`, `useEmissoresGestao`, `get_emissores_gestao` continuam funcionando.
+- Convivência: UI antiga = função antiga; componentes novos = v2.
 
 ---
 
-## 2. Frontend — Tabela principal `/emissores`
+## Fase 1 — Schema base de ratings (migration)
 
-### 2.1. Cards de resumo (10)
-Grid responsivo no topo. Cada card respeita filtros ativos:
-Exposição total, Emissores com posição, Análise vencida, Exposição vencida, Sem análise, Exposição sem análise, Sem limite, Acima do limite, Próximo do limite, Alerta crítico.
+Criar 3 tabelas em `public`, todas com `id uuid PK`, `rating_value text`, `rating_date date`, `source text` (agência), `created_at`, `updated_at`, trigger `set_updated_at`, GRANT `authenticated`/`service_role`, RLS habilitado.
 
-### 2.2. Filtros
-Barra de filtros compacta (Popover com seções):
-- Busca (emissor / CNPJ / grupo)
-- Selects: Grupo, Setor, Rating, Status Análise, Recomendação, Analista, Fundo
-- Toggles tri-state: Com posição, Análise vencida, Com limite, Acima do limite, Próximo do limite, Com alerta
-- Select "Ação necessária" (multi): análise vencida, sem análise, sem limite, acima do limite, próximo do limite, rating ausente, CNPJ não mapeado, cadastro incompleto
+- `rating_issuer_history (cnpj text)` — índice `(cnpj, rating_date DESC)`
+- `rating_emission_history (isin text, cnpj_emissor text)` — índice `(isin, rating_date DESC)`
+- `rating_fidc_class_history (isin text, class_code text)` — índice `(isin, class_code, rating_date DESC)`
 
-### 2.3. Nova tabela
-Colunas (sem ticker): Emissor, CNPJ, Grupo, Setor, Rating (`<RatingBadge/>`), Status Análise, Recomendação, Exposição Total, % PL Consolidado, Fundos, Maior Fundo, % PL Maior Fundo, Limite, Uso do Limite (barra colorida), Próx. Vencimento Análise, Analista, Alertas (ícones + tooltip), Ações.
+**RLS**: leitura para `authenticated`; escrita restrita a Gestor + Coordenação/Especialista via `has_role`.
 
-Ordenação, exportação XLSX, densidade compacta.
+## Fase 2 — RPC `get_resolved_rating_v2`
+
+```
+get_resolved_rating_v2(p_cnpj text, p_isin text DEFAULT NULL, p_class_code text DEFAULT NULL)
+returns (rating_value text, source_level text, rating_date date, rating_id uuid)
+```
+
+Precedência (mais específico → mais genérico):
+1. `rating_fidc_class_history` por `(isin, class_code)` — `source_level='fidc_class'`
+2. `rating_emission_history` por `isin` — `source_level='emission'`
+3. `rating_issuer_history` por `cnpj` — `source_level='issuer'`
+
+Cada nível ordena por `rating_date DESC, created_at DESC LIMIT 1`. `SECURITY DEFINER`, `search_path=public`.
+
+## Fase 3 — Backfill dos ratings legados
+
+Popular `rating_issuer_history` a partir de `public.issuer_ratings` (todos os registros históricos, não só o corrente): `cnpj → cnpj`, `rating → rating_value`, `data_rating → rating_date`, `agencia → source`. Uma migration idempotente (com `ON CONFLICT`/dedupe).
+
+Opcional (documentado, não implementado nesta fase): popular `rating_emission_history` a partir de `trade_ativos.rating` quando houver ISIN em `emissoes` — deixar como follow-up para não acoplar demais.
+
+## Fase 4 — Componente `RatingResolver` (35h)
+
+Página/componente autônomo em `src/components/ratings/RatingResolver.tsx`:
+- Form: CNPJ (14 dígitos, validado), ISIN opcional (12 alfa-num), Class Code opcional.
+- `useQuery` → `supabase.rpc('get_resolved_rating_v2', …)`.
+- Card grande com `rating_value`, badge de `source_level` (cor por nível), data.
+- Histórico: últimas 5 linhas da tabela correspondente ao nível resolvido.
+- Estados: loading, erro, "sem rating".
+- Botão "Exportar JSON".
+
+Não substitui `RatingBadge` — vive em paralelo, acessível por rota nova (ex.: `/ratings/resolver`).
+
+## Fase 5 — Positions Dashboard (40h)
+
+Novo dashboard em `src/pages/PositionsMonitorPage.tsx` sobre `posicoes` + `emissoes` + `trade_ativos`, resolvendo rating por linha via `get_resolved_rating_v2(cnpj_emissor, isin, null)` em batch (padrão `resolveRatingsBatch`).
+
+- Grid paginado (50/pág): Asset, Qty, Unit Price, Total, Rating (badge v2), Data, ações.
+- Filtros laterais: asset, rating, data range, valor.
+- KPIs topo + pie por rating.
+- Export CSV.
+
+Não mexe na `PosicoesPage` existente — página nova.
+
+## Fase 6 — Trade Monitor Dashboard (30h)
+
+Consolidar/estender `TradeMonitorPage`:
+- LineChart 30d de taxa/volume/rendimento por ativo (Recharts).
+- Últimas 20 operações com cores por tipo/status.
+- Cards resumo (ops, volume, taxa média, top ativo).
+- Filtros: ativo multi, data, tipo, status.
+- Export CSV do período.
+
+Fontes: `trade_taxas`, `trade_metricas`, `trade_ativos`.
+
+## Fase 7 — FIDC Alert Rules Engine (45h)
+
+Nova tabela `fidc_alert_rules` (nome, isin, class_code, condição JSON, ação, ativo, criado_por, last_triggered_at) + `fidc_alert_events` (log).
+Trigger de disparo: edge function `fidc-rating-alert-check` acionada por cron (pg_cron + pg_net) após atualizações de `rating_fidc_class_history`.
+
+UI (`src/pages/fidc/AlertasEnginePage.tsx`):
+- CRUD de regras.
+- Dashboard de alertas 30d + filtros.
+- Simulador ("testar regra" sem persistir).
+- Histórico + gráfico de frequência.
+
+RLS: Gestor/Risco escrevem; Analista lê.
+
+## Fase 8 — Analytics Dashboard + Excel Export (35h)
+
+`src/pages/AnalyticsPage.tsx` com 4 tabs (Ratings / Positions / Emissões / Compliance):
+- Recharts: pie, line, heatmap, stacked bar, scatter, timeline.
+- Filtros globais (data, rating, empresas) propagados a todas as tabs.
+- Export XLSX multi-aba com SheetJS (`xlsx`), incluindo resumo executivo.
+- Agregações no backend via RPCs `analytics_*` para evitar puxar linhas cruas.
 
 ---
 
-## 3. Página individual `/emissores/:cnpj`
+## Coexistência com o código atual
 
-### 3.1. Header enriquecido
-Nome, CNPJ, Grupo, Setor, RatingBadge, Status Análise, Recomendação, Exposição atual, Uso do limite, Próximo vencimento da análise.
+```text
+UI antiga (Emissores, RatingBadge, useResolvedRating, useEmissoresGestao)
+   └── continua usando get_resolved_rating(p_cnpj, p_ticker) + issuer_ratings/trade_ativos.rating
 
-### 3.2. Aba "Visão Geral" (aprimorada)
-10 cards + 4 gráficos: Exposição por fundo (bar), Evolução da exposição (line, últimas val_dates), Vencimentos por ano (bar), Distribuição por tipo de ativo (pie).
+UI nova (Fases 4–8)
+   └── usa get_resolved_rating_v2 + rating_*_history
+```
 
-### 3.3. Aba **nova**: "Limites e Enquadramento"
-- Painel resumo: Limite, Exposição, Uso, Folga, Status, Fonte, Data, Comitê, Observações
-- Tabela por fundo: exposição, %PL, target (se existir), limite máximo, folga, status
-- Gráfico de barras comparando exposição × target × limite por fundo
-- Botão "Editar limite" (Gestor/Risco) abre dialog CRUD em `issuer_limits`
-- Histórico de limites (versões anteriores)
+Após Fase 8 estabilizar, decisão futura (não neste plano): migrar UI antiga para v2 e depreciar a v1.
 
-### 3.4. Aba **nova**: "Agenda e Pendências"
-Lista derivada dos alertas + validade da análise: Pendência, Responsável, Prazo, Prioridade (alta/média/baixa por regra), Status, Observações, Ações (ex.: "Abrir análise", "Cadastrar limite").
+## Detalhes técnicos importantes
 
-### 3.5. Aba "Rating e Mercado" (renomeada de Histórico de Rating)
-- Rating atual (CNPJ) + agência + fonte + data
-- Histórico da tabela `issuer_ratings`
-- Tickers/ativos relacionados (via `emissoes` e `trade_ativos`)
-- Spread médio (join com `trade_metricas` quando disponível)
+- Todas as migrations seguem o padrão do projeto: `CREATE TABLE → GRANT → ENABLE RLS → CREATE POLICY`, trigger `set_updated_at`, `search_path=public` em funções.
+- Nenhuma alteração em `src/integrations/supabase/client.ts`, `types.ts`, `.env`, `config.toml`.
+- Backfill roda via `supabase--insert` (dados), migrations só para DDL.
+- Edge function da Fase 7 usa CORS padrão + validação Zod, agendada via `pg_cron`+`pg_net`.
+- Sem dados mock — tudo lê `posicoes`, `emissoes`, `trade_*`, `rating_*_history` reais.
 
-### 3.6. Aba "Ativos em Carteira" (mantida, enriquecida)
-Colunas: Ticker, Ativo, Tipo, ISIN, Fundo, Valor, %PL, Taxa, Vencimento, Duration, Rating emissor, Status análise, Recomendação.
+## Ordem de execução sugerida
 
-### 3.7. Aba "Análises" (mantida)
-Fluxo atual preservado.
+1. Fases 1 + 2 + 3 numa mesma rodada (migration única + insert de backfill).
+2. Fase 4 (valida a RPC v2 ponta-a-ponta).
+3. Fases 5 → 6 → 7 → 8 uma a uma, cada uma com seu próprio plano detalhado.
 
----
-
-## 4. Governança de dados
-Diagnósticos gerados pela mesma RPC alimentam:
-- Cards de resumo
-- Filtro "Ação necessária"
-- Aba Agenda e Pendências
-
----
-
-## 5. Arquivos afetados
-
-**Novos**
-- `supabase/migrations/<ts>_issuer_limits_and_gestao_rpc.sql`
-- `src/hooks/useEmissoresGestao.ts`
-- `src/components/emissores/EmissoresSummaryCards.tsx`
-- `src/components/emissores/EmissoresFilters.tsx`
-- `src/components/emissores/EmissoresTable.tsx` (nova, substitui a renderização atual)
-- `src/components/emissores/LimitUsageBar.tsx`
-- `src/components/emissores/AlertBadges.tsx`
-- `src/components/emissores/detail/LimitesEnquadramentoTab.tsx`
-- `src/components/emissores/detail/AgendaPendenciasTab.tsx`
-- `src/components/emissores/detail/RatingMercadoTab.tsx`
-- `src/components/emissores/detail/IssuerLimitDialog.tsx`
-
-**Editados**
-- `src/pages/EmpresasPage.tsx` — troca tabela por versão gestão, cards e filtros
-- `src/pages/EmpresaDetailPage.tsx` — reorganiza abas, header enriquecido, cards
-- Ajustes leves em componentes existentes de análises/ativos apenas para exibir status/recomendação já disponíveis
-
-**Não tocar**
-- Upload BASE LOTE 45, importadores, FIDC Monitor, Posições, `src/integrations/supabase/*`.
-
----
-
-## 6. Ordem de implementação
-1. Migration: `issuer_limits` + RPC `get_emissores_gestao`
-2. Hook + tabela principal + cards + filtros
-3. Header e Visão Geral aprimorada
-4. Aba Limites e Enquadramento + dialog
-5. Aba Agenda e Pendências
-6. Aba Rating e Mercado
-7. Enriquecer Ativos em Carteira
-8. Validar critérios de aceite
-
-Escopo grande — proponho executar em duas entregas: **(A)** backend + tabela principal + cards/filtros; **(B)** página individual completa (abas novas). Confirma para eu começar pela entrega A?
+Quando quiser iniciar, me diga "toca Fase 1-3" (ou a fase alvo) e eu abro um plano específico já com SQL/arquivos.
