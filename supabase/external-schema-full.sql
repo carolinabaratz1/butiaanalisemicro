@@ -1139,593 +1139,6 @@ CREATE INDEX IF NOT EXISTS idx_trade_taxas_data ON public.trade_taxas USING btre
 CREATE INDEX IF NOT EXISTS idx_trade_taxas_ticker_data ON public.trade_taxas USING btree (ticker, data DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS user_roles_user_id_role_key ON public.user_roles USING btree (user_id, role);
 
--- GRANTS + RLS + POLICIES
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."alert_rules" TO authenticated;
-GRANT ALL ON public."alert_rules" TO service_role;
-ALTER TABLE public."alert_rules" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_ar read" ON public."alert_rules";
-CREATE POLICY "fidc_ar read" ON public."alert_rules" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_ar write" ON public."alert_rules";
-CREATE POLICY "fidc_ar write" ON public."alert_rules" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."alerts" TO authenticated;
-GRANT ALL ON public."alerts" TO service_role;
-ALTER TABLE public."alerts" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_al read" ON public."alerts";
-CREATE POLICY "fidc_al read" ON public."alerts" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_al write" ON public."alerts";
-CREATE POLICY "fidc_al write" ON public."alerts" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_limits" TO authenticated;
-GRANT ALL ON public."allocation_limits" TO service_role;
-ALTER TABLE public."allocation_limits" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read allocation_limits" ON public."allocation_limits";
-CREATE POLICY "Authenticated read allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete allocation_limits" ON public."allocation_limits";
-CREATE POLICY "Gestor delete allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor insert allocation_limits" ON public."allocation_limits";
-CREATE POLICY "Gestor insert allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor update allocation_limits" ON public."allocation_limits";
-CREATE POLICY "Gestor update allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_target_periods" TO authenticated;
-GRANT ALL ON public."allocation_target_periods" TO service_role;
-ALTER TABLE public."allocation_target_periods" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read target_periods" ON public."allocation_target_periods";
-CREATE POLICY "Authenticated read target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete target_periods" ON public."allocation_target_periods";
-CREATE POLICY "Gestor delete target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers insert target_periods" ON public."allocation_target_periods";
-CREATE POLICY "Writers insert target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "Writers update target_periods" ON public."allocation_target_periods";
-CREATE POLICY "Writers update target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets" TO authenticated;
-GRANT ALL ON public."allocation_targets" TO service_role;
-ALTER TABLE public."allocation_targets" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read allocation_targets" ON public."allocation_targets";
-CREATE POLICY "Authenticated read allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete allocation_targets" ON public."allocation_targets";
-CREATE POLICY "Gestor delete allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers insert allocation_targets" ON public."allocation_targets";
-CREATE POLICY "Writers insert allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "Writers update allocation_targets" ON public."allocation_targets";
-CREATE POLICY "Writers update allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets_emissor" TO authenticated;
-GRANT ALL ON public."allocation_targets_emissor" TO service_role;
-ALTER TABLE public."allocation_targets_emissor" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read targets_emissor" ON public."allocation_targets_emissor";
-CREATE POLICY "Authenticated read targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete targets_emissor" ON public."allocation_targets_emissor";
-CREATE POLICY "Gestor delete targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers insert targets_emissor" ON public."allocation_targets_emissor";
-CREATE POLICY "Writers insert targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "Writers update targets_emissor" ON public."allocation_targets_emissor";
-CREATE POLICY "Writers update targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets_setor" TO authenticated;
-GRANT ALL ON public."allocation_targets_setor" TO service_role;
-ALTER TABLE public."allocation_targets_setor" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read allocation_targets_setor" ON public."allocation_targets_setor";
-CREATE POLICY "Authenticated read allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete allocation_targets_setor" ON public."allocation_targets_setor";
-CREATE POLICY "Gestor delete allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor insert allocation_targets_setor" ON public."allocation_targets_setor";
-CREATE POLICY "Gestor insert allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor update allocation_targets_setor" ON public."allocation_targets_setor";
-CREATE POLICY "Gestor update allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."analises" TO authenticated;
-GRANT ALL ON public."analises" TO service_role;
-ALTER TABLE public."analises" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated users can read analises" ON public."analises";
-CREATE POLICY "Authenticated users can read analises" ON public."analises" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Only Gestor can delete analises" ON public."analises";
-CREATE POLICY "Only Gestor can delete analises" ON public."analises" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers can insert analises" ON public."analises";
-CREATE POLICY "Writers can insert analises" ON public."analises" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can update analises" ON public."analises";
-CREATE POLICY "Writers can update analises" ON public."analises" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleia_participacoes" TO authenticated;
-GRANT ALL ON public."assembleia_participacoes" TO service_role;
-ALTER TABLE public."assembleia_participacoes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read participacoes" ON public."assembleia_participacoes";
-CREATE POLICY "Authenticated read participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers delete participacoes" ON public."assembleia_participacoes";
-CREATE POLICY "Writers delete participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers insert participacoes" ON public."assembleia_participacoes";
-CREATE POLICY "Writers insert participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers update participacoes" ON public."assembleia_participacoes";
-CREATE POLICY "Writers update participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleia_upload_log" TO authenticated;
-GRANT ALL ON public."assembleia_upload_log" TO service_role;
-ALTER TABLE public."assembleia_upload_log" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read upload log" ON public."assembleia_upload_log";
-CREATE POLICY "Authenticated read upload log" ON public."assembleia_upload_log" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers insert upload log" ON public."assembleia_upload_log";
-CREATE POLICY "Writers insert upload log" ON public."assembleia_upload_log" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleias" TO authenticated;
-GRANT ALL ON public."assembleias" TO service_role;
-ALTER TABLE public."assembleias" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated can read assembleias" ON public."assembleias";
-CREATE POLICY "Authenticated can read assembleias" ON public."assembleias" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor can delete assembleias" ON public."assembleias";
-CREATE POLICY "Gestor can delete assembleias" ON public."assembleias" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers can insert assembleias" ON public."assembleias";
-CREATE POLICY "Writers can insert assembleias" ON public."assembleias" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can update assembleias" ON public."assembleias";
-CREATE POLICY "Writers can update assembleias" ON public."assembleias" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."credit_opinions" TO authenticated;
-GRANT ALL ON public."credit_opinions" TO service_role;
-ALTER TABLE public."credit_opinions" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_op read" ON public."credit_opinions";
-CREATE POLICY "fidc_op read" ON public."credit_opinions" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_op write" ON public."credit_opinions";
-CREATE POLICY "fidc_op write" ON public."credit_opinions" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write_opinion(auth.uid()))
-  WITH CHECK (fidc_can_write_opinion(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_data_dictionary" TO authenticated;
-GRANT ALL ON public."cvm_data_dictionary" TO service_role;
-ALTER TABLE public."cvm_data_dictionary" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "cvm_dict_read_auth" ON public."cvm_data_dictionary";
-CREATE POLICY "cvm_dict_read_auth" ON public."cvm_data_dictionary" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "cvm_dict_write_admin" ON public."cvm_data_dictionary";
-CREATE POLICY "cvm_dict_write_admin" ON public."cvm_data_dictionary" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_fidc_field_mapping" TO authenticated;
-GRANT ALL ON public."cvm_fidc_field_mapping" TO service_role;
-ALTER TABLE public."cvm_fidc_field_mapping" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "cvm_map_read_auth" ON public."cvm_fidc_field_mapping";
-CREATE POLICY "cvm_map_read_auth" ON public."cvm_fidc_field_mapping" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "cvm_map_write_admin" ON public."cvm_fidc_field_mapping";
-CREATE POLICY "cvm_map_write_admin" ON public."cvm_fidc_field_mapping" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_monthly_import_staging" TO authenticated;
-GRANT ALL ON public."cvm_monthly_import_staging" TO service_role;
-ALTER TABLE public."cvm_monthly_import_staging" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "cvm_stg_read_auth" ON public."cvm_monthly_import_staging";
-CREATE POLICY "cvm_stg_read_auth" ON public."cvm_monthly_import_staging" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "cvm_stg_write_admin" ON public."cvm_monthly_import_staging";
-CREATE POLICY "cvm_stg_write_admin" ON public."cvm_monthly_import_staging" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."emissoes" TO authenticated;
-GRANT ALL ON public."emissoes" TO service_role;
-ALTER TABLE public."emissoes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated users can read emissoes" ON public."emissoes";
-CREATE POLICY "Authenticated users can read emissoes" ON public."emissoes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers can delete emissoes" ON public."emissoes";
-CREATE POLICY "Writers can delete emissoes" ON public."emissoes" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can insert emissoes" ON public."emissoes";
-CREATE POLICY "Writers can insert emissoes" ON public."emissoes" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can update emissoes" ON public."emissoes";
-CREATE POLICY "Writers can update emissoes" ON public."emissoes" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."empresas" TO authenticated;
-GRANT ALL ON public."empresas" TO service_role;
-ALTER TABLE public."empresas" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated users can read empresas" ON public."empresas";
-CREATE POLICY "Authenticated users can read empresas" ON public."empresas" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers can insert empresas" ON public."empresas";
-CREATE POLICY "Writers can insert empresas" ON public."empresas" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can update empresas" ON public."empresas";
-CREATE POLICY "Writers can update empresas" ON public."empresas" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_alert_events" TO authenticated;
-GRANT ALL ON public."fidc_alert_events" TO service_role;
-ALTER TABLE public."fidc_alert_events" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Autenticados leem eventos de alerta" ON public."fidc_alert_events";
-CREATE POLICY "Autenticados leem eventos de alerta" ON public."fidc_alert_events" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_alert_rules" TO authenticated;
-GRANT ALL ON public."fidc_alert_rules" TO service_role;
-ALTER TABLE public."fidc_alert_rules" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Autenticados leem regras de alerta" ON public."fidc_alert_rules";
-CREATE POLICY "Autenticados leem regras de alerta" ON public."fidc_alert_rules" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor/Coordenação apagam regras" ON public."fidc_alert_rules";
-CREATE POLICY "Gestor/Coordenação apagam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "Gestor/Coordenação atualizam regras" ON public."fidc_alert_rules";
-CREATE POLICY "Gestor/Coordenação atualizam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "Gestor/Coordenação criam regras" ON public."fidc_alert_rules";
-CREATE POLICY "Gestor/Coordenação criam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_classes" TO authenticated;
-GRANT ALL ON public."fidc_classes" TO service_role;
-ALTER TABLE public."fidc_classes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read fidc_classes" ON public."fidc_classes";
-CREATE POLICY "Authenticated read fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete fidc_classes" ON public."fidc_classes";
-CREATE POLICY "Gestor delete fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Writers insert fidc_classes" ON public."fidc_classes";
-CREATE POLICY "Writers insert fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers update fidc_classes" ON public."fidc_classes";
-CREATE POLICY "Writers update fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_quota_classes" TO authenticated;
-GRANT ALL ON public."fidc_monthly_quota_classes" TO service_role;
-ALTER TABLE public."fidc_monthly_quota_classes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_mqc read" ON public."fidc_monthly_quota_classes";
-CREATE POLICY "fidc_mqc read" ON public."fidc_monthly_quota_classes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_mqc write" ON public."fidc_monthly_quota_classes";
-CREATE POLICY "fidc_mqc write" ON public."fidc_monthly_quota_classes" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_reports" TO authenticated;
-GRANT ALL ON public."fidc_monthly_reports" TO service_role;
-ALTER TABLE public."fidc_monthly_reports" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_rep read" ON public."fidc_monthly_reports";
-CREATE POLICY "fidc_rep read" ON public."fidc_monthly_reports" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_rep write" ON public."fidc_monthly_reports";
-CREATE POLICY "fidc_rep write" ON public."fidc_monthly_reports" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_segments" TO authenticated;
-GRANT ALL ON public."fidc_monthly_segments" TO service_role;
-ALTER TABLE public."fidc_monthly_segments" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_monthly_segments_select" ON public."fidc_monthly_segments";
-CREATE POLICY "fidc_monthly_segments_select" ON public."fidc_monthly_segments" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_monthly_segments_write" ON public."fidc_monthly_segments";
-CREATE POLICY "fidc_monthly_segments_write" ON public."fidc_monthly_segments" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_quota_classes" TO authenticated;
-GRANT ALL ON public."fidc_quota_classes" TO service_role;
-ALTER TABLE public."fidc_quota_classes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_qc read" ON public."fidc_quota_classes";
-CREATE POLICY "fidc_qc read" ON public."fidc_quota_classes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_qc write" ON public."fidc_quota_classes";
-CREATE POLICY "fidc_qc write" ON public."fidc_quota_classes" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_rating_history" TO authenticated;
-GRANT ALL ON public."fidc_rating_history" TO service_role;
-ALTER TABLE public."fidc_rating_history" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_rat read" ON public."fidc_rating_history";
-CREATE POLICY "fidc_rat read" ON public."fidc_rating_history" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_rat write" ON public."fidc_rating_history";
-CREATE POLICY "fidc_rat write" ON public."fidc_rating_history" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_subordination_limits" TO authenticated;
-GRANT ALL ON public."fidc_subordination_limits" TO service_role;
-ALTER TABLE public."fidc_subordination_limits" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc_sublim_select_auth" ON public."fidc_subordination_limits";
-CREATE POLICY "fidc_sublim_select_auth" ON public."fidc_subordination_limits" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc_sublim_write_roles" ON public."fidc_subordination_limits";
-CREATE POLICY "fidc_sublim_write_roles" ON public."fidc_subordination_limits" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidcs" TO authenticated;
-GRANT ALL ON public."fidcs" TO service_role;
-ALTER TABLE public."fidcs" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "fidc read" ON public."fidcs";
-CREATE POLICY "fidc read" ON public."fidcs" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "fidc write" ON public."fidcs";
-CREATE POLICY "fidc write" ON public."fidcs" AS PERMISSIVE FOR ALL TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."issuer_limits" TO authenticated;
-GRANT ALL ON public."issuer_limits" TO service_role;
-ALTER TABLE public."issuer_limits" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read issuer_limits" ON public."issuer_limits";
-CREATE POLICY "Authenticated read issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor/Risco delete issuer_limits" ON public."issuer_limits";
-CREATE POLICY "Gestor/Risco delete issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
-DROP POLICY IF EXISTS "Gestor/Risco insert issuer_limits" ON public."issuer_limits";
-CREATE POLICY "Gestor/Risco insert issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
-DROP POLICY IF EXISTS "Gestor/Risco update issuer_limits" ON public."issuer_limits";
-CREATE POLICY "Gestor/Risco update issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."issuer_ratings" TO authenticated;
-GRANT ALL ON public."issuer_ratings" TO service_role;
-ALTER TABLE public."issuer_ratings" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "issuer_ratings_delete_writers" ON public."issuer_ratings";
-CREATE POLICY "issuer_ratings_delete_writers" ON public."issuer_ratings" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (fidc_can_write(auth.uid()));
-DROP POLICY IF EXISTS "issuer_ratings_insert_writers" ON public."issuer_ratings";
-CREATE POLICY "issuer_ratings_insert_writers" ON public."issuer_ratings" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (fidc_can_write(auth.uid()));
-DROP POLICY IF EXISTS "issuer_ratings_select_authenticated" ON public."issuer_ratings";
-CREATE POLICY "issuer_ratings_select_authenticated" ON public."issuer_ratings" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "issuer_ratings_update_writers" ON public."issuer_ratings";
-CREATE POLICY "issuer_ratings_update_writers" ON public."issuer_ratings" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (fidc_can_write(auth.uid()))
-  WITH CHECK (fidc_can_write(auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."mfa_reset_log" TO authenticated;
-GRANT ALL ON public."mfa_reset_log" TO service_role;
-ALTER TABLE public."mfa_reset_log" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Gestor e Risco veem logs de MFA" ON public."mfa_reset_log";
-CREATE POLICY "Gestor e Risco veem logs de MFA" ON public."mfa_reset_log" AS PERMISSIVE FOR SELECT TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."pipeline_eventos" TO authenticated;
-GRANT ALL ON public."pipeline_eventos" TO service_role;
-ALTER TABLE public."pipeline_eventos" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Leitura autenticados" ON public."pipeline_eventos";
-CREATE POLICY "Leitura autenticados" ON public."pipeline_eventos" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers can insert pipeline_eventos" ON public."pipeline_eventos";
-CREATE POLICY "Writers can insert pipeline_eventos" ON public."pipeline_eventos" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."posicoes" TO authenticated;
-GRANT ALL ON public."posicoes" TO service_role;
-ALTER TABLE public."posicoes" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated users can read posicoes" ON public."posicoes";
-CREATE POLICY "Authenticated users can read posicoes" ON public."posicoes" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Writers can delete posicoes" ON public."posicoes";
-CREATE POLICY "Writers can delete posicoes" ON public."posicoes" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can insert posicoes" ON public."posicoes";
-CREATE POLICY "Writers can insert posicoes" ON public."posicoes" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-DROP POLICY IF EXISTS "Writers can update posicoes" ON public."posicoes";
-CREATE POLICY "Writers can update posicoes" ON public."posicoes" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles" TO authenticated;
-GRANT ALL ON public."profiles" TO service_role;
-ALTER TABLE public."profiles" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Gestor can insert profiles" ON public."profiles";
-CREATE POLICY "Gestor can insert profiles" ON public."profiles" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor can read all profiles" ON public."profiles";
-CREATE POLICY "Gestor can read all profiles" ON public."profiles" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor can update any profile" ON public."profiles";
-CREATE POLICY "Gestor can update any profile" ON public."profiles" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Users can read own profile" ON public."profiles";
-CREATE POLICY "Users can read own profile" ON public."profiles" AS PERMISSIVE FOR SELECT TO authenticated
-  USING ((auth.uid() = id));
-DROP POLICY IF EXISTS "Users can update own safe fields" ON public."profiles";
-CREATE POLICY "Users can update own safe fields" ON public."profiles" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((auth.uid() = id))
-  WITH CHECK (((auth.uid() = id)
-    AND (funcao = (SELECT p.funcao FROM public.profiles p WHERE p.id = auth.uid()))
-    AND (status = (SELECT p.status FROM public.profiles p WHERE p.id = auth.uid()))));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles_public" TO authenticated;
-GRANT ALL ON public."profiles_public" TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_emission_history" TO authenticated;
-GRANT ALL ON public."rating_emission_history" TO service_role;
-ALTER TABLE public."rating_emission_history" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "rating_emission_history_delete_managers" ON public."rating_emission_history";
-CREATE POLICY "rating_emission_history_delete_managers" ON public."rating_emission_history" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_emission_history_read_authenticated" ON public."rating_emission_history";
-CREATE POLICY "rating_emission_history_read_authenticated" ON public."rating_emission_history" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "rating_emission_history_update_managers" ON public."rating_emission_history";
-CREATE POLICY "rating_emission_history_update_managers" ON public."rating_emission_history" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_emission_history_write_managers" ON public."rating_emission_history";
-CREATE POLICY "rating_emission_history_write_managers" ON public."rating_emission_history" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_fidc_class_history" TO authenticated;
-GRANT ALL ON public."rating_fidc_class_history" TO service_role;
-ALTER TABLE public."rating_fidc_class_history" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "rating_fidc_class_history_delete_managers" ON public."rating_fidc_class_history";
-CREATE POLICY "rating_fidc_class_history_delete_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_fidc_class_history_read_authenticated" ON public."rating_fidc_class_history";
-CREATE POLICY "rating_fidc_class_history_read_authenticated" ON public."rating_fidc_class_history" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "rating_fidc_class_history_update_managers" ON public."rating_fidc_class_history";
-CREATE POLICY "rating_fidc_class_history_update_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_fidc_class_history_write_managers" ON public."rating_fidc_class_history";
-CREATE POLICY "rating_fidc_class_history_write_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_issuer_history" TO authenticated;
-GRANT ALL ON public."rating_issuer_history" TO service_role;
-ALTER TABLE public."rating_issuer_history" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "rating_issuer_history_delete_managers" ON public."rating_issuer_history";
-CREATE POLICY "rating_issuer_history_delete_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR DELETE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_issuer_history_read_authenticated" ON public."rating_issuer_history";
-CREATE POLICY "rating_issuer_history_read_authenticated" ON public."rating_issuer_history" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "rating_issuer_history_update_managers" ON public."rating_issuer_history";
-CREATE POLICY "rating_issuer_history_update_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-DROP POLICY IF EXISTS "rating_issuer_history_write_managers" ON public."rating_issuer_history";
-CREATE POLICY "rating_issuer_history_write_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."setores" TO authenticated;
-GRANT ALL ON public."setores" TO service_role;
-ALTER TABLE public."setores" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Authenticated read setores" ON public."setores";
-CREATE POLICY "Authenticated read setores" ON public."setores" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (true);
-DROP POLICY IF EXISTS "Gestor delete setores" ON public."setores";
-CREATE POLICY "Gestor delete setores" ON public."setores" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor insert setores" ON public."setores";
-CREATE POLICY "Gestor insert setores" ON public."setores" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Gestor update setores" ON public."setores";
-CREATE POLICY "Gestor update setores" ON public."setores" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ativos" TO authenticated;
-GRANT ALL ON public."trade_ativos" TO service_role;
-ALTER TABLE public."trade_ativos" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ativos";
-CREATE POLICY "read_authenticated" ON public."trade_ativos" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_ativos";
-CREATE POLICY "write_service_role" ON public."trade_ativos" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ipca_ref" TO authenticated;
-GRANT ALL ON public."trade_ipca_ref" TO service_role;
-ALTER TABLE public."trade_ipca_ref" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ipca_ref";
-CREATE POLICY "read_authenticated" ON public."trade_ipca_ref" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_ipca_ref";
-CREATE POLICY "write_service_role" ON public."trade_ipca_ref" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_metricas" TO authenticated;
-GRANT ALL ON public."trade_metricas" TO service_role;
-ALTER TABLE public."trade_metricas" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_metricas";
-CREATE POLICY "read_authenticated" ON public."trade_metricas" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_metricas";
-CREATE POLICY "write_service_role" ON public."trade_metricas" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_monitor_view" TO authenticated;
-GRANT ALL ON public."trade_monitor_view" TO service_role;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ntnb" TO authenticated;
-GRANT ALL ON public."trade_ntnb" TO service_role;
-ALTER TABLE public."trade_ntnb" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ntnb";
-CREATE POLICY "read_authenticated" ON public."trade_ntnb" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_ntnb";
-CREATE POLICY "write_service_role" ON public."trade_ntnb" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_agg_diario" TO authenticated;
-GRANT ALL ON public."trade_spread_agg_diario" TO service_role;
-ALTER TABLE public."trade_spread_agg_diario" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_agg_diario";
-CREATE POLICY "read_authenticated" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_agg_diario";
-CREATE POLICY "write_service_role" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_historico" TO authenticated;
-GRANT ALL ON public."trade_spread_historico" TO service_role;
-ALTER TABLE public."trade_spread_historico" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_historico";
-CREATE POLICY "read_authenticated" ON public."trade_spread_historico" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_historico";
-CREATE POLICY "write_service_role" ON public."trade_spread_historico" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_taxas" TO authenticated;
-GRANT ALL ON public."trade_taxas" TO service_role;
-ALTER TABLE public."trade_taxas" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_taxas";
-CREATE POLICY "read_authenticated" ON public."trade_taxas" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_taxas";
-CREATE POLICY "write_service_role" ON public."trade_taxas" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ticker_snapshot" TO authenticated;
-GRANT ALL ON public."trade_ticker_snapshot" TO service_role;
-ALTER TABLE public."trade_ticker_snapshot" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ticker_snapshot";
-CREATE POLICY "read_authenticated" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_ticker_snapshot";
-CREATE POLICY "write_service_role" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_upload_log" TO authenticated;
-GRANT ALL ON public."trade_upload_log" TO service_role;
-ALTER TABLE public."trade_upload_log" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "read_authenticated" ON public."trade_upload_log";
-CREATE POLICY "read_authenticated" ON public."trade_upload_log" AS PERMISSIVE FOR SELECT TO public
-  USING ((auth.role() = 'authenticated'::text));
-DROP POLICY IF EXISTS "write_service_role" ON public."trade_upload_log";
-CREATE POLICY "write_service_role" ON public."trade_upload_log" AS PERMISSIVE FOR ALL TO public
-  USING ((auth.role() = 'service_role'::text));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."user_roles" TO authenticated;
-GRANT ALL ON public."user_roles" TO service_role;
-ALTER TABLE public."user_roles" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Gestor can read all roles" ON public."user_roles";
-CREATE POLICY "Gestor can read all roles" ON public."user_roles" AS PERMISSIVE FOR SELECT TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Only Gestor can delete roles" ON public."user_roles";
-CREATE POLICY "Only Gestor can delete roles" ON public."user_roles" AS PERMISSIVE FOR DELETE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Only Gestor can insert roles" ON public."user_roles";
-CREATE POLICY "Only Gestor can insert roles" ON public."user_roles" AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Only Gestor can update roles" ON public."user_roles";
-CREATE POLICY "Only Gestor can update roles" ON public."user_roles" AS PERMISSIVE FOR UPDATE TO authenticated
-  USING (has_role(auth.uid(), 'Gestor'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
-DROP POLICY IF EXISTS "Users can read own roles" ON public."user_roles";
-CREATE POLICY "Users can read own roles" ON public."user_roles" AS PERMISSIVE FOR SELECT TO authenticated
-  USING ((user_id = auth.uid()));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public."v_issuer_rating_current" TO authenticated;
-GRANT ALL ON public."v_issuer_rating_current" TO service_role;
-
 -- ---------------------------------------------------------------------
 -- FUNCTIONS
 -- ---------------------------------------------------------------------
@@ -2948,6 +2361,593 @@ AS $function$
   ORDER BY tx.ticker, tx.data;
 $function$
 ;
+
+-- GRANTS + RLS + POLICIES
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."alert_rules" TO authenticated;
+GRANT ALL ON public."alert_rules" TO service_role;
+ALTER TABLE public."alert_rules" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_ar read" ON public."alert_rules";
+CREATE POLICY "fidc_ar read" ON public."alert_rules" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_ar write" ON public."alert_rules";
+CREATE POLICY "fidc_ar write" ON public."alert_rules" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."alerts" TO authenticated;
+GRANT ALL ON public."alerts" TO service_role;
+ALTER TABLE public."alerts" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_al read" ON public."alerts";
+CREATE POLICY "fidc_al read" ON public."alerts" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_al write" ON public."alerts";
+CREATE POLICY "fidc_al write" ON public."alerts" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_limits" TO authenticated;
+GRANT ALL ON public."allocation_limits" TO service_role;
+ALTER TABLE public."allocation_limits" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read allocation_limits" ON public."allocation_limits";
+CREATE POLICY "Authenticated read allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete allocation_limits" ON public."allocation_limits";
+CREATE POLICY "Gestor delete allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor insert allocation_limits" ON public."allocation_limits";
+CREATE POLICY "Gestor insert allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor update allocation_limits" ON public."allocation_limits";
+CREATE POLICY "Gestor update allocation_limits" ON public."allocation_limits" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_target_periods" TO authenticated;
+GRANT ALL ON public."allocation_target_periods" TO service_role;
+ALTER TABLE public."allocation_target_periods" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read target_periods" ON public."allocation_target_periods";
+CREATE POLICY "Authenticated read target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete target_periods" ON public."allocation_target_periods";
+CREATE POLICY "Gestor delete target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers insert target_periods" ON public."allocation_target_periods";
+CREATE POLICY "Writers insert target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "Writers update target_periods" ON public."allocation_target_periods";
+CREATE POLICY "Writers update target_periods" ON public."allocation_target_periods" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets" TO authenticated;
+GRANT ALL ON public."allocation_targets" TO service_role;
+ALTER TABLE public."allocation_targets" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read allocation_targets" ON public."allocation_targets";
+CREATE POLICY "Authenticated read allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete allocation_targets" ON public."allocation_targets";
+CREATE POLICY "Gestor delete allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers insert allocation_targets" ON public."allocation_targets";
+CREATE POLICY "Writers insert allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "Writers update allocation_targets" ON public."allocation_targets";
+CREATE POLICY "Writers update allocation_targets" ON public."allocation_targets" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets_emissor" TO authenticated;
+GRANT ALL ON public."allocation_targets_emissor" TO service_role;
+ALTER TABLE public."allocation_targets_emissor" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read targets_emissor" ON public."allocation_targets_emissor";
+CREATE POLICY "Authenticated read targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete targets_emissor" ON public."allocation_targets_emissor";
+CREATE POLICY "Gestor delete targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers insert targets_emissor" ON public."allocation_targets_emissor";
+CREATE POLICY "Writers insert targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "Writers update targets_emissor" ON public."allocation_targets_emissor";
+CREATE POLICY "Writers update targets_emissor" ON public."allocation_targets_emissor" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."allocation_targets_setor" TO authenticated;
+GRANT ALL ON public."allocation_targets_setor" TO service_role;
+ALTER TABLE public."allocation_targets_setor" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read allocation_targets_setor" ON public."allocation_targets_setor";
+CREATE POLICY "Authenticated read allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete allocation_targets_setor" ON public."allocation_targets_setor";
+CREATE POLICY "Gestor delete allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor insert allocation_targets_setor" ON public."allocation_targets_setor";
+CREATE POLICY "Gestor insert allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor update allocation_targets_setor" ON public."allocation_targets_setor";
+CREATE POLICY "Gestor update allocation_targets_setor" ON public."allocation_targets_setor" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."analises" TO authenticated;
+GRANT ALL ON public."analises" TO service_role;
+ALTER TABLE public."analises" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can read analises" ON public."analises";
+CREATE POLICY "Authenticated users can read analises" ON public."analises" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Only Gestor can delete analises" ON public."analises";
+CREATE POLICY "Only Gestor can delete analises" ON public."analises" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers can insert analises" ON public."analises";
+CREATE POLICY "Writers can insert analises" ON public."analises" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can update analises" ON public."analises";
+CREATE POLICY "Writers can update analises" ON public."analises" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleia_participacoes" TO authenticated;
+GRANT ALL ON public."assembleia_participacoes" TO service_role;
+ALTER TABLE public."assembleia_participacoes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read participacoes" ON public."assembleia_participacoes";
+CREATE POLICY "Authenticated read participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers delete participacoes" ON public."assembleia_participacoes";
+CREATE POLICY "Writers delete participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers insert participacoes" ON public."assembleia_participacoes";
+CREATE POLICY "Writers insert participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers update participacoes" ON public."assembleia_participacoes";
+CREATE POLICY "Writers update participacoes" ON public."assembleia_participacoes" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleia_upload_log" TO authenticated;
+GRANT ALL ON public."assembleia_upload_log" TO service_role;
+ALTER TABLE public."assembleia_upload_log" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read upload log" ON public."assembleia_upload_log";
+CREATE POLICY "Authenticated read upload log" ON public."assembleia_upload_log" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers insert upload log" ON public."assembleia_upload_log";
+CREATE POLICY "Writers insert upload log" ON public."assembleia_upload_log" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."assembleias" TO authenticated;
+GRANT ALL ON public."assembleias" TO service_role;
+ALTER TABLE public."assembleias" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated can read assembleias" ON public."assembleias";
+CREATE POLICY "Authenticated can read assembleias" ON public."assembleias" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor can delete assembleias" ON public."assembleias";
+CREATE POLICY "Gestor can delete assembleias" ON public."assembleias" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers can insert assembleias" ON public."assembleias";
+CREATE POLICY "Writers can insert assembleias" ON public."assembleias" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can update assembleias" ON public."assembleias";
+CREATE POLICY "Writers can update assembleias" ON public."assembleias" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."credit_opinions" TO authenticated;
+GRANT ALL ON public."credit_opinions" TO service_role;
+ALTER TABLE public."credit_opinions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_op read" ON public."credit_opinions";
+CREATE POLICY "fidc_op read" ON public."credit_opinions" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_op write" ON public."credit_opinions";
+CREATE POLICY "fidc_op write" ON public."credit_opinions" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write_opinion(auth.uid()))
+  WITH CHECK (fidc_can_write_opinion(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_data_dictionary" TO authenticated;
+GRANT ALL ON public."cvm_data_dictionary" TO service_role;
+ALTER TABLE public."cvm_data_dictionary" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cvm_dict_read_auth" ON public."cvm_data_dictionary";
+CREATE POLICY "cvm_dict_read_auth" ON public."cvm_data_dictionary" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "cvm_dict_write_admin" ON public."cvm_data_dictionary";
+CREATE POLICY "cvm_dict_write_admin" ON public."cvm_data_dictionary" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_fidc_field_mapping" TO authenticated;
+GRANT ALL ON public."cvm_fidc_field_mapping" TO service_role;
+ALTER TABLE public."cvm_fidc_field_mapping" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cvm_map_read_auth" ON public."cvm_fidc_field_mapping";
+CREATE POLICY "cvm_map_read_auth" ON public."cvm_fidc_field_mapping" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "cvm_map_write_admin" ON public."cvm_fidc_field_mapping";
+CREATE POLICY "cvm_map_write_admin" ON public."cvm_fidc_field_mapping" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."cvm_monthly_import_staging" TO authenticated;
+GRANT ALL ON public."cvm_monthly_import_staging" TO service_role;
+ALTER TABLE public."cvm_monthly_import_staging" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cvm_stg_read_auth" ON public."cvm_monthly_import_staging";
+CREATE POLICY "cvm_stg_read_auth" ON public."cvm_monthly_import_staging" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "cvm_stg_write_admin" ON public."cvm_monthly_import_staging";
+CREATE POLICY "cvm_stg_write_admin" ON public."cvm_monthly_import_staging" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."emissoes" TO authenticated;
+GRANT ALL ON public."emissoes" TO service_role;
+ALTER TABLE public."emissoes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can read emissoes" ON public."emissoes";
+CREATE POLICY "Authenticated users can read emissoes" ON public."emissoes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers can delete emissoes" ON public."emissoes";
+CREATE POLICY "Writers can delete emissoes" ON public."emissoes" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can insert emissoes" ON public."emissoes";
+CREATE POLICY "Writers can insert emissoes" ON public."emissoes" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can update emissoes" ON public."emissoes";
+CREATE POLICY "Writers can update emissoes" ON public."emissoes" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."empresas" TO authenticated;
+GRANT ALL ON public."empresas" TO service_role;
+ALTER TABLE public."empresas" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can read empresas" ON public."empresas";
+CREATE POLICY "Authenticated users can read empresas" ON public."empresas" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers can insert empresas" ON public."empresas";
+CREATE POLICY "Writers can insert empresas" ON public."empresas" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can update empresas" ON public."empresas";
+CREATE POLICY "Writers can update empresas" ON public."empresas" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_alert_events" TO authenticated;
+GRANT ALL ON public."fidc_alert_events" TO service_role;
+ALTER TABLE public."fidc_alert_events" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Autenticados leem eventos de alerta" ON public."fidc_alert_events";
+CREATE POLICY "Autenticados leem eventos de alerta" ON public."fidc_alert_events" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_alert_rules" TO authenticated;
+GRANT ALL ON public."fidc_alert_rules" TO service_role;
+ALTER TABLE public."fidc_alert_rules" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Autenticados leem regras de alerta" ON public."fidc_alert_rules";
+CREATE POLICY "Autenticados leem regras de alerta" ON public."fidc_alert_rules" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor/Coordenação apagam regras" ON public."fidc_alert_rules";
+CREATE POLICY "Gestor/Coordenação apagam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "Gestor/Coordenação atualizam regras" ON public."fidc_alert_rules";
+CREATE POLICY "Gestor/Coordenação atualizam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "Gestor/Coordenação criam regras" ON public."fidc_alert_rules";
+CREATE POLICY "Gestor/Coordenação criam regras" ON public."fidc_alert_rules" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_classes" TO authenticated;
+GRANT ALL ON public."fidc_classes" TO service_role;
+ALTER TABLE public."fidc_classes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read fidc_classes" ON public."fidc_classes";
+CREATE POLICY "Authenticated read fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete fidc_classes" ON public."fidc_classes";
+CREATE POLICY "Gestor delete fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Writers insert fidc_classes" ON public."fidc_classes";
+CREATE POLICY "Writers insert fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers update fidc_classes" ON public."fidc_classes";
+CREATE POLICY "Writers update fidc_classes" ON public."fidc_classes" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_quota_classes" TO authenticated;
+GRANT ALL ON public."fidc_monthly_quota_classes" TO service_role;
+ALTER TABLE public."fidc_monthly_quota_classes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_mqc read" ON public."fidc_monthly_quota_classes";
+CREATE POLICY "fidc_mqc read" ON public."fidc_monthly_quota_classes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_mqc write" ON public."fidc_monthly_quota_classes";
+CREATE POLICY "fidc_mqc write" ON public."fidc_monthly_quota_classes" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_reports" TO authenticated;
+GRANT ALL ON public."fidc_monthly_reports" TO service_role;
+ALTER TABLE public."fidc_monthly_reports" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_rep read" ON public."fidc_monthly_reports";
+CREATE POLICY "fidc_rep read" ON public."fidc_monthly_reports" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_rep write" ON public."fidc_monthly_reports";
+CREATE POLICY "fidc_rep write" ON public."fidc_monthly_reports" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_monthly_segments" TO authenticated;
+GRANT ALL ON public."fidc_monthly_segments" TO service_role;
+ALTER TABLE public."fidc_monthly_segments" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_monthly_segments_select" ON public."fidc_monthly_segments";
+CREATE POLICY "fidc_monthly_segments_select" ON public."fidc_monthly_segments" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_monthly_segments_write" ON public."fidc_monthly_segments";
+CREATE POLICY "fidc_monthly_segments_write" ON public."fidc_monthly_segments" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_quota_classes" TO authenticated;
+GRANT ALL ON public."fidc_quota_classes" TO service_role;
+ALTER TABLE public."fidc_quota_classes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_qc read" ON public."fidc_quota_classes";
+CREATE POLICY "fidc_qc read" ON public."fidc_quota_classes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_qc write" ON public."fidc_quota_classes";
+CREATE POLICY "fidc_qc write" ON public."fidc_quota_classes" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_rating_history" TO authenticated;
+GRANT ALL ON public."fidc_rating_history" TO service_role;
+ALTER TABLE public."fidc_rating_history" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_rat read" ON public."fidc_rating_history";
+CREATE POLICY "fidc_rat read" ON public."fidc_rating_history" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_rat write" ON public."fidc_rating_history";
+CREATE POLICY "fidc_rat write" ON public."fidc_rating_history" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidc_subordination_limits" TO authenticated;
+GRANT ALL ON public."fidc_subordination_limits" TO service_role;
+ALTER TABLE public."fidc_subordination_limits" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc_sublim_select_auth" ON public."fidc_subordination_limits";
+CREATE POLICY "fidc_sublim_select_auth" ON public."fidc_subordination_limits" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc_sublim_write_roles" ON public."fidc_subordination_limits";
+CREATE POLICY "fidc_sublim_write_roles" ON public."fidc_subordination_limits" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."fidcs" TO authenticated;
+GRANT ALL ON public."fidcs" TO service_role;
+ALTER TABLE public."fidcs" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fidc read" ON public."fidcs";
+CREATE POLICY "fidc read" ON public."fidcs" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "fidc write" ON public."fidcs";
+CREATE POLICY "fidc write" ON public."fidcs" AS PERMISSIVE FOR ALL TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."issuer_limits" TO authenticated;
+GRANT ALL ON public."issuer_limits" TO service_role;
+ALTER TABLE public."issuer_limits" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read issuer_limits" ON public."issuer_limits";
+CREATE POLICY "Authenticated read issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor/Risco delete issuer_limits" ON public."issuer_limits";
+CREATE POLICY "Gestor/Risco delete issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
+DROP POLICY IF EXISTS "Gestor/Risco insert issuer_limits" ON public."issuer_limits";
+CREATE POLICY "Gestor/Risco insert issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
+DROP POLICY IF EXISTS "Gestor/Risco update issuer_limits" ON public."issuer_limits";
+CREATE POLICY "Gestor/Risco update issuer_limits" ON public."issuer_limits" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."issuer_ratings" TO authenticated;
+GRANT ALL ON public."issuer_ratings" TO service_role;
+ALTER TABLE public."issuer_ratings" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "issuer_ratings_delete_writers" ON public."issuer_ratings";
+CREATE POLICY "issuer_ratings_delete_writers" ON public."issuer_ratings" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (fidc_can_write(auth.uid()));
+DROP POLICY IF EXISTS "issuer_ratings_insert_writers" ON public."issuer_ratings";
+CREATE POLICY "issuer_ratings_insert_writers" ON public."issuer_ratings" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (fidc_can_write(auth.uid()));
+DROP POLICY IF EXISTS "issuer_ratings_select_authenticated" ON public."issuer_ratings";
+CREATE POLICY "issuer_ratings_select_authenticated" ON public."issuer_ratings" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "issuer_ratings_update_writers" ON public."issuer_ratings";
+CREATE POLICY "issuer_ratings_update_writers" ON public."issuer_ratings" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (fidc_can_write(auth.uid()))
+  WITH CHECK (fidc_can_write(auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."mfa_reset_log" TO authenticated;
+GRANT ALL ON public."mfa_reset_log" TO service_role;
+ALTER TABLE public."mfa_reset_log" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Gestor e Risco veem logs de MFA" ON public."mfa_reset_log";
+CREATE POLICY "Gestor e Risco veem logs de MFA" ON public."mfa_reset_log" AS PERMISSIVE FOR SELECT TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Risco e Compliance'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."pipeline_eventos" TO authenticated;
+GRANT ALL ON public."pipeline_eventos" TO service_role;
+ALTER TABLE public."pipeline_eventos" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Leitura autenticados" ON public."pipeline_eventos";
+CREATE POLICY "Leitura autenticados" ON public."pipeline_eventos" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers can insert pipeline_eventos" ON public."pipeline_eventos";
+CREATE POLICY "Writers can insert pipeline_eventos" ON public."pipeline_eventos" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."posicoes" TO authenticated;
+GRANT ALL ON public."posicoes" TO service_role;
+ALTER TABLE public."posicoes" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated users can read posicoes" ON public."posicoes";
+CREATE POLICY "Authenticated users can read posicoes" ON public."posicoes" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Writers can delete posicoes" ON public."posicoes";
+CREATE POLICY "Writers can delete posicoes" ON public."posicoes" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can insert posicoes" ON public."posicoes";
+CREATE POLICY "Writers can insert posicoes" ON public."posicoes" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+DROP POLICY IF EXISTS "Writers can update posicoes" ON public."posicoes";
+CREATE POLICY "Writers can update posicoes" ON public."posicoes" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)))
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role) OR has_role(auth.uid(), 'Analista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles" TO authenticated;
+GRANT ALL ON public."profiles" TO service_role;
+ALTER TABLE public."profiles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Gestor can insert profiles" ON public."profiles";
+CREATE POLICY "Gestor can insert profiles" ON public."profiles" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor can read all profiles" ON public."profiles";
+CREATE POLICY "Gestor can read all profiles" ON public."profiles" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor can update any profile" ON public."profiles";
+CREATE POLICY "Gestor can update any profile" ON public."profiles" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Users can read own profile" ON public."profiles";
+CREATE POLICY "Users can read own profile" ON public."profiles" AS PERMISSIVE FOR SELECT TO authenticated
+  USING ((auth.uid() = id));
+DROP POLICY IF EXISTS "Users can update own safe fields" ON public."profiles";
+CREATE POLICY "Users can update own safe fields" ON public."profiles" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((auth.uid() = id))
+  WITH CHECK (((auth.uid() = id)
+    AND (funcao = (SELECT p.funcao FROM public.profiles p WHERE p.id = auth.uid()))
+    AND (status = (SELECT p.status FROM public.profiles p WHERE p.id = auth.uid()))));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."profiles_public" TO authenticated;
+GRANT ALL ON public."profiles_public" TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_emission_history" TO authenticated;
+GRANT ALL ON public."rating_emission_history" TO service_role;
+ALTER TABLE public."rating_emission_history" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "rating_emission_history_delete_managers" ON public."rating_emission_history";
+CREATE POLICY "rating_emission_history_delete_managers" ON public."rating_emission_history" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_emission_history_read_authenticated" ON public."rating_emission_history";
+CREATE POLICY "rating_emission_history_read_authenticated" ON public."rating_emission_history" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "rating_emission_history_update_managers" ON public."rating_emission_history";
+CREATE POLICY "rating_emission_history_update_managers" ON public."rating_emission_history" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_emission_history_write_managers" ON public."rating_emission_history";
+CREATE POLICY "rating_emission_history_write_managers" ON public."rating_emission_history" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_fidc_class_history" TO authenticated;
+GRANT ALL ON public."rating_fidc_class_history" TO service_role;
+ALTER TABLE public."rating_fidc_class_history" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "rating_fidc_class_history_delete_managers" ON public."rating_fidc_class_history";
+CREATE POLICY "rating_fidc_class_history_delete_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_fidc_class_history_read_authenticated" ON public."rating_fidc_class_history";
+CREATE POLICY "rating_fidc_class_history_read_authenticated" ON public."rating_fidc_class_history" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "rating_fidc_class_history_update_managers" ON public."rating_fidc_class_history";
+CREATE POLICY "rating_fidc_class_history_update_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_fidc_class_history_write_managers" ON public."rating_fidc_class_history";
+CREATE POLICY "rating_fidc_class_history_write_managers" ON public."rating_fidc_class_history" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."rating_issuer_history" TO authenticated;
+GRANT ALL ON public."rating_issuer_history" TO service_role;
+ALTER TABLE public."rating_issuer_history" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "rating_issuer_history_delete_managers" ON public."rating_issuer_history";
+CREATE POLICY "rating_issuer_history_delete_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR DELETE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_issuer_history_read_authenticated" ON public."rating_issuer_history";
+CREATE POLICY "rating_issuer_history_read_authenticated" ON public."rating_issuer_history" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "rating_issuer_history_update_managers" ON public."rating_issuer_history";
+CREATE POLICY "rating_issuer_history_update_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+DROP POLICY IF EXISTS "rating_issuer_history_write_managers" ON public."rating_issuer_history";
+CREATE POLICY "rating_issuer_history_write_managers" ON public."rating_issuer_history" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK ((has_role(auth.uid(), 'Gestor'::app_role) OR has_role(auth.uid(), 'Coordenação/Especialista'::app_role)));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."setores" TO authenticated;
+GRANT ALL ON public."setores" TO service_role;
+ALTER TABLE public."setores" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Authenticated read setores" ON public."setores";
+CREATE POLICY "Authenticated read setores" ON public."setores" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (true);
+DROP POLICY IF EXISTS "Gestor delete setores" ON public."setores";
+CREATE POLICY "Gestor delete setores" ON public."setores" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor insert setores" ON public."setores";
+CREATE POLICY "Gestor insert setores" ON public."setores" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Gestor update setores" ON public."setores";
+CREATE POLICY "Gestor update setores" ON public."setores" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ativos" TO authenticated;
+GRANT ALL ON public."trade_ativos" TO service_role;
+ALTER TABLE public."trade_ativos" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ativos";
+CREATE POLICY "read_authenticated" ON public."trade_ativos" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_ativos";
+CREATE POLICY "write_service_role" ON public."trade_ativos" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ipca_ref" TO authenticated;
+GRANT ALL ON public."trade_ipca_ref" TO service_role;
+ALTER TABLE public."trade_ipca_ref" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ipca_ref";
+CREATE POLICY "read_authenticated" ON public."trade_ipca_ref" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_ipca_ref";
+CREATE POLICY "write_service_role" ON public."trade_ipca_ref" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_metricas" TO authenticated;
+GRANT ALL ON public."trade_metricas" TO service_role;
+ALTER TABLE public."trade_metricas" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_metricas";
+CREATE POLICY "read_authenticated" ON public."trade_metricas" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_metricas";
+CREATE POLICY "write_service_role" ON public."trade_metricas" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_monitor_view" TO authenticated;
+GRANT ALL ON public."trade_monitor_view" TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ntnb" TO authenticated;
+GRANT ALL ON public."trade_ntnb" TO service_role;
+ALTER TABLE public."trade_ntnb" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ntnb";
+CREATE POLICY "read_authenticated" ON public."trade_ntnb" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_ntnb";
+CREATE POLICY "write_service_role" ON public."trade_ntnb" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_agg_diario" TO authenticated;
+GRANT ALL ON public."trade_spread_agg_diario" TO service_role;
+ALTER TABLE public."trade_spread_agg_diario" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_agg_diario";
+CREATE POLICY "read_authenticated" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_agg_diario";
+CREATE POLICY "write_service_role" ON public."trade_spread_agg_diario" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_spread_historico" TO authenticated;
+GRANT ALL ON public."trade_spread_historico" TO service_role;
+ALTER TABLE public."trade_spread_historico" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_spread_historico";
+CREATE POLICY "read_authenticated" ON public."trade_spread_historico" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_spread_historico";
+CREATE POLICY "write_service_role" ON public."trade_spread_historico" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_taxas" TO authenticated;
+GRANT ALL ON public."trade_taxas" TO service_role;
+ALTER TABLE public."trade_taxas" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_taxas";
+CREATE POLICY "read_authenticated" ON public."trade_taxas" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_taxas";
+CREATE POLICY "write_service_role" ON public."trade_taxas" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_ticker_snapshot" TO authenticated;
+GRANT ALL ON public."trade_ticker_snapshot" TO service_role;
+ALTER TABLE public."trade_ticker_snapshot" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_ticker_snapshot";
+CREATE POLICY "read_authenticated" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_ticker_snapshot";
+CREATE POLICY "write_service_role" ON public."trade_ticker_snapshot" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."trade_upload_log" TO authenticated;
+GRANT ALL ON public."trade_upload_log" TO service_role;
+ALTER TABLE public."trade_upload_log" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_authenticated" ON public."trade_upload_log";
+CREATE POLICY "read_authenticated" ON public."trade_upload_log" AS PERMISSIVE FOR SELECT TO public
+  USING ((auth.role() = 'authenticated'::text));
+DROP POLICY IF EXISTS "write_service_role" ON public."trade_upload_log";
+CREATE POLICY "write_service_role" ON public."trade_upload_log" AS PERMISSIVE FOR ALL TO public
+  USING ((auth.role() = 'service_role'::text));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."user_roles" TO authenticated;
+GRANT ALL ON public."user_roles" TO service_role;
+ALTER TABLE public."user_roles" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Gestor can read all roles" ON public."user_roles";
+CREATE POLICY "Gestor can read all roles" ON public."user_roles" AS PERMISSIVE FOR SELECT TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Only Gestor can delete roles" ON public."user_roles";
+CREATE POLICY "Only Gestor can delete roles" ON public."user_roles" AS PERMISSIVE FOR DELETE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Only Gestor can insert roles" ON public."user_roles";
+CREATE POLICY "Only Gestor can insert roles" ON public."user_roles" AS PERMISSIVE FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Only Gestor can update roles" ON public."user_roles";
+CREATE POLICY "Only Gestor can update roles" ON public."user_roles" AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (has_role(auth.uid(), 'Gestor'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'Gestor'::app_role));
+DROP POLICY IF EXISTS "Users can read own roles" ON public."user_roles";
+CREATE POLICY "Users can read own roles" ON public."user_roles" AS PERMISSIVE FOR SELECT TO authenticated
+  USING ((user_id = auth.uid()));
+GRANT SELECT, INSERT, UPDATE, DELETE ON public."v_issuer_rating_current" TO authenticated;
+GRANT ALL ON public."v_issuer_rating_current" TO service_role;
 
 -- TRIGGERS
 DROP TRIGGER IF EXISTS "t_fidc_ar_updated" ON public."alert_rules";
