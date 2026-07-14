@@ -27,7 +27,35 @@ const TABLES_ALL = [
   "pipeline_eventos", "mfa_reset_log",
 ];
 
-const BATCH_SIZE = 500;
+const DEFAULT_BATCH_SIZE = 250;
+const MAX_BATCH_SIZE = 250;
+
+type SyncBody = {
+  table?: string;
+  tables?: string[];
+  offset?: number;
+  limit?: number;
+  reset?: boolean;
+  list_only?: boolean;
+};
+
+const TABLE_SET = new Set(TABLES_ALL);
+
+function clampBatchSize(value: unknown) {
+  const parsed = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : DEFAULT_BATCH_SIZE;
+  return Math.min(Math.max(parsed, 1), MAX_BATCH_SIZE);
+}
+
+function safeOffset(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function resolveRequestedTable(body: SyncBody) {
+  const table = body.table ?? body.tables?.[0];
+  if (!table) return { error: "table_required" } as const;
+  if (!TABLE_SET.has(table)) return { error: "table_not_allowed" } as const;
+  return { table } as const;
+}
 
 async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string }> {
   const auth = req.headers.get("Authorization");
@@ -75,7 +103,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { tables?: string[]; list_only?: boolean } = {};
+  let body: SyncBody = {};
   try { body = await req.json(); } catch { /* ignore */ }
 
   if (body.list_only) {
@@ -84,64 +112,79 @@ Deno.serve(async (req) => {
     });
   }
 
-  const list = body.tables?.length ? body.tables : TABLES_ALL;
+  const requested = resolveRequestedTable(body);
+  if ("error" in requested) {
+    return new Response(JSON.stringify({ error: requested.error, tables: TABLES_ALL }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const table = requested.table;
+  const offset = safeOffset(body.offset);
+  const limit = clampBatchSize(body.limit);
+  const reset = body.reset === true;
 
   // prepare:false é necessário para pooler em transaction mode (pgBouncer)
   const src = postgres(srcUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
   const dst = postgres(dstUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
 
-  const report: Array<{ table: string; ok: boolean; ms: number; rows?: number; error?: string }> = [];
+  const report: Array<{ table: string; ok: boolean; ms: number; rows?: number; offset?: number; next_offset?: number; done?: boolean; reset?: boolean; error?: string }> = [];
   const t0 = Date.now();
 
   try {
     await dst`SET session_replication_role = replica`;
 
-    for (const table of list) {
-      const ts = Date.now();
-      try {
-        // Colunas em comum
-        const srcCols = await src<{ column_name: string }[]>`
-          SELECT column_name FROM information_schema.columns
-          WHERE table_schema='public' AND table_name=${table}
-          ORDER BY ordinal_position`;
-        const dstCols = await dst<{ column_name: string }[]>`
-          SELECT column_name FROM information_schema.columns
-          WHERE table_schema='public' AND table_name=${table}`;
-        if (srcCols.length === 0 || dstCols.length === 0) {
-          report.push({ table, ok: false, ms: Date.now() - ts, error: `missing_schema (src=${srcCols.length},dst=${dstCols.length})` });
-          continue;
-        }
+    const ts = Date.now();
+    try {
+      // Colunas em comum
+      const srcCols = await src<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=${table}
+        ORDER BY ordinal_position`;
+      const dstCols = await dst<{ column_name: string }[]>`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name=${table}`;
+      if (srcCols.length === 0 || dstCols.length === 0) {
+        report.push({ table, ok: false, ms: Date.now() - ts, error: `missing_schema (src=${srcCols.length},dst=${dstCols.length})` });
+      } else {
         const dstSet = new Set(dstCols.map((c) => c.column_name));
         const shared = srcCols.map((c) => c.column_name).filter((c) => dstSet.has(c));
         if (shared.length === 0) {
           report.push({ table, ok: false, ms: Date.now() - ts, error: "no_shared_columns" });
-          continue;
-        }
-        const colListQuoted = shared.map((c) => `"${c}"`).join(",");
+        } else {
+          const colListQuoted = shared.map((c) => `"${c.replaceAll('"', '""')}"`).join(",");
 
+          if (reset) {
         await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
+          }
 
-        let offset = 0;
-        let total = 0;
-        while (true) {
           const rows = await src.unsafe(
-            `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${BATCH_SIZE}`,
+            `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${limit}`,
           );
-          if (rows.length === 0) break;
+          if (rows.length > 0) {
           // postgres.js serializa arrays JS como jsonb automaticamente
           await dst`
             INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
             SELECT ${dst.unsafe(colListQuoted)}
             FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
           `;
-          total += rows.length;
-          offset += rows.length;
-          if (rows.length < BATCH_SIZE) break;
+          }
+
+          const nextOffset = offset + rows.length;
+          report.push({
+            table,
+            ok: true,
+            ms: Date.now() - ts,
+            rows: rows.length,
+            offset,
+            next_offset: nextOffset,
+            done: rows.length < limit,
+            reset,
+          });
         }
-        report.push({ table, ok: true, ms: Date.now() - ts, rows: total });
-      } catch (e) {
-        report.push({ table, ok: false, ms: Date.now() - ts, error: (e as Error).message });
       }
+    } catch (e) {
+      report.push({ table, ok: false, ms: Date.now() - ts, error: (e as Error).message });
     }
   } finally {
     try { await dst`SET session_replication_role = origin`; } catch { /* ignore */ }
