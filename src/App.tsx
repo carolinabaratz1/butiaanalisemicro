@@ -84,9 +84,15 @@ function ProtectedRoutes() {
     return <Navigate to="/mfa/verificar" replace />;
   }
 
+  // OAuth consent lives outside the app shell for a clean, focused decision UI.
+  if (location.pathname === '/.lovable/oauth/consent') {
+    return <OAuthConsentPage />;
+  }
+
   return (
     <AppLayout>
       <Routes>
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsentPage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
         <Route path="/positions-monitor" element={<RouteGuard path="/posicoes"><PositionsMonitorPage /></RouteGuard>} />
