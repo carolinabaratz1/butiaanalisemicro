@@ -2289,6 +2289,54 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_external_log: {
+        Row: {
+          created_at: string
+          details: Json
+          duration_ms: number | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          started_at: string
+          status: string
+          tables_failed: number | null
+          tables_ok: number | null
+          tables_total: number | null
+          trigger_source: string
+          triggered_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          tables_failed?: number | null
+          tables_ok?: number | null
+          tables_total?: number | null
+          trigger_source: string
+          triggered_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          duration_ms?: number | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          tables_failed?: number | null
+          tables_ok?: number | null
+          tables_total?: number | null
+          trigger_source?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       trade_ativos: {
         Row: {
           anos_venc: number | null
