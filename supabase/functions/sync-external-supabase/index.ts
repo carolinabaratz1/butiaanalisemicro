@@ -27,8 +27,9 @@ const TABLES_ALL = [
   "pipeline_eventos", "mfa_reset_log",
 ];
 
-const DEFAULT_BATCH_SIZE = 250;
-const MAX_BATCH_SIZE = 250;
+const DEFAULT_BATCH_SIZE = 2000;
+const MAX_BATCH_SIZE = 5000;
+const TIME_BUDGET_MS = 60_000;
 
 type SyncBody = {
   table?: string;
