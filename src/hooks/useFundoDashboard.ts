@@ -8,6 +8,10 @@ import {
 } from '@/lib/posicoes/credit-eligibility';
 import { resolveRatingsBatch, ratingKey } from '@/lib/ratings/resolveRatingsBatch';
 import type { RatingSource } from '@/lib/ratings/useResolvedRating';
+import {
+  synthesizeIssuerFromProduct,
+  isExcludedFromPL,
+} from '@/components/alocacao/allocationUtils';
 
 export interface DashboardRow {
   ticker: string | null;
