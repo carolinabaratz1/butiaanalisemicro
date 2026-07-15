@@ -172,8 +172,8 @@ export function useExposicaoData(valDate: string | null) {
     enabled: !!valDate,
     staleTime: 60_000,
     queryFn: async () => {
-      // 1) Posições da data
-      const posicoes = await fetchAllPaged<Posicao>((from, to) =>
+      // 1) Posições da data (exclui DAP/Futuros — não contam para PL)
+      const posicoesRaw = await fetchAllPaged<Posicao>((from, to) =>
         supabase
           .from("posicoes")
           .select(
@@ -181,6 +181,9 @@ export function useExposicaoData(valDate: string | null) {
           )
           .eq("val_date", valDate as string)
           .range(from, to),
+      );
+      const posicoes = posicoesRaw.filter(
+        (p) => !isExcludedFromPL(p.product ?? "", p.product_class ?? ""),
       );
 
       const fundosSet = new Set<string>();
