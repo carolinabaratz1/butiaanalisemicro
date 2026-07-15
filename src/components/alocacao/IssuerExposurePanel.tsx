@@ -218,7 +218,7 @@ export function IssuerExposurePanel({ fundo, valDate }: Props) {
                     </TableCell>
                     <TableCell className="text-center">
                       <RatingBadge
-                        rating={g.ratingBucket}
+                        rating={g.isSoberano ? "Soberano" : g.ratingBucket}
                         source={g.ratingSource ?? "emissor"}
                         agencia={g.ratingAgencia}
                         data={g.ratingDate}
