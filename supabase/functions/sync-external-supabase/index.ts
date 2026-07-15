@@ -27,8 +27,9 @@ const TABLES_ALL = [
   "pipeline_eventos", "mfa_reset_log",
 ];
 
-const DEFAULT_BATCH_SIZE = 250;
-const MAX_BATCH_SIZE = 250;
+const DEFAULT_BATCH_SIZE = 2000;
+const MAX_BATCH_SIZE = 5000;
+const TIME_BUDGET_MS = 60_000;
 
 type SyncBody = {
   table?: string;
@@ -155,33 +156,41 @@ Deno.serve(async (req) => {
           const colListQuoted = shared.map((c) => `"${c.replaceAll('"', '""')}"`).join(",");
 
           if (reset) {
-        await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
+            await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
           }
 
-          const rows = await src.unsafe(
-            `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${limit}`,
-          );
-          if (rows.length > 0) {
-          // postgres.js serializa arrays JS como jsonb automaticamente
-          await dst`
-            INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
-            SELECT ${dst.unsafe(colListQuoted)}
-            FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
-          `;
+          // Loop internamente múltiplos chunks até esgotar o time budget
+          let curOffset = offset;
+          let totalRows = 0;
+          let done = false;
+          while (Date.now() - ts < TIME_BUDGET_MS) {
+            const rows = await src.unsafe(
+              `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${curOffset} LIMIT ${limit}`,
+            );
+            if (rows.length > 0) {
+              await dst`
+                INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
+                SELECT ${dst.unsafe(colListQuoted)}
+                FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
+              `;
+            }
+            curOffset += rows.length;
+            totalRows += rows.length;
+            if (rows.length < limit) { done = true; break; }
           }
 
-          const nextOffset = offset + rows.length;
           report.push({
             table,
             ok: true,
             ms: Date.now() - ts,
-            rows: rows.length,
+            rows: totalRows,
             offset,
-            next_offset: nextOffset,
-            done: rows.length < limit,
+            next_offset: curOffset,
+            done,
             reset,
           });
         }
+
       }
     } catch (e) {
       report.push({ table, ok: false, ms: Date.now() - ts, error: (e as Error).message });
