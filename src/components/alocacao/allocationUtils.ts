@@ -70,7 +70,7 @@ export function isTermo(product: string, productClass: string): boolean {
 // tratados de forma padronizada em toda a aplicação (Posições, Exposição,
 // Alocação). Retorna null quando o produto é comum (segue o fluxo normal).
 export const B3_CNPJ = "09.346.601/0001-25";
-export const TESOURO_CNPJ = "00.000.000/0001-91";
+export const TESOURO_CNPJ = "00.394.460/0001-41";
 
 export interface SyntheticIssuer {
   cnpj: string;
