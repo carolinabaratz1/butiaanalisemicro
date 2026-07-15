@@ -279,20 +279,38 @@ export function useExposicaoData(valDate: string | null) {
         const em = p.isin ? emissoesMap.get(p.isin) ?? null : null;
         const ativo = em?.ticker ? ativoByTicker.get(em.ticker) ?? null : null;
         const rawCnpj = em?.cnpj_emissor ?? ativo?.emissor_cnpj ?? null;
-        const cnpj = normCnpj(rawCnpj);
-        const empresa = cnpj ? empresaByCnpj.get(cnpj) ?? null : null;
+        let cnpj = normCnpj(rawCnpj);
+        let empresa = cnpj ? empresaByCnpj.get(cnpj) ?? null : null;
 
-        const emissorNome = empresa?.nome ?? ativo?.emissor_nome ?? "Emissor não mapeado";
-        const grupo = empresa?.grupo_economico?.trim() || "Grupo não mapeado";
-        const setor = empresa?.setor ?? "—";
+        let emissorNome = empresa?.nome ?? ativo?.emissor_nome ?? "Emissor não mapeado";
+        let grupo = empresa?.grupo_economico?.trim() || "Grupo não mapeado";
+        let setor = empresa?.setor ?? "—";
 
-        const resolved =
+        let resolved: ResolvedRating =
           ratingMap.get(ratingKey(cnpj, em?.ticker ?? null)) ?? {
             rating: null,
             source: "nr" as const,
             agencia: null,
             data_rating: null,
           };
+
+        // Emissor sintético para Termo (B3/TERMO) e Overnight/LFT (Tesouro/CAIXA/Soberano)
+        const synth = synthesizeIssuerFromProduct(p.product, p.product_class);
+        if (synth) {
+          const synthCnpj = normCnpj(synth.cnpj);
+          const empReal = empresaByCnpj.get(synthCnpj) ?? null;
+          cnpj = synthCnpj;
+          empresa = empReal;
+          emissorNome = synth.nome;
+          grupo = synth.grupoEconomico;
+          setor = empReal?.setor ?? synth.setor;
+          resolved = {
+            rating: synth.rating,
+            source: "emissor" as const,
+            agencia: null,
+            data_rating: null,
+          };
+        }
 
         // taxa
         let taxaLabel: string | null = null;
