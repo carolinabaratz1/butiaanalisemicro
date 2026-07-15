@@ -1,5 +1,8 @@
 // Espelha (TRUNCATE + INSERT em lotes JSON) todas as tabelas do Lovable Cloud
-// para o Supabase externo. Compatível com pooler (transaction mode).
+// para o Supabase externo. Suporta dois modos:
+//   - chunk (default): sincroniza uma tabela por invocação, em chunks (usado pelo UI)
+//   - full  : dispara sincronização completa em background, com log em sync_external_log
+//             (usado pelo cron das 03h BRT)
 import postgres from "npm:postgres@3.4.4";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -30,14 +33,17 @@ const TABLES_ALL = [
 const DEFAULT_BATCH_SIZE = 2000;
 const MAX_BATCH_SIZE = 5000;
 const TIME_BUDGET_MS = 20_000;
+const FULL_CHUNK_LIMIT = 2000;
 
 type SyncBody = {
+  mode?: "chunk" | "full";
   table?: string;
   tables?: string[];
   offset?: number;
   limit?: number;
   reset?: boolean;
   list_only?: boolean;
+  trigger?: string;
 };
 
 const TABLE_SET = new Set(TABLES_ALL);
@@ -58,7 +64,14 @@ function resolveRequestedTable(body: SyncBody) {
   return { table } as const;
 }
 
-async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string }> {
+function admin() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+}
+
+async function verifyCaller(req: Request): Promise<{ ok: boolean; userId?: string; error?: string }> {
   const auth = req.headers.get("Authorization");
   if (!auth?.startsWith("Bearer ")) return { ok: false, error: "no_token" };
   const token = auth.slice(7);
@@ -69,24 +82,117 @@ async function verifyCaller(req: Request): Promise<{ ok: boolean; error?: string
   );
   const { data: u } = await sb.auth.getUser();
   if (!u?.user) return { ok: false, error: "invalid_token" };
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-  const { data: role } = await admin
+  const { data: role } = await admin()
     .from("user_roles")
     .select("role")
     .eq("user_id", u.user.id)
     .eq("role", "Gestor")
     .maybeSingle();
   if (!role) return { ok: false, error: "not_gestor" };
-  return { ok: true };
+  return { ok: true, userId: u.user.id };
+}
+
+async function syncOneTable(
+  src: ReturnType<typeof postgres>,
+  dst: ReturnType<typeof postgres>,
+  table: string,
+): Promise<{ table: string; ok: boolean; ms: number; rows: number; chunks: number; error?: string }> {
+  const ts = Date.now();
+  try {
+    const srcCols = await src<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=${table}
+      ORDER BY ordinal_position`;
+    const dstCols = await dst<{ column_name: string }[]>`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema='public' AND table_name=${table}`;
+    if (srcCols.length === 0 || dstCols.length === 0) {
+      return { table, ok: false, ms: Date.now() - ts, rows: 0, chunks: 0, error: `missing_schema (src=${srcCols.length},dst=${dstCols.length})` };
+    }
+    const dstSet = new Set(dstCols.map((c) => c.column_name));
+    const shared = srcCols.map((c) => c.column_name).filter((c) => dstSet.has(c));
+    if (shared.length === 0) {
+      return { table, ok: false, ms: Date.now() - ts, rows: 0, chunks: 0, error: "no_shared_columns" };
+    }
+    const colListQuoted = shared.map((c) => `"${c.replaceAll('"', '""')}"`).join(",");
+
+    await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
+
+    let offset = 0;
+    let totalRows = 0;
+    let chunks = 0;
+    while (true) {
+      const rows = await src.unsafe(
+        `SELECT ${colListQuoted} FROM public."${table}" ORDER BY 1 OFFSET ${offset} LIMIT ${FULL_CHUNK_LIMIT}`,
+      );
+      if (rows.length > 0) {
+        await dst`
+          INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
+          SELECT ${dst.unsafe(colListQuoted)}
+          FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
+        `;
+      }
+      chunks++;
+      totalRows += rows.length;
+      offset += rows.length;
+      if (rows.length < FULL_CHUNK_LIMIT) break;
+    }
+
+    return { table, ok: true, ms: Date.now() - ts, rows: totalRows, chunks };
+  } catch (e) {
+    return { table, ok: false, ms: Date.now() - ts, rows: 0, chunks: 0, error: (e as Error).message };
+  }
+}
+
+async function runFullSync(logId: string) {
+  const srcUrl = Deno.env.get("SUPABASE_DB_URL")!;
+  const dstUrl = Deno.env.get("EXT_SUPABASE_DB_URL")!;
+  const src = postgres(srcUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
+  const dst = postgres(dstUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
+  const startedAt = Date.now();
+  const details: Array<{ table: string; ok: boolean; ms: number; rows: number; chunks: number; error?: string }> = [];
+  let errorMessage: string | null = null;
+
+  try {
+    await dst`SET session_replication_role = replica`;
+    for (const table of TABLES_ALL) {
+      const r = await syncOneTable(src, dst, table);
+      details.push(r);
+      // Progresso incremental para permitir acompanhamento em tempo real
+      await admin().from("sync_external_log").update({
+        details,
+        tables_ok: details.filter((d) => d.ok).length,
+        tables_failed: details.filter((d) => !d.ok).length,
+      }).eq("id", logId);
+    }
+  } catch (e) {
+    errorMessage = (e as Error).message;
+  } finally {
+    try { await dst`SET session_replication_role = origin`; } catch { /* ignore */ }
+    await src.end({ timeout: 5 });
+    await dst.end({ timeout: 5 });
+  }
+
+  const ok = details.filter((d) => d.ok).length;
+  const failed = details.length - ok;
+  const status = errorMessage ? "failed" : failed === 0 ? "success" : "partial";
+  await admin().from("sync_external_log").update({
+    status,
+    finished_at: new Date().toISOString(),
+    duration_ms: Date.now() - startedAt,
+    tables_total: TABLES_ALL.length,
+    tables_ok: ok,
+    tables_failed: failed,
+    details,
+    error_message: errorMessage,
+  }).eq("id", logId);
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const isCron = req.headers.get("x-cron-secret") === Deno.env.get("EXT_SYNC_CRON_SECRET");
+  let userId: string | undefined;
   if (!isCron) {
     const v = await verifyCaller(req);
     if (!v.ok) {
@@ -94,6 +200,7 @@ Deno.serve(async (req) => {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    userId = v.userId;
   }
 
   const srcUrl = Deno.env.get("SUPABASE_DB_URL");
@@ -113,6 +220,38 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ----- MODO FULL: dispara sync completo em background e retorna imediatamente -----
+  if (body.mode === "full" || (isCron && !body.table)) {
+    const { data: logRow, error: logErr } = await admin()
+      .from("sync_external_log")
+      .insert({
+        trigger_source: isCron ? "cron" : "manual",
+        triggered_by: userId ?? null,
+        status: "running",
+        tables_total: TABLES_ALL.length,
+      })
+      .select("id")
+      .single();
+    if (logErr || !logRow) {
+      return new Response(JSON.stringify({ error: "log_insert_failed", detail: logErr?.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Executa em background para não estourar o timeout HTTP
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) {
+      rt.waitUntil(runFullSync(logRow.id));
+    } else {
+      // Fallback: dispara sem await
+      runFullSync(logRow.id);
+    }
+    return new Response(JSON.stringify({ started: true, log_id: logRow.id }), {
+      status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // ----- MODO CHUNK (existente, usado pelo UI para acompanhar em tempo real) -----
   const requested = resolveRequestedTable(body);
   if ("error" in requested) {
     return new Response(JSON.stringify({ error: requested.error, tables: TABLES_ALL }), {
@@ -125,7 +264,6 @@ Deno.serve(async (req) => {
   const limit = clampBatchSize(body.limit);
   const reset = body.reset === true;
 
-  // prepare:false é necessário para pooler em transaction mode (pgBouncer)
   const src = postgres(srcUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
   const dst = postgres(dstUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
 
@@ -137,7 +275,6 @@ Deno.serve(async (req) => {
 
     const ts = Date.now();
     try {
-      // Colunas em comum
       const srcCols = await src<{ column_name: string }[]>`
         SELECT column_name FROM information_schema.columns
         WHERE table_schema='public' AND table_name=${table}
@@ -159,7 +296,6 @@ Deno.serve(async (req) => {
             await dst.unsafe(`TRUNCATE TABLE public."${table}" RESTART IDENTITY CASCADE`);
           }
 
-          // Loop internamente múltiplos chunks até esgotar o time budget
           let curOffset = offset;
           let totalRows = 0;
           let done = false;
@@ -180,17 +316,10 @@ Deno.serve(async (req) => {
           }
 
           report.push({
-            table,
-            ok: true,
-            ms: Date.now() - ts,
-            rows: totalRows,
-            offset,
-            next_offset: curOffset,
-            done,
-            reset,
+            table, ok: true, ms: Date.now() - ts,
+            rows: totalRows, offset, next_offset: curOffset, done, reset,
           });
         }
-
       }
     } catch (e) {
       report.push({ table, ok: false, ms: Date.now() - ts, error: (e as Error).message });
