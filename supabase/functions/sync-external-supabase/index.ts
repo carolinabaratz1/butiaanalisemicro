@@ -29,7 +29,7 @@ const TABLES_ALL = [
 
 const DEFAULT_BATCH_SIZE = 2000;
 const MAX_BATCH_SIZE = 5000;
-const TIME_BUDGET_MS = 60_000;
+const TIME_BUDGET_MS = 20_000;
 
 type SyncBody = {
   table?: string;
