@@ -195,11 +195,19 @@ serve(async (req) => {
   );
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-  if (userError || !user) {
+  if (!authHeader.startsWith("Bearer ")) {
     return jsonResponse({ success: false, error: "Sessão inválida. Faça login novamente." }, 401);
   }
+  const token = authHeader.replace("Bearer ", "");
+  const authClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+  );
+  const { data: claimsData, error: userError } = await authClient.auth.getClaims(token);
+  if (userError || !claimsData?.claims?.sub) {
+    return jsonResponse({ success: false, error: "Sessão inválida. Faça login novamente." }, 401);
+  }
+  const user = { id: claimsData.claims.sub as string };
 
   // Role check: only Gestor / Coordenação/Especialista / Analista can upload trade data
   const { data: roleRow } = await supabase
