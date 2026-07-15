@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Database, CheckCircle2, XCircle } from 'lucide-react';
+import { RefreshCw, Database, CheckCircle2, XCircle, Clock, History } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TableReport {
@@ -15,13 +15,71 @@ interface TableReport {
   error?: string;
 }
 
+interface SyncLogRow {
+  id: string;
+  trigger_source: 'cron' | 'manual';
+  status: 'running' | 'success' | 'partial' | 'failed';
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  tables_total: number | null;
+  tables_ok: number | null;
+  tables_failed: number | null;
+  error_message: string | null;
+  details: TableReport[] | null;
+}
+
 const CHUNK_SIZE = 2000;
+
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+}
+
+function formatDuration(ms: number | null) {
+  if (!ms) return '-';
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+function statusColor(status: SyncLogRow['status']) {
+  switch (status) {
+    case 'success': return 'text-green-400';
+    case 'partial': return 'text-amber-400';
+    case 'failed':  return 'text-red-400';
+    default:        return 'text-blue-400';
+  }
+}
+
+function statusLabel(status: SyncLogRow['status']) {
+  return { success: 'OK', partial: 'Parcial', failed: 'Falha', running: 'Em execução' }[status];
+}
 
 export default function SyncExternalCard() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTable, setCurrentTable] = useState('');
   const [report, setReport] = useState<TableReport[]>([]);
+  const [history, setHistory] = useState<SyncLogRow[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const loadHistory = useCallback(async () => {
+    const { data } = await supabase
+      .from('sync_external_log')
+      .select('*')
+      .order('started_at', { ascending: false })
+      .limit(20);
+    setHistory((data ?? []) as unknown as SyncLogRow[]);
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+    const t = setInterval(loadHistory, 15_000);
+    return () => clearInterval(t);
+  }, [loadHistory]);
 
   const runSync = async () => {
     setRunning(true);
@@ -30,7 +88,6 @@ export default function SyncExternalCard() {
     setCurrentTable('');
 
     try {
-      // 1) Descobre a lista de tabelas
       const { data: listData, error: listErr } = await supabase.functions.invoke(
         'sync-external-supabase',
         { body: { list_only: true } },
@@ -38,7 +95,6 @@ export default function SyncExternalCard() {
       if (listErr) throw listErr;
       const tables: string[] = listData.tables ?? [];
 
-      // 2) Uma invocação por chunk — evita estouro de CPU/memória em tabelas grandes
       const results: TableReport[] = [];
       for (let i = 0; i < tables.length; i++) {
         const table = tables[i];
@@ -56,29 +112,17 @@ export default function SyncExternalCard() {
             'sync-external-supabase',
             { body: { table, offset, limit: CHUNK_SIZE, reset: offset === 0 } },
           );
-
-          if (error) {
-            failed = error.message;
-            break;
-          }
-
+          if (error) { failed = error.message; break; }
           const step = data?.report?.[0];
-          if (!step) {
-            failed = 'sem resposta';
-            break;
-          }
-          if (!step.ok) {
-            failed = step.error ?? 'erro desconhecido';
-            break;
-          }
+          if (!step) { failed = 'sem resposta'; break; }
+          if (!step.ok) { failed = step.error ?? 'erro desconhecido'; break; }
 
           chunks += 1;
           totalRows += step.rows ?? 0;
           totalMs += step.ms ?? 0;
           offset = step.next_offset ?? offset + (step.rows ?? 0);
 
-          const chunkLabel = `${table} · ${totalRows.toLocaleString('pt-BR')} linhas`;
-          setCurrentTable(chunkLabel);
+          setCurrentTable(`${table} · ${totalRows.toLocaleString('pt-BR')} linhas`);
           setReport([...results, { table, ok: true, ms: totalMs, rows: totalRows, chunks }]);
 
           if (step.done) break;
@@ -98,6 +142,7 @@ export default function SyncExternalCard() {
       const failed = results.length - okCount;
       if (failed === 0) toast.success(`Sync completo: ${okCount} tabelas`);
       else toast.warning(`Sync com falhas: ${okCount} OK, ${failed} com erro`);
+      loadHistory();
     } catch (e) {
       toast.error(`Falha no sync: ${(e as Error).message}`);
     } finally {
@@ -107,6 +152,7 @@ export default function SyncExternalCard() {
 
   const okCount = report.filter((r) => r.ok).length;
   const failedCount = report.filter((r) => !r.ok).length;
+  const lastCron = history.find((h) => h.trigger_source === 'cron');
 
   return (
     <Card className="bg-surface-2 border-border">
@@ -118,9 +164,26 @@ export default function SyncExternalCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Espelha (TRUNCATE + INSERT) todas as tabelas para o Supabase externo,
-          uma por vez. Execução automática diária às 03:00 (BRT).
+          Espelha (TRUNCATE + INSERT) todas as tabelas para o Supabase externo.
+          Execução automática diária às 03:00 (BRT) rodando em segundo plano no servidor.
         </p>
+
+        {lastCron && (
+          <div className="text-xs bg-surface-1 border border-border rounded px-2 py-1.5 flex items-center gap-2">
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className="text-muted-foreground">Última execução automática:</span>
+            <span className={statusColor(lastCron.status)}>{statusLabel(lastCron.status)}</span>
+            <span className="text-muted-foreground">·</span>
+            <span>{formatDateTime(lastCron.started_at)}</span>
+            {lastCron.tables_ok != null && (
+              <>
+                <span className="text-muted-foreground">·</span>
+                <span>{lastCron.tables_ok}/{lastCron.tables_total} OK</span>
+              </>
+            )}
+          </div>
+        )}
+
         <Button onClick={runSync} disabled={running} size="sm" className="gap-1.5">
           <RefreshCw className={`h-3.5 w-3.5 ${running ? 'animate-spin' : ''}`} />
           {running ? 'Sincronizando...' : 'Sincronizar agora'}
@@ -180,6 +243,70 @@ export default function SyncExternalCard() {
             </div>
           </div>
         )}
+
+        <div className="pt-2 border-t border-border">
+          <div className="text-xs font-medium mb-1.5 flex items-center gap-1.5">
+            <History className="h-3 w-3" /> Histórico
+          </div>
+          {history.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhuma execução registrada ainda.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto text-xs border border-border rounded">
+              <table className="w-full">
+                <thead className="bg-surface-1 sticky top-0">
+                  <tr>
+                    <th className="text-left px-2 py-1">Início</th>
+                    <th className="text-left px-2 py-1">Origem</th>
+                    <th className="text-left px-2 py-1">Status</th>
+                    <th className="text-right px-2 py-1">OK/Total</th>
+                    <th className="text-right px-2 py-1">Duração</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h) => (
+                    <>
+                      <tr
+                        key={h.id}
+                        className="border-t border-border cursor-pointer hover:bg-surface-1"
+                        onClick={() => setExpanded(expanded === h.id ? null : h.id)}
+                      >
+                        <td className="px-2 py-1">{formatDateTime(h.started_at)}</td>
+                        <td className="px-2 py-1">{h.trigger_source === 'cron' ? 'Automática' : 'Manual'}</td>
+                        <td className={`px-2 py-1 ${statusColor(h.status)}`}>{statusLabel(h.status)}</td>
+                        <td className="px-2 py-1 text-right">
+                          {h.tables_ok ?? 0}/{h.tables_total ?? 0}
+                          {(h.tables_failed ?? 0) > 0 && (
+                            <span className="text-red-400 ml-1">(-{h.tables_failed})</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-right">{formatDuration(h.duration_ms)}</td>
+                      </tr>
+                      {expanded === h.id && h.details && (
+                        <tr className="bg-surface-1">
+                          <td colSpan={5} className="px-2 py-2">
+                            {h.error_message && (
+                              <div className="text-red-400 mb-1">Erro: {h.error_message}</div>
+                            )}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-0.5">
+                              {h.details.map((d) => (
+                                <div key={d.table} className="flex justify-between gap-2 font-mono text-[11px]">
+                                  <span className="truncate">{d.table}</span>
+                                  <span className={d.ok ? 'text-green-400' : 'text-red-400'}>
+                                    {d.ok ? `${(d.rows ?? 0).toLocaleString('pt-BR')}` : (d.error ?? 'erro')}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
