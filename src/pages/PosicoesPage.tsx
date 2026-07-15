@@ -225,10 +225,19 @@ export default function PosicoesPage() {
     return c === 'equity' || c.startsWith('bdr') || c === 'termo' || c === 'funds br' || c.includes('etf');
   };
 
+  // Posições ativas: exclui DAP/Futuros (não contam para posição dos fundos)
+  const posicoesActive = useMemo(
+    () => posicoes.filter(p => !isExcludedFromPL(p.product ?? '', p.product_class ?? '')),
+    [posicoes],
+  );
+
   // Enriched positions
   const enriched = useMemo<EnrichedPosition[]>(() => {
-    return posicoes.map(p => {
-      const cnpj = p.isin ? isinToCnpj[p.isin] : undefined;
+    return posicoesActive.map(p => {
+      // Emissor sintético para Termo/Overnight/LFT (padroniza emissor/grupo/rating)
+      const synth = synthesizeIssuerFromProduct(p.product, p.product_class);
+      const rawCnpj = p.isin ? isinToCnpj[p.isin] : undefined;
+      const cnpj = synth ? synth.cnpj : rawCnpj;
       const empresa = cnpj ? cnpjToEmpresa[cnpj] : undefined;
       const analise = cnpj ? latestAnaliseByEmpresa[cnpj] : undefined;
       // Recomendação efetiva: roteia pelo product_class
@@ -237,12 +246,14 @@ export default function PosicoesPage() {
       const recEfetiva = equity
         ? (analise?.recomendacao || (analise && isRecLike(analise.status) ? analise.status : null))
         : ((analise as any)?.recomendacao_rf || (analise && isRecLike(analise.status) ? analise.status : null));
+      const empresaNome = synth ? synth.nome : empresa?.nome;
+      const empresaRating = synth ? synth.rating : empresa?.rating;
       return {
         ...p,
         cnpj,
-        empresaNome: empresa?.nome,
-        empresaRating: empresa?.rating,
-        analiseStatus: getAnaliseStatus(analise, empresa?.tipo),
+        empresaNome,
+        empresaRating,
+        analiseStatus: synth ? 'Aprovada' : getAnaliseStatus(analise, empresa?.tipo),
         analiseRecomendacao: recEfetiva,
         analisePrecoMin: analise?.preco_min ?? null,
         analisePrecoMedio: analise?.preco_medio ?? null,
@@ -250,7 +261,7 @@ export default function PosicoesPage() {
         analiseDataConclusao: analise?.data_conclusao || null,
       };
     });
-  }, [posicoes, isinToCnpj, cnpjToEmpresa, latestAnaliseByEmpresa]);
+  }, [posicoesActive, isinToCnpj, cnpjToEmpresa, latestAnaliseByEmpresa]);
 
   // BI filtered
   const biFiltered = useMemo(() => {
@@ -260,15 +271,15 @@ export default function PosicoesPage() {
     });
   }, [enriched, biFundFilter, biClassFilter]);
 
-  const allFunds = useMemo(() => [...new Set(posicoes.map(p => p.trading_desk_share_source).filter((v): v is string => !!v))], [posicoes]);
-  const allProductClasses = useMemo(() => [...new Set(posicoes.map(p => p.product_class).filter((v): v is string => !!v))], [posicoes]);
+  const allFunds = useMemo(() => [...new Set(posicoesActive.map(p => p.trading_desk_share_source).filter((v): v is string => !!v))], [posicoesActive]);
+  const allProductClasses = useMemo(() => [...new Set(posicoesActive.map(p => p.product_class).filter((v): v is string => !!v))], [posicoesActive]);
 
   const filtered = useMemo(() => {
-    return posicoes.filter(p => {
+    return posicoesActive.filter(p => {
       return (fundFilter === 'all' || p.trading_desk_share_source === fundFilter)
         && (classFilter === 'all' || p.product_class === classFilter);
     });
-  }, [posicoes, fundFilter, classFilter]);
+  }, [posicoesActive, fundFilter, classFilter]);
 
   const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
   const totalPages = Math.ceil(filtered.length / pageSize);
