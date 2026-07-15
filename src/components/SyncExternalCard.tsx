@@ -15,7 +15,7 @@ interface TableReport {
   error?: string;
 }
 
-const CHUNK_SIZE = 250;
+const CHUNK_SIZE = 2000;
 
 export default function SyncExternalCard() {
   const [running, setRunning] = useState(false);
