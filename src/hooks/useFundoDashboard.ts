@@ -8,6 +8,10 @@ import {
 } from '@/lib/posicoes/credit-eligibility';
 import { resolveRatingsBatch, ratingKey } from '@/lib/ratings/resolveRatingsBatch';
 import type { RatingSource } from '@/lib/ratings/useResolvedRating';
+import {
+  synthesizeIssuerFromProduct,
+  isExcludedFromPL,
+} from '@/components/alocacao/allocationUtils';
 
 export interface DashboardRow {
   ticker: string | null;
@@ -119,7 +123,28 @@ export function useFundoDashboard(fundo: string | null) {
         p_fundo: fundo,
       } as never);
       if (error) throw error;
-      const rows = (data ?? []) as unknown as DashboardRow[];
+      const rawRows = (data ?? []) as unknown as DashboardRow[];
+
+      // 1) Excluir DAP/Futuro do PL e agregações.
+      // 2) Injetar emissor sintético para Termo (B3) / Overnight / LFT (Tesouro Nacional).
+      const rows: DashboardRow[] = [];
+      for (const r of rawRows) {
+        const prod = r.product_class ?? '';
+        if (isExcludedFromPL(prod, prod)) continue;
+        const synth = synthesizeIssuerFromProduct(prod, prod);
+        if (synth) {
+          rows.push({
+            ...r,
+            nome_emissor: synth.nome,
+            grupo_economico: synth.grupoEconomico,
+            cnpj_emissor: synth.cnpj,
+            setor: synth.setor,
+            rating: synth.isSoberano ? 'Soberano' : (r.rating ?? synth.rating),
+          });
+        } else {
+          rows.push(r);
+        }
+      }
 
       // Resolve ratings por CNPJ (não por ticker). O RPC get_resolved_rating
       // faz o fallback CNPJ -> grupo econômico.
@@ -201,11 +226,15 @@ export function useFundoDashboard(fundo: string | null) {
         cur.financeiro += r.financeiro;
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
-        const ratingLabel = !r.credit_analytics_eligible
-          ? '—'
-          : !cnpj
-            ? 'CNPJ emissor não mapeado'
-            : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
+        const prod = r.product_class ?? '';
+        const synth = synthesizeIssuerFromProduct(prod, prod);
+        const ratingLabel = synth
+          ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
+          : !r.credit_analytics_eligible
+            ? '—'
+            : !cnpj
+              ? 'CNPJ emissor não mapeado'
+              : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
           key,
           ticker: r.ticker?.trim() || '—',
