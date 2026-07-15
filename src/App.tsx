@@ -149,25 +149,34 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={session ? <PostAuthRedirect /> : <LoginPage />} />
       <Route path="/trocar-senha" element={
         !session ? <Navigate to="/login" replace /> :
-        !currentUser?.must_change_password ? <Navigate to="/" replace /> :
+        !currentUser?.must_change_password ? <PostAuthRedirect /> :
         <ChangePasswordPage />
       } />
       <Route path="/mfa/configurar" element={
         !session ? <Navigate to="/login" replace /> :
-        mfaStatus !== 'needs_enroll' ? <Navigate to="/" replace /> :
+        mfaStatus !== 'needs_enroll' ? <PostAuthRedirect /> :
         <MfaEnrollPage />
       } />
       <Route path="/mfa/verificar" element={
         !session ? <Navigate to="/login" replace /> :
-        mfaStatus !== 'needs_verify' ? <Navigate to="/" replace /> :
+        mfaStatus !== 'needs_verify' ? <PostAuthRedirect /> :
         <MfaVerifyPage />
       } />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );
+}
+
+// After each auth gate, forward to ?next=<same-origin path> if present, otherwise home.
+// Used to preserve the OAuth consent URL through login / password change / MFA.
+function PostAuthRedirect() {
+  const [params] = useSearchParams();
+  const next = params.get('next');
+  const isSafe = next && next.startsWith('/') && !next.startsWith('//');
+  return <Navigate to={isSafe ? next! : '/'} replace />;
 }
 
 function ThemeInit() {
