@@ -1,61 +1,51 @@
+## Objetivo
 
-# Sincronizar com o Supabase externo (`wicveoufijvtqebuxxaj`)
+Padronizar como quatro tipos especiais de ativo aparecem nas visões de posição (aba **Posições** e aba **Trade Monitor → Alocação**), para que Termo, Overnight, LFT e DAP Futuro deixem de "poluir" as agregações por emissor / grupo econômico / rating e sigam regras de negócio explícitas.
 
-Objetivo: garantir que o projeto externo tenha o mesmo schema do Lovable Cloud (Fases 1, 2, 3, 7) e, opcionalmente, os mesmos dados de rating já migrados. O app **continua** apontando para o Lovable Cloud — nada em `.env`, `client.ts` ou `types.ts` muda.
+## Regras de negócio (o que vai passar a valer)
 
-## Situação atual
+| Tipo (product_class) | Grupo econômico | Emissor | CNPJ usado | Rating exibido | Conta no PL? |
+|---|---|---|---|---|---|
+| Termo | TERMO | B3 | 09.346.601/0001-25 | Rating de B3 (hoje AAA) | Sim |
+| Overnight | CAIXA | TESOURO NACIONAL | 00.000.000/0001-91 | Soberano | Sim |
+| LFT | CAIXA | TESOURO NACIONAL | 00.000.000/0001-91 | Soberano | Sim |
+| DAP Future | — | — | — | — | Não (excluído) |
 
-- Arquivo `supabase-external-schema.sql` já existe na raiz do projeto e contém, em versão idempotente:
-  - Extensão `pgcrypto` e função `set_updated_at`.
-  - Bloco opcional para criar `app_role`, `user_roles` e `has_role` (comentado).
-  - Tabelas `rating_issuer_history`, `rating_emission_history`, `rating_fidc_class_history` com índices, GRANTs, RLS, policies e triggers.
-  - RPC `get_resolved_rating_v2` (fidc_class → emission → issuer).
-  - Tabelas `fidc_alert_rules` e `fidc_alert_events` com índices, GRANTs, RLS, policies e trigger.
-  - Bloco opcional de backfill de `rating_issuer_history` a partir de `issuer_ratings` (comentado).
-  - Bloco alternativo de policies permissivas para authenticated (sem `has_role`).
+Hoje esses ativos aparecem como "Emissor não mapeado" / "Grupo não mapeado" na aba Exposição por Grupo/Emissor, e Overnight/LFT são agrupados como "Tesouro Nacional" (não CAIXA) na Alocação. DAP Future já é excluído na Alocação, mas ainda entra em contagens da página Posições.
 
-Nada precisa ser reescrito para o schema em si. A sincronização é operacional (executar) + opcional (dados).
+## O que muda na aplicação
 
-## Etapas do plano
+Toda a lógica passa a viver em um único utilitário compartilhado, para que as duas telas consumam a mesma regra.
 
-### 1. Preparar o projeto externo
-Escolher, antes de rodar o SQL:
-- **A.** Manter policies com `has_role` (mais seguro). Requer que o projeto externo já tenha `app_role` + `user_roles` + `has_role`, ou descomentar o bloco 2 do script para criá-los.
-- **B.** Usar o bloco alternativo permissivo (todo `authenticated` lê/escreve). Mais simples, menos seguro. Usar só se for um projeto sandbox.
+1. **Novo helper `synthesizeIssuerFromProduct(product, product_class)`** em `src/components/alocacao/allocationUtils.ts`, retornando (quando aplicável) um "emissor sintético": `{ cnpj, nome, grupoEconomico, setor, rating, ratingLabel, isSoberano, excluded }`. Reaproveita as funções `isTermo`, `isExcludedFromPL`, `isTesouroNacional` já existentes.
 
-### 2. Aplicar o schema
-1. Abrir o SQL Editor do projeto externo `wicveoufijvtqebuxxaj`.
-2. Colar o conteúdo de `supabase-external-schema.sql`.
-3. Descomentar o bloco 2 (app_role/has_role) se necessário — passo 1A.
-4. Executar. Como é idempotente, pode ser rodado várias vezes.
-5. Verificar no dashboard do projeto externo:
-   - Tabelas criadas em `public`.
-   - Policies ativas.
-   - Função `get_resolved_rating_v2` presente.
+2. **Aba Posições – tabela e painéis BI** (`src/pages/PosicoesPage.tsx`)
+   - Ao enriquecer cada posição, se o helper devolver um emissor sintético, sobrescrever `cnpj`, `empresaNome`, `empresaRating` (usando "Soberano" para Overnight/LFT e o rating real de B3 para Termo) e um novo campo `grupoEconomico`.
+   - DAP Future: filtrar da lista `enriched` antes das agregações (contadores, gráficos, drill-downs, exportações). Deixa de aparecer em "Total de posições", "Distribuição por classe/fundo", "Duration", etc.
+   - Termo/Overnight/LFT continuam classificados como `isNonAnalyzable` (não exigem análise de research), mas agora têm emissor/rating preenchidos.
 
-### 3. (Opcional) Sincronizar dados de rating
-Se você quiser levar as 610 linhas já populadas de `rating_issuer_history` (Fase 3) e demais históricos para o projeto externo, temos duas opções:
+3. **Aba Posições – Exposição por Grupo / Emissor** (`src/components/posicoes/useExposicaoData.ts`)
+   - Antes de resolver `empresaByCnpj`, aplicar o helper. Quando houver emissor sintético, injetar uma empresa virtual (Termo→B3 real via CNPJ da B3; Overnight/LFT→Tesouro Nacional real via CNPJ 00.000.000/0001-91) e usar `grupoEconomico` "TERMO" ou "CAIXA".
+   - Rating: para Overnight/LFT forçar rótulo "Soberano" no `ResolvedRating` (source "emissor") — não usa `ratingBucket` numérico; Termo herda o rating real da B3.
+   - DAP Future: descartar já em `posicoes` (nem soma no PL do fundo nem entra em nenhum agregado).
 
-- **3a. Backfill a partir de `issuer_ratings` do próprio projeto externo** (se essa tabela existir lá): descomentar o bloco 6 do script.
-- **3b. Exportar do Lovable Cloud e importar no externo** (novo trabalho, não coberto pelo arquivo atual):
-  1. Eu exporto CSVs de `rating_issuer_history`, `rating_emission_history`, `rating_fidc_class_history`, `fidc_alert_rules`, `fidc_alert_events` do Lovable Cloud para `/mnt/documents/`.
-  2. Você baixa os CSVs e usa `Table Editor → Import CSV` no dashboard do projeto externo, ou eu gero um segundo arquivo `supabase-external-data.sql` com `INSERT`s prontos.
+4. **Trade Monitor → Alocação** (`src/components/alocacao/useAllocationData.ts`)
+   - Substituir a lógica ad-hoc atual (que já sintetiza Tesouro Nacional e "Termo (B3)") por uma chamada ao mesmo helper.
+   - Grupo econômico de Overnight/LFT passa de "Tesouro Nacional" para **CAIXA**.
+   - Grupo econômico de Termo passa de "Termo (B3)" para **TERMO**, mantendo o emissor B3 e o rating real de B3.
+   - Rating exibido de Overnight/LFT vira **Soberano** (com badge próprio); o bucket usado internamente para limites continua "AAA" para não quebrar `worstRating`.
+   - `isExcludedFromPL` continua tratando DAP/Futuros (comportamento atual mantido).
 
-### 4. (Opcional) Ampliar o escopo
-Se quiser replicar também outras tabelas do app (`empresas`, `posicoes`, `trade_*`, `fidc_monthly_reports`, etc.) e suas funções (`get_emissores_gestao`, `get_posicoes_dashboard_fundo`, `recalc_trade_metricas_*`), eu gero um segundo arquivo `supabase-external-schema-full.sql` cobrindo todo o schema `public`. Não faz parte do script atual.
+5. **Badge de rating "Soberano"** — pequeno ajuste em `RatingBadge` para reconhecer o rótulo "Soberano" e exibi-lo com estilo neutro/positivo (não misturar com escala AAA/AA/etc.). Aplicado só onde o helper marcar `isSoberano`.
 
-## Perguntas antes de rodar
+## Não-escopo
 
-Para eu ajustar o entregável e/ou gerar o export de dados, preciso confirmar três pontos:
+- Nenhuma alteração no importador de posições nem na tabela `posicoes` (as regras são aplicadas em runtime, sem migração).
+- Nenhuma mudança em `empresas` ou `issuer_ratings` — B3 e Tesouro Nacional já existem.
+- Notional de DAP Futuro fica de fora, conforme pedido.
 
-1. **Policies:** manter `has_role` (opção A) ou usar policies permissivas (opção B)?
-2. **Dados:** só schema, backfill local (3a) ou export do Lovable Cloud (3b)?
-3. **Escopo:** parar nas Fases 1/2/3/7 (arquivo atual) ou incluir o schema completo do app (etapa 4)?
+## Verificação após implementar
 
-## O que muda no repositório
-
-- Se a resposta for "só schema atual": nenhuma alteração de arquivo — basta rodar o SQL existente.
-- Se for "export de dados (3b)": criar `supabase-external-data.sql` (ou CSVs em `/mnt/documents/`).
-- Se for "schema completo (4)": criar `supabase-external-schema-full.sql`.
-
-Em nenhum caso o app é alterado.
+- Aba Posições → tabela principal: filtrar por `product_class = Termo`, `Overnight`, `LFT` e confirmar emissor/grupo/rating conforme tabela acima; confirmar que `DAP Future` sumiu dos totais e gráficos.
+- Aba Posições → Exposição por Grupo / Emissor: aparecem os grupos "TERMO" e "CAIXA"; contadores de "Emissor não mapeado" / "Grupo não mapeado" diminuem.
+- Trade Monitor → Alocação → painel por grupo: Overnight/LFT aparecem sob "CAIXA" com badge "Soberano"; Termo sob "TERMO" com rating de B3; DAP Future segue fora.

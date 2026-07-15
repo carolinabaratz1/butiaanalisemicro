@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
 import type { ResolvedRating } from "@/lib/ratings/useResolvedRating";
-import { worstRating, ratingBucket } from "@/components/alocacao/allocationUtils";
+import { worstRating, ratingBucket, synthesizeIssuerFromProduct, isExcludedFromPL } from "@/components/alocacao/allocationUtils";
 import { getDisplayStatus, fetchAllPaged } from "@/utils/analiseStatus";
 
 export type StatusKey =
@@ -172,8 +172,8 @@ export function useExposicaoData(valDate: string | null) {
     enabled: !!valDate,
     staleTime: 60_000,
     queryFn: async () => {
-      // 1) Posições da data
-      const posicoes = await fetchAllPaged<Posicao>((from, to) =>
+      // 1) Posições da data (exclui DAP/Futuros — não contam para PL)
+      const posicoesRaw = await fetchAllPaged<Posicao>((from, to) =>
         supabase
           .from("posicoes")
           .select(
@@ -181,6 +181,9 @@ export function useExposicaoData(valDate: string | null) {
           )
           .eq("val_date", valDate as string)
           .range(from, to),
+      );
+      const posicoes = posicoesRaw.filter(
+        (p) => !isExcludedFromPL(p.product ?? "", p.product_class ?? ""),
       );
 
       const fundosSet = new Set<string>();
@@ -276,20 +279,38 @@ export function useExposicaoData(valDate: string | null) {
         const em = p.isin ? emissoesMap.get(p.isin) ?? null : null;
         const ativo = em?.ticker ? ativoByTicker.get(em.ticker) ?? null : null;
         const rawCnpj = em?.cnpj_emissor ?? ativo?.emissor_cnpj ?? null;
-        const cnpj = normCnpj(rawCnpj);
-        const empresa = cnpj ? empresaByCnpj.get(cnpj) ?? null : null;
+        let cnpj = normCnpj(rawCnpj);
+        let empresa = cnpj ? empresaByCnpj.get(cnpj) ?? null : null;
 
-        const emissorNome = empresa?.nome ?? ativo?.emissor_nome ?? "Emissor não mapeado";
-        const grupo = empresa?.grupo_economico?.trim() || "Grupo não mapeado";
-        const setor = empresa?.setor ?? "—";
+        let emissorNome = empresa?.nome ?? ativo?.emissor_nome ?? "Emissor não mapeado";
+        let grupo = empresa?.grupo_economico?.trim() || "Grupo não mapeado";
+        let setor = empresa?.setor ?? "—";
 
-        const resolved =
+        let resolved: ResolvedRating =
           ratingMap.get(ratingKey(cnpj, em?.ticker ?? null)) ?? {
             rating: null,
             source: "nr" as const,
             agencia: null,
             data_rating: null,
           };
+
+        // Emissor sintético para Termo (B3/TERMO) e Overnight/LFT (Tesouro/CAIXA/Soberano)
+        const synth = synthesizeIssuerFromProduct(p.product, p.product_class);
+        if (synth) {
+          const synthCnpj = normCnpj(synth.cnpj);
+          const empReal = empresaByCnpj.get(synthCnpj) ?? null;
+          cnpj = synthCnpj;
+          empresa = empReal;
+          emissorNome = synth.nome;
+          grupo = synth.grupoEconomico;
+          setor = empReal?.setor ?? synth.setor;
+          resolved = {
+            rating: synth.rating,
+            source: "emissor" as const,
+            agencia: null,
+            data_rating: null,
+          };
+        }
 
         // taxa
         let taxaLabel: string | null = null;
