@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { FundoDashboard } from '@/components/posicoes/FundoDashboard';
 import { ExposicaoGrupoEmissorTab } from '@/components/posicoes/ExposicaoGrupoEmissorTab';
 import { toast } from '@/hooks/use-toast';
+import { synthesizeIssuerFromProduct, isExcludedFromPL } from '@/components/alocacao/allocationUtils';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#3b82f6', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f43f5e'];
