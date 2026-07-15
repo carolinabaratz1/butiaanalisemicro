@@ -37,6 +37,7 @@ import PositionsMonitorPage from "./pages/PositionsMonitorPage";
 import TradeActivityDashboardPage from "./pages/TradeActivityDashboardPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AlertasEnginePage from "./pages/fidc/AlertasEnginePage";
+import OAuthConsentPage from "./pages/OAuthConsentPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
