@@ -72,16 +72,25 @@ function ProtectedRoutes() {
     return <LoadingScreen />;
   }
 
+  // Preserve `?next=` (used for OAuth consent) through the auth-gate redirects.
+  const nextSuffix = (() => {
+    if (location.pathname === '/.lovable/oauth/consent') {
+      return `?next=${encodeURIComponent(location.pathname + location.search)}`;
+    }
+    const passthrough = new URLSearchParams(location.search).get('next');
+    return passthrough ? `?next=${encodeURIComponent(passthrough)}` : '';
+  })();
+
   if (currentUser?.must_change_password) {
-    return <Navigate to="/trocar-senha" replace />;
+    return <Navigate to={`/trocar-senha${nextSuffix}`} replace />;
   }
 
   if (mfaStatus === 'needs_enroll') {
-    return <Navigate to="/mfa/configurar" replace />;
+    return <Navigate to={`/mfa/configurar${nextSuffix}`} replace />;
   }
 
   if (mfaStatus === 'needs_verify') {
-    return <Navigate to="/mfa/verificar" replace />;
+    return <Navigate to={`/mfa/verificar${nextSuffix}`} replace />;
   }
 
   // OAuth consent lives outside the app shell for a clean, focused decision UI.
