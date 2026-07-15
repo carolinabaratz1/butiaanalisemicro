@@ -123,7 +123,28 @@ export function useFundoDashboard(fundo: string | null) {
         p_fundo: fundo,
       } as never);
       if (error) throw error;
-      const rows = (data ?? []) as unknown as DashboardRow[];
+      const rawRows = (data ?? []) as unknown as DashboardRow[];
+
+      // 1) Excluir DAP/Futuro do PL e agregações.
+      // 2) Injetar emissor sintético para Termo (B3) / Overnight / LFT (Tesouro Nacional).
+      const rows: DashboardRow[] = [];
+      for (const r of rawRows) {
+        const prod = r.product_class ?? '';
+        if (isExcludedFromPL(prod, prod)) continue;
+        const synth = synthesizeIssuerFromProduct(prod, prod);
+        if (synth) {
+          rows.push({
+            ...r,
+            nome_emissor: synth.nome,
+            grupo_economico: synth.grupoEconomico,
+            cnpj_emissor: synth.cnpj,
+            setor: synth.setor,
+            rating: synth.isSoberano ? 'Soberano' : (r.rating ?? synth.rating),
+          });
+        } else {
+          rows.push(r);
+        }
+      }
 
       // Resolve ratings por CNPJ (não por ticker). O RPC get_resolved_rating
       // faz o fallback CNPJ -> grupo econômico.
