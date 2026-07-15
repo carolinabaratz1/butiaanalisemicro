@@ -226,11 +226,15 @@ export function useFundoDashboard(fundo: string | null) {
         cur.financeiro += r.financeiro;
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
-        const ratingLabel = !r.credit_analytics_eligible
-          ? '—'
-          : !cnpj
-            ? 'CNPJ emissor não mapeado'
-            : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
+        const prod = r.product_class ?? '';
+        const synth = synthesizeIssuerFromProduct(prod, prod);
+        const ratingLabel = synth
+          ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
+          : !r.credit_analytics_eligible
+            ? '—'
+            : !cnpj
+              ? 'CNPJ emissor não mapeado'
+              : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
           key,
           ticker: r.ticker?.trim() || '—',
