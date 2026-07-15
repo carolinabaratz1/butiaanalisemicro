@@ -508,7 +508,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
         if (empresaEff) {
           const grupoKey = isSoberanoEff
-            ? "Tesouro Nacional"
+            ? "CAIXA"
             : (empresaEff.grupo_economico?.trim() || empresaEff.nome);
           const resolvedR = ratingByCnpj.get(empresaEff.cnpj);
           const emissorEntry = {
@@ -636,7 +636,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
 
       if (termoTotal > 0) {
         porGrupo.push({
-          grupo: "Termo (B3)",
+          grupo: "TERMO",
           emissores: [],
           ratingBucket: "AAA",
           total: termoTotal,
