@@ -72,7 +72,7 @@ export default function SyncExternalCard() {
       .select('*')
       .order('started_at', { ascending: false })
       .limit(20);
-    setHistory((data ?? []) as SyncLogRow[]);
+    setHistory((data ?? []) as unknown as SyncLogRow[]);
   }, []);
 
   useEffect(() => {
