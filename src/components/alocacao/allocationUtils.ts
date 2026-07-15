@@ -65,6 +65,70 @@ export function isTermo(product: string, productClass: string): boolean {
   return p.includes("termo") || c.includes("termo");
 }
 
+// ── Emissor sintético por tipo de produto ──
+// Alguns produtos não têm emissor real na carteira, mas devem ser
+// tratados de forma padronizada em toda a aplicação (Posições, Exposição,
+// Alocação). Retorna null quando o produto é comum (segue o fluxo normal).
+export const B3_CNPJ = "09.346.601/0001-25";
+export const TESOURO_CNPJ = "00.000.000/0001-91";
+
+export interface SyntheticIssuer {
+  cnpj: string;
+  nome: string;
+  grupoEconomico: string;
+  setor: string;
+  rating: string; // rótulo a exibir (pode ser "Soberano" ou a rating real)
+  ratingBucket: "AAA"; // bucket usado para limites/worstRating
+  isSoberano: boolean;
+  isTermo: boolean;
+}
+
+function isOvernightProduct(product: string, productClass: string): boolean {
+  const p = (product || "").toLowerCase();
+  const c = (productClass || "").toLowerCase();
+  return p.includes("overnight") || c.includes("overnight") ||
+    p.includes("compromiss") || c.includes("compromiss");
+}
+
+function isLftProduct(product: string, productClass: string): boolean {
+  const p = (product || "").toLowerCase();
+  const c = (productClass || "").toLowerCase();
+  return p.includes("lft") || c === "lft";
+}
+
+export function synthesizeIssuerFromProduct(
+  product: string | null | undefined,
+  productClass: string | null | undefined,
+): SyntheticIssuer | null {
+  const prod = product ?? "";
+  const cls = productClass ?? "";
+  if (isTermo(prod, cls)) {
+    return {
+      cnpj: B3_CNPJ,
+      nome: "B3",
+      grupoEconomico: "TERMO",
+      setor: "Financeiro",
+      rating: "AAA",
+      ratingBucket: "AAA",
+      isSoberano: false,
+      isTermo: true,
+    };
+  }
+  if (isOvernightProduct(prod, cls) || isLftProduct(prod, cls)) {
+    return {
+      cnpj: TESOURO_CNPJ,
+      nome: "TESOURO NACIONAL",
+      grupoEconomico: "CAIXA",
+      setor: "Título Público",
+      rating: "Soberano",
+      ratingBucket: "AAA",
+      isSoberano: true,
+      isTermo: false,
+    };
+  }
+  return null;
+}
+
 // Map product / product_class to a tipo_ativo recognised by allocation_limits.
 export function tipoAtivoFromProduct(product: string, productClass: string): string {
   const p = (product || "").toLowerCase();
