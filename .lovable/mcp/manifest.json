@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://oxgbtbdkvxyraxbtpdjt.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "butia-research-mcp",
+      "version": "0.1.0",
+      "title": "Butiá Research Platform"
+    },
+    "tools": [
+      {
+        "name": "whoami",
+        "title": "Quem sou eu",
+        "description": "Retorna o perfil do usuário autenticado (id, nome, e-mail, função).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_emissores",
+        "title": "Listar emissores",
+        "description": "Lista emissores (empresas) da plataforma Butiá com filtros opcionais por nome, setor e rating. Máximo 100 resultados.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "search": {
+              "description": "Busca em nome ou CNPJ.",
+              "type": "string"
+            },
+            "setor": {
+              "description": "Filtra por setor.",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Máx. de resultados (padrão 25).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_emissor",
+        "title": "Detalhes do emissor",
+        "description": "Retorna detalhes de um emissor por CNPJ, incluindo emissões vinculadas e últimas análises.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "cnpj": {
+              "type": "string",
+              "minLength": 11,
+              "description": "CNPJ do emissor (com ou sem formatação)."
+            }
+          },
+          "required": [
+            "cnpj"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_analises",
+        "title": "Listar análises",
+        "description": "Lista análises de crédito/ações com filtros opcionais. Ordenadas pelas mais recentes.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "empresa_id": {
+              "description": "Filtra por emissor (id).",
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "recomendacao": {
+              "description": "Ex.: Compra, Venda, Neutro.",
+              "type": "string"
+            },
+            "analista": {
+              "description": "Nome/id do analista responsável.",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Máx. de resultados (padrão 25).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_posicoes",
+        "title": "Listar posições",
+        "description": "Lista posições da carteira em uma data (padrão: mais recente). Filtros opcionais por ISIN e classe do produto.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "val_date": {
+              "description": "Data de referência YYYY-MM-DD. Padrão: última.",
+              "type": "string"
+            },
+            "isin": {
+              "description": "Filtra por ISIN.",
+              "type": "string"
+            },
+            "product_class": {
+              "description": "Classe do produto (ex.: DEB, LFT).",
+              "type": "string"
+            },
+            "limit": {
+              "description": "Máx. de resultados (padrão 50).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

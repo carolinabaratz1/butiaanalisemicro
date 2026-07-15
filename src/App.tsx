@@ -1,6 +1,6 @@
 import type React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,6 +37,7 @@ import PositionsMonitorPage from "./pages/PositionsMonitorPage";
 import TradeActivityDashboardPage from "./pages/TradeActivityDashboardPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AlertasEnginePage from "./pages/fidc/AlertasEnginePage";
+import OAuthConsentPage from "./pages/OAuthConsentPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -53,13 +54,16 @@ function LoadingScreen() {
 
 function ProtectedRoutes() {
   const { session, loading, currentUser, mfaStatus } = useAuth();
+  const location = useLocation();
 
   if (loading || mfaStatus === 'loading') {
     return <LoadingScreen />;
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const next = location.pathname + location.search;
+    const suffix = next && next !== '/' ? `?next=${encodeURIComponent(next)}` : '';
+    return <Navigate to={`/login${suffix}`} replace />;
   }
 
   // Aguarda o profile carregar antes de aplicar RouteGuard,
@@ -68,21 +72,36 @@ function ProtectedRoutes() {
     return <LoadingScreen />;
   }
 
+  // Preserve `?next=` (used for OAuth consent) through the auth-gate redirects.
+  const nextSuffix = (() => {
+    if (location.pathname === '/.lovable/oauth/consent') {
+      return `?next=${encodeURIComponent(location.pathname + location.search)}`;
+    }
+    const passthrough = new URLSearchParams(location.search).get('next');
+    return passthrough ? `?next=${encodeURIComponent(passthrough)}` : '';
+  })();
+
   if (currentUser?.must_change_password) {
-    return <Navigate to="/trocar-senha" replace />;
+    return <Navigate to={`/trocar-senha${nextSuffix}`} replace />;
   }
 
   if (mfaStatus === 'needs_enroll') {
-    return <Navigate to="/mfa/configurar" replace />;
+    return <Navigate to={`/mfa/configurar${nextSuffix}`} replace />;
   }
 
   if (mfaStatus === 'needs_verify') {
-    return <Navigate to="/mfa/verificar" replace />;
+    return <Navigate to={`/mfa/verificar${nextSuffix}`} replace />;
+  }
+
+  // OAuth consent lives outside the app shell for a clean, focused decision UI.
+  if (location.pathname === '/.lovable/oauth/consent') {
+    return <OAuthConsentPage />;
   }
 
   return (
     <AppLayout>
       <Routes>
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsentPage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/posicoes" element={<RouteGuard path="/posicoes"><PosicoesPage /></RouteGuard>} />
         <Route path="/positions-monitor" element={<RouteGuard path="/posicoes"><PositionsMonitorPage /></RouteGuard>} />
@@ -139,25 +158,34 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={session ? <PostAuthRedirect /> : <LoginPage />} />
       <Route path="/trocar-senha" element={
         !session ? <Navigate to="/login" replace /> :
-        !currentUser?.must_change_password ? <Navigate to="/" replace /> :
+        !currentUser?.must_change_password ? <PostAuthRedirect /> :
         <ChangePasswordPage />
       } />
       <Route path="/mfa/configurar" element={
         !session ? <Navigate to="/login" replace /> :
-        mfaStatus !== 'needs_enroll' ? <Navigate to="/" replace /> :
+        mfaStatus !== 'needs_enroll' ? <PostAuthRedirect /> :
         <MfaEnrollPage />
       } />
       <Route path="/mfa/verificar" element={
         !session ? <Navigate to="/login" replace /> :
-        mfaStatus !== 'needs_verify' ? <Navigate to="/" replace /> :
+        mfaStatus !== 'needs_verify' ? <PostAuthRedirect /> :
         <MfaVerifyPage />
       } />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );
+}
+
+// After each auth gate, forward to ?next=<same-origin path> if present, otherwise home.
+// Used to preserve the OAuth consent URL through login / password change / MFA.
+function PostAuthRedirect() {
+  const [params] = useSearchParams();
+  const next = params.get('next');
+  const isSafe = next && next.startsWith('/') && !next.startsWith('//');
+  return <Navigate to={isSafe ? next! : '/'} replace />;
 }
 
 function ThemeInit() {
