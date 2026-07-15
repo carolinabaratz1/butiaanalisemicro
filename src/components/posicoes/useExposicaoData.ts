@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
 import type { ResolvedRating } from "@/lib/ratings/useResolvedRating";
-import { worstRating, ratingBucket } from "@/components/alocacao/allocationUtils";
+import { worstRating, ratingBucket, synthesizeIssuerFromProduct, isExcludedFromPL } from "@/components/alocacao/allocationUtils";
 import { getDisplayStatus, fetchAllPaged } from "@/utils/analiseStatus";
 
 export type StatusKey =
