@@ -491,7 +491,15 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
     }
   }
 
-  const ativosRows = Array.from(ativosMap.values());
+  // Remove chaves vazias das linhas de ativos para que a edge function
+  // preserve os valores já existentes no banco (merge parcial).
+  const ativosRows = Array.from(ativosMap.values()).map((row) => {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (v !== null && v !== undefined && v !== "") cleaned[k] = v;
+    }
+    return cleaned;
+  });
 
   return {
     rows: {

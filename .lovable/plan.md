@@ -1,42 +1,38 @@
-## Problema
+## Objetivo
 
-O tratamento sintético dos ativos especiais (Termo → B3, Overnight/LFT → Tesouro Nacional, DAP/Futuro → excluído) foi aplicado nas abas Posições, Exposição por Grupo/Emissor e Alocação, mas **não foi propagado para o Dashboard do Fundo** (aba "Dashboard" em `/posicoes`, componente `FundoDashboard`).
+Na aba **Atualizar Dados**, o upload da planilha deixará de sobrescrever a linha inteira de `trade_ativos`. Passará a atualizar apenas os campos que vierem preenchidos na planilha, mantendo os valores anteriores nos campos que a planilha não trouxer (ex.: rating manual, data_rating, spread_emissao já cadastrados).
 
-O hook `useFundoDashboard` consome o RPC `get_posicoes_dashboard_fundo` e agrega diretamente pelos campos crus (`nome_emissor`, `grupo_economico`, `cnpj_emissor`, `product_class`), sem passar pelo helper `synthesizeIssuerFromProduct` nem filtrar DAP/Futuro.
+As demais tabelas (`trade_taxas`, `trade_ntnb`, `trade_ipca_ref`) continuam com o upsert atual — o comportamento delas já é o esperado.
 
-Efeitos visíveis hoje no dashboard:
-- Ativos Termo aparecem sem emissor/grupo (ou com o emissor original), em vez de B3 / grupo TERMO.
-- Overnight e LFT aparecem sem emissor consolidado, em vez de Tesouro Nacional / grupo CAIXA / rating "Soberano".
-- DAP/Futuro entra no PL total, distorcendo KPIs, distribuições e Top Posições.
+## Mudanças
 
-## Correção
+### 1. Edge Function `supabase/functions/process-upload/index.ts`
 
-Ajustar apenas o hook `src/hooks/useFundoDashboard.ts` para reaplicar a mesma normalização já em uso nas demais telas. Nenhuma outra tela, RPC ou tabela precisa mudar.
+Adicionar tratamento especial para `trade_ativos` na função `batchUpsert`:
 
-Passos:
+- Para as outras tabelas: continua `upsert` normal (comportamento atual).
+- Para `trade_ativos`:
+  1. Buscar as linhas existentes desses tickers (`select * where ticker in (...)`).
+  2. Para cada linha nova, fazer merge: para cada campo, se o valor vindo da planilha for `null`/`undefined`/`""`, manter o valor antigo; caso contrário usar o novo.
+  3. Fazer `upsert` do resultado mesclado (mantém idempotência e insere tickers realmente novos).
 
-1. **Filtrar DAP/Futuro antes de qualquer agregação**  
-   Aplicar `isExcludedFromPL(product_class, product_class)` (usando `product_class` como produto — é o único campo disponível no retorno do RPC) e descartar as linhas correspondentes. Assim DAP/Futuro somem de PL total, nº de ativos, duration médio, distribuições e Top Posições.
+Isso garante que:
+- Tickers novos entram normalmente.
+- Tickers existentes têm somente os campos preenchidos da planilha atualizados.
+- Nenhum registro é excluído.
 
-2. **Injetar emissor sintético para Termo/Overnight/LFT**  
-   Antes de resolver ratings e classificar, mapear cada `DashboardRow` com `synthesizeIssuerFromProduct(product_class, product_class)`:
-   - Quando o helper retorna um sintético, sobrescrever no row: `nome_emissor`, `grupo_economico`, `cnpj_emissor`, `setor` e um campo `rating` sintético (`"Soberano"` para Tesouro, `"AAA"` para B3).
-   - Isso garante que o rating resolvido por CNPJ pegue o registro real do Tesouro/B3 quando existir em `empresas`, e caso contrário use o rótulo sintético como fallback.
+### 2. Cliente `src/components/trade/UploadPage.tsx`
 
-3. **Preservar o rótulo "Soberano" no Top Posições e no By Rating**  
-   Após a resolução por CNPJ, se o row for sintético soberano (Tesouro), forçar o `ratingLabel` exibido como `"Soberano"` (mantendo o bucket AAA na agregação `byRating`, para não quebrar a ordenação existente).
-
-4. **CNPJs únicos para resolução de rating**  
-   O `Set` de CNPJs enviado para `resolveRatingsBatch` passa a incluir os CNPJs sintéticos (B3 `09.346.601/0001-25` e Tesouro `00.394.460/0001-41`), então limites e ratings reais desses emissores, se cadastrados, aparecem naturalmente.
+Ajuste mínimo no parser `parseTradeWorkbook`: antes de enviar cada linha de `trade_ativos`, remover chaves cujo valor seja `null`/`undefined`/`""`. Assim o payload já chega enxuto na Edge Function e o merge do lado do servidor decide o que preservar.
 
 ## Detalhes técnicos
 
-- Arquivo alterado: `src/hooks/useFundoDashboard.ts` apenas.
-- Imports adicionais: `synthesizeIssuerFromProduct`, `isExcludedFromPL` de `@/components/alocacao/allocationUtils`.
-- Transformação feita uma vez, logo após receber `rows` do RPC e antes de montar `uniqueCnpjs`. As agregações (`byTipo`, `byIndexador`, `byDuration`, `topPosicoes`, `byRating`, `bySetor`, `byGrupo`, `byEmissor`, `qualidade`) reutilizam os rows normalizados sem mudança adicional.
-- Nada muda no RPC, em RLS, em tipos gerados, nem no componente `FundoDashboard.tsx`.
+- Chave de conflito de `trade_ativos` continua `ticker` (não muda).
+- O merge é feito em lotes (usar os mesmos tickers do batch atual — sem query extra por linha).
+- Fluxo `start` / `upsert` / `finish` e o recálculo de métricas permanecem iguais.
+- Nada muda em `trade_taxas`, `trade_ntnb`, `trade_ipca_ref` nem nas tabelas derivadas.
 
 ## Fora de escopo
 
-- Renormalização do `byTipo` para os rótulos padronizados de `tipoAtivoFromProduct` (hoje mostra o `product_class` cru). Pode ser tratado em uma etapa futura se o usuário pedir.
-- Qualquer ajuste em Notional/DAP — mantém-se apenas a exclusão do PL, conforme já acordado.
+- Preservação de histórico de `trade_taxas` (upsert já é aditivo por `ticker,data`).
+- Alterações em tabelas derivadas (`trade_spread_historico` etc.) — continuam sendo recalculadas.

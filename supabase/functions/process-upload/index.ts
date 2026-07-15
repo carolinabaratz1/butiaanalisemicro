@@ -120,6 +120,47 @@ async function upsertChunk(
   throw new Error(`${table} upsert: ${lastErr.slice(0, 500)}`);
 }
 
+function isEmpty(v: unknown): boolean {
+  return v === null || v === undefined || v === "";
+}
+
+// Merge parcial para trade_ativos: preserva campos existentes quando a
+// planilha não traz valor. Faz uma query pelos tickers do lote e mescla
+// campo-a-campo antes do upsert.
+async function mergeAtivosWithExisting(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const tickers = Array.from(
+    new Set(rows.map((r) => r.ticker).filter((t): t is string => typeof t === "string" && t.length > 0)),
+  );
+  if (tickers.length === 0) return rows;
+
+  const existingByTicker = new Map<string, Record<string, unknown>>();
+  // Fetch em lotes para não estourar limite de URL.
+  const FETCH_CHUNK = 200;
+  for (let i = 0; i < tickers.length; i += FETCH_CHUNK) {
+    const slice = tickers.slice(i, i + FETCH_CHUNK);
+    const { data, error } = await supabase.from("trade_ativos").select("*").in("ticker", slice);
+    if (error) throw new Error(`trade_ativos select: ${error.message}`);
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      if (typeof row.ticker === "string") existingByTicker.set(row.ticker, row);
+    }
+  }
+
+  return rows.map((incoming) => {
+    const ticker = String(incoming.ticker ?? "");
+    const existing = existingByTicker.get(ticker);
+    if (!existing) return incoming;
+    const merged: Record<string, unknown> = { ...existing };
+    for (const [k, v] of Object.entries(incoming)) {
+      if (!isEmpty(v)) merged[k] = v;
+    }
+    return merged;
+  });
+}
+
 async function batchUpsert(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -127,7 +168,10 @@ async function batchUpsert(
   rows: Record<string, unknown>[],
 ) {
   if (rows.length === 0) return 0;
-  const deduped = dedupeRows(table, rows);
+  let deduped = dedupeRows(table, rows);
+  if (table === "trade_ativos") {
+    deduped = await mergeAtivosWithExisting(supabase, deduped);
+  }
   // Sub-chunk to keep payloads small and reduce 520 risk on large batches.
   const SUB = 200;
   for (let i = 0; i < deduped.length; i += SUB) {
