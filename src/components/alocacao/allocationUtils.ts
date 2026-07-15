@@ -201,6 +201,7 @@ export function resolveIndexador(product: string, productClass: string, sub: str
 // AAA, AA, A, BBB, <BBB, Sem Rating
 export function ratingBucket(rating: string | null | undefined): string {
   if (!rating) return "Sem Rating";
+  if (/soberano/i.test(rating)) return "AAA"; // Tesouro/Overnight/LFT → tratado como AAA
   const r = rating.toUpperCase().replace(/\(.*?\)/g, "").replace(/^BR/, "").trim();
   if (!r) return "Sem Rating";
   if (r.startsWith("AAA")) return "AAA";
