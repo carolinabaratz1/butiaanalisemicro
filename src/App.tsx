@@ -54,13 +54,16 @@ function LoadingScreen() {
 
 function ProtectedRoutes() {
   const { session, loading, currentUser, mfaStatus } = useAuth();
+  const location = useLocation();
 
   if (loading || mfaStatus === 'loading') {
     return <LoadingScreen />;
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const next = location.pathname + location.search;
+    const suffix = next && next !== '/' ? `?next=${encodeURIComponent(next)}` : '';
+    return <Navigate to={`/login${suffix}`} replace />;
   }
 
   // Aguarda o profile carregar antes de aplicar RouteGuard,
