@@ -36,7 +36,7 @@ const TIME_BUDGET_MS = 20_000;
 const FULL_CHUNK_LIMIT = 2000;
 
 type SyncBody = {
-  mode?: "chunk" | "full";
+  mode?: "chunk" | "full" | "step";
   table?: string;
   tables?: string[];
   offset?: number;
@@ -44,6 +44,9 @@ type SyncBody = {
   reset?: boolean;
   list_only?: boolean;
   trigger?: string;
+  log_id?: string;
+  table_index?: number;
+  started_at_ms?: number;
 };
 
 const TABLE_SET = new Set(TABLES_ALL);
@@ -144,48 +147,72 @@ async function syncOneTable(
   }
 }
 
-async function runFullSync(logId: string) {
+type TableDetail = { table: string; ok: boolean; ms: number; rows: number; chunks: number; error?: string };
+
+// Processa UMA tabela por invocação e reencadeia a próxima via self-fetch,
+// evitando o WORKER_RESOURCE_LIMIT que matava a execução após ~8 tabelas.
+async function runOneTableStep(logId: string, tableIndex: number, startedAtMs: number) {
   const srcUrl = Deno.env.get("SUPABASE_DB_URL")!;
   const dstUrl = Deno.env.get("EXT_SUPABASE_DB_URL")!;
+  const table = TABLES_ALL[tableIndex];
+
+  // Recupera detalhes acumulados
+  const { data: current } = await admin()
+    .from("sync_external_log")
+    .select("details")
+    .eq("id", logId)
+    .maybeSingle();
+  const details: TableDetail[] = ((current?.details as TableDetail[] | null) ?? []);
+
   const src = postgres(srcUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
   const dst = postgres(dstUrl, { max: 1, ssl: "require", prepare: false, idle_timeout: 20 });
-  const startedAt = Date.now();
-  const details: Array<{ table: string; ok: boolean; ms: number; rows: number; chunks: number; error?: string }> = [];
-  let errorMessage: string | null = null;
-
+  let result: TableDetail;
   try {
     await dst`SET session_replication_role = replica`;
-    for (const table of TABLES_ALL) {
-      const r = await syncOneTable(src, dst, table);
-      details.push(r);
-      // Progresso incremental para permitir acompanhamento em tempo real
-      await admin().from("sync_external_log").update({
-        details,
-        tables_ok: details.filter((d) => d.ok).length,
-        tables_failed: details.filter((d) => !d.ok).length,
-      }).eq("id", logId);
-    }
+    result = await syncOneTable(src, dst, table);
   } catch (e) {
-    errorMessage = (e as Error).message;
+    result = { table, ok: false, ms: 0, rows: 0, chunks: 0, error: (e as Error).message };
   } finally {
     try { await dst`SET session_replication_role = origin`; } catch { /* ignore */ }
     await src.end({ timeout: 5 });
     await dst.end({ timeout: 5 });
   }
 
+  details.push(result);
   const ok = details.filter((d) => d.ok).length;
-  const failed = details.length - ok;
-  const status = errorMessage ? "failed" : failed === 0 ? "success" : "partial";
+  const failed = details.filter((d) => !d.ok).length;
+  const isLast = tableIndex >= TABLES_ALL.length - 1;
+
+  if (isLast) {
+    const status = failed === 0 ? "success" : "partial";
+    await admin().from("sync_external_log").update({
+      status,
+      finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - startedAtMs,
+      tables_total: TABLES_ALL.length,
+      tables_ok: ok,
+      tables_failed: failed,
+      details,
+    }).eq("id", logId);
+    return;
+  }
+
   await admin().from("sync_external_log").update({
-    status,
-    finished_at: new Date().toISOString(),
-    duration_ms: Date.now() - startedAt,
-    tables_total: TABLES_ALL.length,
+    details,
     tables_ok: ok,
     tables_failed: failed,
-    details,
-    error_message: errorMessage,
   }).eq("id", logId);
+
+  // Reencadeia a próxima tabela numa nova invocação
+  const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-external-supabase`;
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-cron-secret": Deno.env.get("EXT_SYNC_CRON_SECRET") ?? "",
+    },
+    body: JSON.stringify({ mode: "step", log_id: logId, table_index: tableIndex + 1, started_at_ms: startedAtMs }),
+  }).catch(() => { /* fire-and-forget */ });
 }
 
 Deno.serve(async (req) => {
@@ -220,7 +247,31 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ----- MODO FULL: dispara sync completo em background e retorna imediatamente -----
+  // ----- MODO STEP: processa UMA tabela e reencadeia a próxima (self-fetch) -----
+  if (body.mode === "step") {
+    if (!isCron) {
+      return new Response(JSON.stringify({ error: "step_requires_cron_secret" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const logId = body.log_id ?? "";
+    const idx = Number(body.table_index ?? 0);
+    const startedAtMs = Number(body.started_at_ms ?? Date.now());
+    if (!logId || !Number.isFinite(idx) || idx < 0 || idx >= TABLES_ALL.length) {
+      return new Response(JSON.stringify({ error: "invalid_step_params" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    const p = runOneTableStep(logId, idx, startedAtMs);
+    if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => { /* ignore */ });
+    return new Response(JSON.stringify({ accepted: true, table_index: idx }), {
+      status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // ----- MODO FULL: cria log e dispara a primeira tabela; próximas se reencadeiam -----
   if (body.mode === "full" || (isCron && !body.table)) {
     const { data: logRow, error: logErr } = await admin()
       .from("sync_external_log")
@@ -237,15 +288,11 @@ Deno.serve(async (req) => {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    // Executa em background para não estourar o timeout HTTP
+    const startedAtMs = Date.now();
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
-    if (rt?.waitUntil) {
-      rt.waitUntil(runFullSync(logRow.id));
-    } else {
-      // Fallback: dispara sem await
-      runFullSync(logRow.id);
-    }
+    const p = runOneTableStep(logRow.id, 0, startedAtMs);
+    if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => { /* ignore */ });
     return new Response(JSON.stringify({ started: true, log_id: logRow.id }), {
       status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
