@@ -254,9 +254,9 @@ Deno.serve(async (req) => {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const logId = String(body["log_id" as keyof SyncBody] ?? (body as unknown as { log_id?: string }).log_id ?? "");
-    const idx = Number((body as unknown as { table_index?: number }).table_index ?? 0);
-    const startedAtMs = Number((body as unknown as { started_at_ms?: number }).started_at_ms ?? Date.now());
+    const logId = body.log_id ?? "";
+    const idx = Number(body.table_index ?? 0);
+    const startedAtMs = Number(body.started_at_ms ?? Date.now());
     if (!logId || !Number.isFinite(idx) || idx < 0 || idx >= TABLES_ALL.length) {
       return new Response(JSON.stringify({ error: "invalid_step_params" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
