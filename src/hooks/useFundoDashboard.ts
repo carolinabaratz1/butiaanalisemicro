@@ -12,6 +12,7 @@ import {
   synthesizeIssuerFromProduct,
   isExcludedFromPL,
   resolveIndexador,
+  isCaixaIntragrupo,
 } from '@/components/alocacao/allocationUtils';
 
 export interface DashboardRow {
@@ -32,6 +33,8 @@ export interface DashboardRow {
   nome_emissor: string | null;
   codigo_emissor: string | null;
   cnpj_emissor: string | null;
+  fidc_tipo: string | null;
+  fidc_classe: string | null;
 }
 
 export interface ResolvedRatingMeta {
@@ -116,7 +119,30 @@ const BUCKET_ORDER = ['0–1a', '1–3a', '3–5a', '5–7a', '>7a', 'S/D'];
 const NR_META: ResolvedRatingMeta = { rating: null, source: 'nr', agencia: null, data_rating: null };
 const normCnpj = (c?: string | null) => (c ?? '').replace(/[^0-9]/g, '');
 
+// Busca dinamicamente os CNPJs de fundos Butiá com perfil RF Crédito
+// Privado (grupo_economico = 'Fundo RF CP' + nome contendo "buti"). Usado
+// para reconhecer cotas intragrupo (um fundo Butiá aplicando em outro)
+// sem precisar fixar CNPJ nenhum no código — qualquer novo fundo Butiá
+// RF CP cadastrado em `empresas` já entra automaticamente.
+function useButiaRfCpCnpjs() {
+  return useQuery({
+    queryKey: ['butia-rf-cp-cnpjs'],
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('cnpj,nome,grupo_economico')
+        .eq('grupo_economico', 'Fundo RF CP')
+        .ilike('nome', '%buti%');
+      if (error) throw error;
+      return new Set((data ?? []).map((r: any) => normCnpj(r.cnpj)));
+    },
+  });
+}
+
 export function useFundoDashboard(fundo: string | null) {
+  const butiaCnpjsQuery = useButiaRfCpCnpjs();
+
   const q = useQuery({
     queryKey: ['fundo-dashboard', fundo],
     enabled: !!fundo,
@@ -169,6 +195,7 @@ export function useFundoDashboard(fundo: string | null) {
 
   const rows = q.data?.rows ?? [];
   const ratingsByCnpj = q.data?.ratingsByCnpj ?? new Map<string, ResolvedRatingMeta>();
+  const butiaRfCpCnpjs = butiaCnpjsQuery.data ?? new Set<string>();
 
   const agg = useMemo(() => {
     const posVal = (r: DashboardRow) =>
@@ -177,20 +204,34 @@ export function useFundoDashboard(fundo: string | null) {
     const classified: ClassifiedRow[] = rows.map(r => {
       const cnpj = normCnpj(r.cnpj_emissor);
       const resolved = cnpj ? (ratingsByCnpj.get(cnpj) ?? NR_META) : NR_META;
-      // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar
-      const rowForClassify = { ...r, rating: resolved.rating ?? null };
-      // Indexador real: mesma lógica usada no módulo Alocação (resolveIndexador),
-      // em vez do "Outros" prematuro que vinha do join direto com trade_ativos.
+      // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar.
+      // Cota intragrupo (fundo Butiá RF CP investindo em outro fundo Butiá RF CP)
+      // é tratada como caixa: força AAA aqui também, já que synthesizeIssuerFromProduct
+      // não cobre esse caso (não é Termo/LFT/Overnight).
+      const isCaixaGrupo = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs);
+      const rowForClassify = {
+        ...r,
+        rating: isCaixaGrupo ? 'AAA' : (resolved.rating ?? null),
+      };
+      // Indexador real: prioriza cadastro real (fidc_tipo / cota intragrupo Butiá
+      // RF CP) sobre o texto genérico do produto vindo do custodiante ("Funds BR").
       const indexadorResolvido = resolveIndexador(
         r.product ?? '',
         r.product_class ?? '',
         r.sub_indexador ?? null,
+        {
+          fidcTipo: r.fidc_tipo ?? null,
+          cnpjEmissor: r.cnpj_emissor ?? null,
+          butiaRfCpCnpjs,
+        },
       );
       return {
         ...r,
         ...classifyCreditEligibility(rowForClassify),
         financeiro: posVal(r),
-        resolved_rating: resolved,
+        resolved_rating: isCaixaGrupo
+          ? { rating: 'AAA', source: 'emissor' as RatingSource, agencia: null, data_rating: null }
+          : resolved,
         indexador_resolvido: indexadorResolvido,
       };
     });
@@ -218,8 +259,8 @@ export function useFundoDashboard(fundo: string | null) {
     };
 
     const byTipo = groupSum(classified, r => (r.product_class?.trim() || 'Outros'));
-    // Agora usa a resolução completa (product + product_class + sub_indexador),
-    // igual ao módulo Alocação, em vez do campo cru vindo do join com trade_ativos.
+    // Agora usa a resolução completa (product + product_class + sub_indexador +
+    // cadastro real de FIDC/cota intragrupo Butiá RF CP), em vez do campo cru do trade_ativos.
     const byIndexador = groupSum(classified, r => r.indexador_resolvido || 'Outros');
 
     const durMap = new Map<string, number>();
@@ -242,13 +283,15 @@ export function useFundoDashboard(fundo: string | null) {
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
         const synth = synthesizeIssuerFromProduct(r.product ?? '', r.product_class ?? '');
-        const ratingLabel = synth
-          ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
-          : !r.credit_analytics_eligible
-            ? '—'
-            : !cnpj
-              ? 'CNPJ emissor não mapeado'
-              : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
+        const ratingLabel = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs)
+          ? 'AAA'
+          : synth
+            ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
+            : !r.credit_analytics_eligible
+              ? '—'
+              : !cnpj
+                ? 'CNPJ emissor não mapeado'
+                : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
           key,
           ticker: r.ticker?.trim() || '—',
@@ -429,12 +472,12 @@ export function useFundoDashboard(fundo: string | null) {
       },
       rowsClassified: classified,
     };
-  }, [rows, ratingsByCnpj]);
+  }, [rows, ratingsByCnpj, butiaRfCpCnpjs]);
 
   return {
     data: agg,
     rawRows: rows,
-    isLoading: q.isLoading,
-    error: q.error as Error | null,
+    isLoading: q.isLoading || butiaCnpjsQuery.isLoading,
+    error: (q.error as Error | null) ?? (butiaCnpjsQuery.error as Error | null),
   };
 }
