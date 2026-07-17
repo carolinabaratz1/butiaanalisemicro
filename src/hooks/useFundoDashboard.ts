@@ -11,11 +11,13 @@ import type { RatingSource } from '@/lib/ratings/useResolvedRating';
 import {
   synthesizeIssuerFromProduct,
   isExcludedFromPL,
+  resolveIndexador,
 } from '@/components/alocacao/allocationUtils';
 
 export interface DashboardRow {
   ticker: string | null;
   isin: string | null;
+  product: string | null;
   product_class: string | null;
   financial_price: number;
   amount: number | null;
@@ -42,6 +44,7 @@ export interface ResolvedRatingMeta {
 export interface ClassifiedRow extends DashboardRow, CreditClassification {
   financeiro: number;
   resolved_rating: ResolvedRatingMeta;
+  indexador_resolvido: string;
 }
 
 const RATING_ORDER = [
@@ -127,11 +130,13 @@ export function useFundoDashboard(fundo: string | null) {
 
       // 1) Excluir DAP/Futuro do PL e agregações.
       // 2) Injetar emissor sintético para Termo (B3) / Overnight / LFT (Tesouro Nacional).
+      // Usa o campo "product" (descrição real) além de "product_class", igual ao módulo Alocação.
       const rows: DashboardRow[] = [];
       for (const r of rawRows) {
-        const prod = r.product_class ?? '';
-        if (isExcludedFromPL(prod, prod)) continue;
-        const synth = synthesizeIssuerFromProduct(prod, prod);
+        const prod = r.product ?? '';
+        const cls = r.product_class ?? '';
+        if (isExcludedFromPL(prod, cls)) continue;
+        const synth = synthesizeIssuerFromProduct(prod, cls);
         if (synth) {
           rows.push({
             ...r,
@@ -174,11 +179,19 @@ export function useFundoDashboard(fundo: string | null) {
       const resolved = cnpj ? (ratingsByCnpj.get(cnpj) ?? NR_META) : NR_META;
       // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar
       const rowForClassify = { ...r, rating: resolved.rating ?? null };
+      // Indexador real: mesma lógica usada no módulo Alocação (resolveIndexador),
+      // em vez do "Outros" prematuro que vinha do join direto com trade_ativos.
+      const indexadorResolvido = resolveIndexador(
+        r.product ?? '',
+        r.product_class ?? '',
+        r.sub_indexador ?? null,
+      );
       return {
         ...r,
         ...classifyCreditEligibility(rowForClassify),
         financeiro: posVal(r),
         resolved_rating: resolved,
+        indexador_resolvido: indexadorResolvido,
       };
     });
 
@@ -205,7 +218,9 @@ export function useFundoDashboard(fundo: string | null) {
     };
 
     const byTipo = groupSum(classified, r => (r.product_class?.trim() || 'Outros'));
-    const byIndexador = groupSum(classified, r => (r.indexador?.trim() || 'Outros'));
+    // Agora usa a resolução completa (product + product_class + sub_indexador),
+    // igual ao módulo Alocação, em vez do campo cru vindo do join com trade_ativos.
+    const byIndexador = groupSum(classified, r => r.indexador_resolvido || 'Outros');
 
     const durMap = new Map<string, number>();
     for (const r of classified) {
@@ -226,8 +241,7 @@ export function useFundoDashboard(fundo: string | null) {
         cur.financeiro += r.financeiro;
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
-        const prod = r.product_class ?? '';
-        const synth = synthesizeIssuerFromProduct(prod, prod);
+        const synth = synthesizeIssuerFromProduct(r.product ?? '', r.product_class ?? '');
         const ratingLabel = synth
           ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
           : !r.credit_analytics_eligible
