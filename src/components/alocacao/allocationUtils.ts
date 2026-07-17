@@ -65,6 +65,38 @@ export function isTermo(product: string, productClass: string): boolean {
   return p.includes("termo") || c.includes("termo");
 }
 
+// ── Cotas intragrupo (um fundo Butiá aplicando em outro fundo Butiá) ──
+// Ex: BUTIÁ PLUS aplica no BUTIA TOP CP FIRF M; BUTIA TOP PREV aplica no
+// BUTIÁ TOP FIC RF CP. Essas cotas chegam na carteira como product_class
+// genérico ("Funds BR"), sem nenhuma palavra que identifique o fundo como
+// "intragrupo" — a única forma confiável de reconhecer é pelo CNPJ do
+// emissor bater com o cadastro de um fundo Butiá de perfil RF Crédito
+// Privado (tabela `empresas`, grupo_economico = 'Fundo RF CP').
+//
+// Por isso essa checagem é *genérica*: em vez de fixar CNPJs no código,
+// quem chama (hook de dados) busca dinamicamente o conjunto de CNPJs de
+// fundos Butiá RF CP no banco e passa esse conjunto aqui. Assim, um novo
+// fundo Butiá RF CP cadastrado no futuro já entra automaticamente, sem
+// precisar alterar este arquivo.
+//
+// Fundos Butiá de outros perfis (Multimercado, Ações) NÃO entram nessa
+// regra — permanecem com o tratamento normal de cota de fundo de terceiro.
+function normCnpjLocal(c?: string | null): string {
+  return (c || "").replace(/[^0-9]/g, "");
+}
+
+export type CnpjSet = Set<string> | string[] | null | undefined;
+
+export function isCaixaIntragrupo(
+  cnpjEmissor: string | null | undefined,
+  butiaRfCpCnpjs: CnpjSet,
+): boolean {
+  const norm = normCnpjLocal(cnpjEmissor);
+  if (!norm || !butiaRfCpCnpjs) return false;
+  if (butiaRfCpCnpjs instanceof Set) return butiaRfCpCnpjs.has(norm);
+  return butiaRfCpCnpjs.some(c => normCnpjLocal(c) === norm);
+}
+
 // ── Emissor sintético por tipo de produto ──
 // Alguns produtos não têm emissor real na carteira, mas devem ser
 // tratados de forma padronizada em toda a aplicação (Posições, Exposição,
@@ -130,7 +162,18 @@ export function synthesizeIssuerFromProduct(
 }
 
 // Map product / product_class to a tipo_ativo recognised by allocation_limits.
-export function tipoAtivoFromProduct(product: string, productClass: string): string {
+// cnpjEmissor + butiaRfCpCnpjs são opcionais: quando informados, permitem
+// reclassificar cotas intragrupo (fundo Butiá RF CP investindo em outro
+// fundo Butiá RF CP) como "Caixa Mínimo", mesmo vindo com product_class
+// genérico ("Funds BR").
+export function tipoAtivoFromProduct(
+  product: string,
+  productClass: string,
+  cnpjEmissor?: string | null,
+  butiaRfCpCnpjs?: CnpjSet,
+): string {
+  if (isCaixaIntragrupo(cnpjEmissor, butiaRfCpCnpjs)) return "Caixa Mínimo";
+
   const p = (product || "").toLowerCase();
   const c = (productClass || "").toLowerCase();
   if (!p && !c) return "Outros";
@@ -173,7 +216,9 @@ export function indexadorFromProductFallback(product: string): string | null {
   // ordem importa
   if (/IPCA\s*\+/.test(p)) return "IPCA";
   if (/%\s*(DO\s+)?(CDI|DI)\b/.test(p) || /\bCDI\s*PCT\b/.test(p)) return "%CDI";
-  if (/(CDI|DI)\s*\+/.test(p)) return "CDI+";
+  // "DI +" / "CDI +" (formato com sinal) OU "DI Spread" / "CDI Spread" (formato textual,
+  // ex: "Letra Financeira DI Spread") — antes só o formato com "+" era reconhecido.
+  if (/(CDI|DI)\s*(\+|SPREAD)/.test(p)) return "CDI+";
   if (/%\s*SELIC\b/.test(p) || /\bSELIC\s*PCT\b/.test(p)) return "%Selic";
   if (/\bSELIC\b/.test(p)) return "%Selic";
   if (/\bPR[ÉE]\b/.test(p) || /PRE-?FIXAD/.test(p)) return "Pré";
@@ -181,13 +226,27 @@ export function indexadorFromProductFallback(product: string): string | null {
 }
 
 // Indexador final aplicando regras de produto antes do sub_indexador.
-export function resolveIndexador(product: string, productClass: string, sub: string | null | undefined): string {
+// opts.fidcTipo vem do cadastro real (tabela emissoes: fidc_tipo/fidc_classe
+// preenchidos) e tem prioridade sobre parsing de texto -> FIDC cadastrado
+// vira CDI+.
+// opts.cnpjEmissor + opts.butiaRfCpCnpjs identificam cota intragrupo
+// (fundo Butiá RF CP investindo em outro fundo Butiá RF CP) -> também CDI+,
+// tratada como caixa.
+export function resolveIndexador(
+  product: string,
+  productClass: string,
+  sub: string | null | undefined,
+  opts?: { fidcTipo?: string | null; cnpjEmissor?: string | null; butiaRfCpCnpjs?: CnpjSet },
+): string {
+  if (isCaixaIntragrupo(opts?.cnpjEmissor, opts?.butiaRfCpCnpjs)) return "CDI+";
+  if (opts?.fidcTipo) return "CDI+";
+
   const p = (product || "").toLowerCase();
   // Termo -> Pré
   if (p.includes("termo")) return "Pré";
   // LFT / Overnight / Compromissadas -> %Selic
   if (p.includes("lft") || p.includes("overnight") || p.includes("compromiss")) return "%Selic";
-  // FIDC -> CDI+
+  // FIDC (fallback textual, caso não tenha vindo no cadastro) -> CDI+
   if (p.includes("fidc")) return "CDI+";
   // Tem sub_indexador (caso típico de debêntures e ativos cadastrados)
   if (sub) return indexadorFromSub(sub);
