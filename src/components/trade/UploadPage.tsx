@@ -318,10 +318,20 @@ export function UploadPage() {
   );
 }
 
+// Extrai ticker, data de vencimento e taxa de emissão do "Nome do Ativo".
+// Formato: "TICKER - NOME DO EMISSOR - DATA(YYYYMMDD) - TAXA".
+//
+// IMPORTANTE: o nome do emissor pode conter " - " no meio (ex.: "V.TAL -
+// REDE NEUTRA DE TELECOMUNICACOES S.A.", "ENERGISA MATO GROSSO -
+// DISTRIBUIDORA DE ENERGIA S.A.", "CESP - COMPANHIA ENERGETICA..."), o que
+// gera mais de 4 partes no split. Por isso NÃO usamos posição fixa
+// (parts[2]/parts[3]) — usamos posição relativa ao FINAL da string, já que
+// a data e a taxa são sempre os dois últimos segmentos, não importa quantos
+// hífens o nome do emissor tenha no meio.
 function parseNomeAtivo(nome: string) {
   const parts = nome.split(" - ");
-  const vencStr = parts[2]?.trim() ?? "";
-  const taxaEmissao = parts[3]?.trim() ?? "";
+  const vencStr = parts[parts.length - 2]?.trim() ?? "";
+  const taxaEmissao = parts[parts.length - 1]?.trim() ?? "";
 
   let vencDate: string | null = null;
   let anosVenc: number | null = null;
