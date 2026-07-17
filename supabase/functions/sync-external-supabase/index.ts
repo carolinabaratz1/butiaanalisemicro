@@ -244,7 +244,31 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ----- MODO FULL: dispara sync completo em background e retorna imediatamente -----
+  // ----- MODO STEP: processa UMA tabela e reencadeia a próxima (self-fetch) -----
+  if (body.mode === "step") {
+    if (!isCron) {
+      return new Response(JSON.stringify({ error: "step_requires_cron_secret" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const logId = String(body["log_id" as keyof SyncBody] ?? (body as unknown as { log_id?: string }).log_id ?? "");
+    const idx = Number((body as unknown as { table_index?: number }).table_index ?? 0);
+    const startedAtMs = Number((body as unknown as { started_at_ms?: number }).started_at_ms ?? Date.now());
+    if (!logId || !Number.isFinite(idx) || idx < 0 || idx >= TABLES_ALL.length) {
+      return new Response(JSON.stringify({ error: "invalid_step_params" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    const p = runOneTableStep(logId, idx, startedAtMs);
+    if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => { /* ignore */ });
+    return new Response(JSON.stringify({ accepted: true, table_index: idx }), {
+      status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // ----- MODO FULL: cria log e dispara a primeira tabela; próximas se reencadeiam -----
   if (body.mode === "full" || (isCron && !body.table)) {
     const { data: logRow, error: logErr } = await admin()
       .from("sync_external_log")
@@ -261,15 +285,11 @@ Deno.serve(async (req) => {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    // Executa em background para não estourar o timeout HTTP
+    const startedAtMs = Date.now();
     // deno-lint-ignore no-explicit-any
     const rt = (globalThis as any).EdgeRuntime;
-    if (rt?.waitUntil) {
-      rt.waitUntil(runFullSync(logRow.id));
-    } else {
-      // Fallback: dispara sem await
-      runFullSync(logRow.id);
-    }
+    const p = runOneTableStep(logRow.id, 0, startedAtMs);
+    if (rt?.waitUntil) rt.waitUntil(p); else p.catch(() => { /* ignore */ });
     return new Response(JSON.stringify({ started: true, log_id: logRow.id }), {
       status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
