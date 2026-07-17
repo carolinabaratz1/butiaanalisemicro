@@ -36,7 +36,7 @@ const TIME_BUDGET_MS = 20_000;
 const FULL_CHUNK_LIMIT = 2000;
 
 type SyncBody = {
-  mode?: "chunk" | "full";
+  mode?: "chunk" | "full" | "step";
   table?: string;
   tables?: string[];
   offset?: number;
@@ -44,6 +44,9 @@ type SyncBody = {
   reset?: boolean;
   list_only?: boolean;
   trigger?: string;
+  log_id?: string;
+  table_index?: number;
+  started_at_ms?: number;
 };
 
 const TABLE_SET = new Set(TABLES_ALL);
