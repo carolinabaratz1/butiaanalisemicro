@@ -231,7 +231,7 @@ export default function EmpresaDetailPage() {
 
     const { data: inserted, error } = await supabase.from('analises').insert({
       empresa_id: decodedCnpj,
-      tipo: 'Geral',
+      tipo: 'Crédito Privado',
       isin: solicitarModal,
       analista_responsavel: analistaSel,
       solicitante_id: currentUser?.id || '',
