@@ -2855,12 +2855,15 @@ export type Database = {
           cnpj_emissor: string
           codigo_emissor: string
           duration_du: number
+          fidc_classe: string
+          fidc_tipo: string
           financial_price: number
           fundo: string
           grupo_economico: string
           indexador: string
           isin: string
           nome_emissor: string
+          product: string
           product_class: string
           rating: string
           setor: string
@@ -2893,7 +2896,7 @@ export type Database = {
         }[]
       }
       get_resolved_rating: {
-        Args: { p_cnpj: string; p_ticker?: string }
+        Args: { p_cnpj: string; p_isin?: string; p_ticker?: string }
         Returns: {
           agencia: string
           data_rating: string
@@ -2931,6 +2934,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      rating_bucket_severity: { Args: { p_rating: string }; Returns: number }
       recalc_trade_metricas: { Args: never; Returns: undefined }
       recalc_trade_metricas_di: { Args: never; Returns: undefined }
       recalc_trade_metricas_ipca: { Args: never; Returns: undefined }
