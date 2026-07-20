@@ -412,7 +412,7 @@ export default function PipelineResearchPage() {
       empresa_id: novoEmissor,
       analista_responsavel: novoAnalistaId,
       solicitante_id: currentUser?.id || '',
-      tipo: 'Geral',
+      tipo: 'Crédito Privado',
       status: 'Pendente',
       data_inicio: format(new Date(), 'yyyy-MM-dd'),
       prazo: format(novoPrazo, 'yyyy-MM-dd'),
