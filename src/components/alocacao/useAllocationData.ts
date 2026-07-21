@@ -287,20 +287,38 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         : { data: [] as any };
       const empresas = (empresasRes.data ?? []) as any[];
 
-      // Resolve ratings via RPC (hierarchy: ticker → emissor → grupo → N/R).
-      // Overwrite empresa.rating with the resolved value so the existing
-      // downstream code automatically uses ticker/issuer/group fallback,
-      // while exposing the source for badge rendering.
-      const ratingResolvedMap = empresas.length
-        ? await resolveRatingsBatch(empresas.map((e) => ({ cnpj: e.cnpj })))
+      // Resolve ratings por POSIÇÃO (CNPJ + ISIN), não por empresa. Isso é
+      // essencial para FIDC: cada cota (Sênior/Mezanino/Subordinada) tem seu
+      // próprio rating, então resolver só por CNPJ do administrador/gestor
+      // faria todas as cotas de um mesmo FIDC compartilharem incorretamente
+      // o mesmo rating. Para os demais instrumentos, a função ignora o ISIN
+      // e resolve sempre pelo CNPJ do emissor (nunca por ticker).
+      const isinToEmissaoPre = new Map(emissoes.map(e => [e.isin, e]));
+      const ratingLookupItems = positions
+        .map(p => {
+          const emissao = p.isin ? isinToEmissaoPre.get(p.isin) : null;
+          return { cnpj: emissao?.cnpj_emissor ?? null, isin: p.isin ?? null };
+        })
+        .filter(it => it.cnpj || it.isin);
+      const ratingResolvedMap = ratingLookupItems.length
+        ? await resolveRatingsBatch(ratingLookupItems)
         : new Map();
+      // isin -> rating resolvido (prioritário para FIDC); cnpj -> rating resolvido (fallback/demais)
+      const ratingByIsin = new Map<string, { rating: string | null; source: RatingSource; agencia: string | null; data_rating: string | null }>();
       const ratingByCnpj = new Map<string, { rating: string | null; source: RatingSource; agencia: string | null; data_rating: string | null }>();
+      for (const it of ratingLookupItems) {
+        const r = ratingResolvedMap.get(ratingKey(it.cnpj, null, it.isin));
+        if (!r) continue;
+        if (it.isin) ratingByIsin.set(it.isin, r);
+        if (it.cnpj && !ratingByCnpj.has(it.cnpj)) ratingByCnpj.set(it.cnpj, r);
+      }
+      // Mantém empresa.rating sincronizado com o rating "por CNPJ" (usado como
+      // fallback de exibição em agregações por emissor/grupo); o rating por
+      // posição individual (porRating/breakdownPorRating) usa ratingByIsin
+      // com prioridade, garantindo que cotas FIDC distintas não se confundam.
       for (const e of empresas) {
-        const r = ratingResolvedMap.get(ratingKey(e.cnpj));
-        if (r) {
-          ratingByCnpj.set(e.cnpj, r);
-          if (r.rating) e.rating = r.rating; // keep legacy field in sync
-        }
+        const r = ratingByCnpj.get(e.cnpj);
+        if (r?.rating) e.rating = r.rating;
       }
 
       // Buscar TODOS os tickers (em carteira ou não) dos emissores envolvidos
@@ -451,7 +469,11 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         addTo(porIndexador, indexLabel, fin);
 
         const empresa = emissao?.cnpj_emissor ? cnpjToEmpresa.get(emissao.cnpj_emissor) : null;
-        const ratingB = isTermo(p.product, p.product_class) ? "AAA" : ratingBucket(empresa?.rating);
+        // Rating individual da posição: prioriza o resolvido por ISIN (cobre
+        // FIDC, onde cada cota tem seu próprio rating) e cai para o rating
+        // resolvido por CNPJ do emissor nos demais casos.
+        const posResolved = (p.isin ? ratingByIsin.get(p.isin) : null) ?? (emissao?.cnpj_emissor ? ratingByCnpj.get(emissao.cnpj_emissor) : null);
+        const ratingB = isTermo(p.product, p.product_class) ? "AAA" : ratingBucket(posResolved?.rating ?? empresa?.rating);
         addTo(porRating, ratingB, fin);
 
         if (isTermo(p.product, p.product_class)) {
@@ -510,6 +532,10 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           const grupoKey = isSoberanoEff
             ? "CAIXA"
             : (empresaEff.grupo_economico?.trim() || empresaEff.nome);
+          // Para o card de emissor/grupo, o rating exibido segue sendo o do
+          // CNPJ (posição consolidada do emissor/administrador) — o rating
+          // por cota (ISIN) já foi corretamente aplicado acima em porRating/
+          // breakdownPorRating, que é o que alimenta o enquadramento por rating.
           const resolvedR = ratingByCnpj.get(empresaEff.cnpj);
           const emissorEntry = {
             nome: empresaEff.nome, cnpj: empresaEff.cnpj, empresaId: empresaEff.id, rating: empresaEff.rating,
@@ -605,8 +631,9 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         }
 
         // Representação da fonte do rating no nível do grupo:
-        // 'grupo' se algum emissor foi resolvido por grupo, senão 'emissor' se houver
-        // ao menos um com rating cadastrado, caso contrário 'nr'. Para soberano força 'emissor'.
+        // 'grupo'/'grupo_conservador' se algum emissor foi resolvido por
+        // grupo, senão 'emissor'/'emissor_conservador' se houver ao menos um
+        // com rating cadastrado, caso contrário 'nr'. Para soberano força 'emissor'.
         let groupSource: RatingSource = "nr";
         let groupAgencia: string | null = null;
         let groupDate: string | null = null;
@@ -614,8 +641,10 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           groupSource = "emissor";
         } else {
           const sources = g.emissores.map(e => e.ratingSource ?? "nr");
-          if (sources.some(s => s === "grupo")) groupSource = "grupo";
-          else if (sources.some(s => s === "ticker")) groupSource = "ticker";
+          if (sources.some(s => s === "grupo_conservador")) groupSource = "grupo_conservador";
+          else if (sources.some(s => s === "grupo")) groupSource = "grupo";
+          else if (sources.some(s => s === "emissor_conservador")) groupSource = "emissor_conservador";
+          else if (sources.some(s => s === "fidc_isin")) groupSource = "fidc_isin";
           else if (sources.some(s => s === "emissor")) groupSource = "emissor";
           const ref = g.emissores.find(e => e.ratingSource === groupSource);
           groupAgencia = ref?.ratingAgencia ?? null;
