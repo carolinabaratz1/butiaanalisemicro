@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Plus, ExternalLink, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,20 +89,6 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
     onError: (e: any) => toast.error(e.message || "Erro ao registrar rating"),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("issuer_ratings").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Registro removido");
-      qc.invalidateQueries({ queryKey: ["issuer_ratings", normCnpj] });
-      qc.invalidateQueries({ queryKey: ["resolvedRating"] });
-      qc.invalidateQueries({ queryKey: ["empresas"] });
-    },
-    onError: (e: any) => toast.error(e.message || "Erro ao remover"),
-  });
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -111,6 +97,12 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
         </DialogHeader>
 
         <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Histórico append-only: novos ratings são adicionados como uma nova entrada; registros
+            existentes não podem ser editados ou removidos. O rating mais recente (pela data) é
+            sempre o utilizado nas demais telas do app.
+          </p>
+
           {canEdit && !showForm && (
             <div className="flex justify-end">
               <Button size="sm" onClick={() => setShowForm(true)} className="gap-1">
@@ -176,15 +168,14 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
                   <TableHead className="text-[11px]">Outlook</TableHead>
                   <TableHead className="text-[11px]">Observação</TableHead>
                   <TableHead className="text-[11px]">Laudo</TableHead>
-                  {canEdit && <TableHead className="text-[11px] w-10"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-4">Carregando…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">Carregando…</TableCell></TableRow>
                 )}
                 {!isLoading && history.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-xs text-muted-foreground py-4">Sem ratings registrados.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">Sem ratings registrados.</TableCell></TableRow>
                 )}
                 {history.map((r: any, idx: number) => (
                   <TableRow key={r.id}>
@@ -203,13 +194,6 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
                         </a>
                       ) : "—"}
                     </TableCell>
-                    {canEdit && (
-                      <TableCell>
-                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => deleteMutation.mutate(r.id)} disabled={deleteMutation.isPending}>
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    )}
                   </TableRow>
                 ))}
               </TableBody>
