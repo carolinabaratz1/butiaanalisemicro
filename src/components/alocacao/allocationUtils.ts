@@ -97,6 +97,22 @@ export function isCaixaIntragrupo(
   return butiaRfCpCnpjs.some(c => normCnpjLocal(c) === norm);
 }
 
+// ── Rating forçado AAA por tipo de produto ──
+// Alguns produtos são tratados como AAA independentemente do rating do
+// CNPJ do banco/emissor por trás — a garantia/estrutura do próprio produto
+// é o que sustenta o risco, não o rating de crédito do emissor:
+//  - DPGE (Depósito a Prazo com Garantia Especial): estrutura com garantia
+//    especial do FGC, tratada como AAA.
+//  - Compromissada: lastreada em título público, tratada como AAA.
+// Regra genérica por texto do produto — qualquer ativo com "DPGE" ou
+// "Compromissada" no nome/classe entra automaticamente, sem precisar
+// cadastrar CNPJ nenhum.
+export function isForcedAAAProduct(product: string | null | undefined, productClass: string | null | undefined): boolean {
+  const p = (product || "").toLowerCase();
+  const c = (productClass || "").toLowerCase();
+  return p.includes("dpge") || c.includes("dpge") || p.includes("compromiss") || c.includes("compromiss");
+}
+
 // ── Emissor sintético por tipo de produto ──
 // Alguns produtos não têm emissor real na carteira, mas devem ser
 // tratados de forma padronizada em toda a aplicação (Posições, Exposição,
