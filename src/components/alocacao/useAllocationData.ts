@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
-  fidcTipoFromClasse, FidcClasse,
+  fidcTipoFromClasse, FidcClasse, isForcedAAAProduct,
 } from "./allocationUtils";
 import { getDisplayStatus } from "@/utils/analiseStatus";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
@@ -473,7 +473,11 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         // FIDC, onde cada cota tem seu próprio rating) e cai para o rating
         // resolvido por CNPJ do emissor nos demais casos.
         const posResolved = (p.isin ? ratingByIsin.get(p.isin) : null) ?? (emissao?.cnpj_emissor ? ratingByCnpj.get(emissao.cnpj_emissor) : null);
-        const ratingB = isTermo(p.product, p.product_class) ? "AAA" : ratingBucket(posResolved?.rating ?? empresa?.rating);
+        // DPGE e Compromissada são tratados como AAA pela estrutura/garantia
+        // do próprio produto, independentemente do rating do banco emissor.
+        const ratingB = (isTermo(p.product, p.product_class) || isForcedAAAProduct(p.product, p.product_class))
+          ? "AAA"
+          : ratingBucket(posResolved?.rating ?? empresa?.rating);
         addTo(porRating, ratingB, fin);
 
         if (isTermo(p.product, p.product_class)) {
