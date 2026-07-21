@@ -122,8 +122,7 @@ const normCnpj = (c?: string | null) => (c ?? '').replace(/[^0-9]/g, '');
 // Busca dinamicamente os CNPJs de fundos Butiá com perfil RF Crédito
 // Privado (grupo_economico = 'Fundo RF CP' + nome contendo "buti"). Usado
 // para reconhecer cotas intragrupo (um fundo Butiá aplicando em outro)
-// sem precisar fixar CNPJ nenhum no código — qualquer novo fundo Butiá
-// RF CP cadastrado em `empresas` já entra automaticamente.
+// sem precisar fixar CNPJ nenhum no código.
 function useButiaRfCpCnpjs() {
   return useQuery({
     queryKey: ['butia-rf-cp-cnpjs'],
@@ -154,9 +153,6 @@ export function useFundoDashboard(fundo: string | null) {
       if (error) throw error;
       const rawRows = (data ?? []) as unknown as DashboardRow[];
 
-      // 1) Excluir DAP/Futuro do PL e agregações.
-      // 2) Injetar emissor sintético para Termo (B3) / Overnight / LFT (Tesouro Nacional).
-      // Usa o campo "product" (descrição real) além de "product_class", igual ao módulo Alocação.
       const rows: DashboardRow[] = [];
       for (const r of rawRows) {
         const prod = r.product ?? '';
@@ -177,24 +173,29 @@ export function useFundoDashboard(fundo: string | null) {
         }
       }
 
-      // Resolve ratings por CNPJ (não por ticker). O RPC get_resolved_rating
-      // faz o fallback CNPJ -> grupo econômico.
-      const uniqueCnpjs = Array.from(
-        new Set(rows.map(r => normCnpj(r.cnpj_emissor)).filter(Boolean)),
+      // Resolve ratings por CNPJ + ISIN. O ISIN é essencial para FIDC: cada
+      // cota (Sênior/Mezanino/Subordinada) tem seu próprio rating, então
+      // resolver só por CNPJ do administrador/gestor misturaria ratings de
+      // classes diferentes. Para os demais instrumentos (debênture, CDB,
+      // etc.), a função de resolução ignora o ISIN e usa o CNPJ do emissor.
+      const uniqueKeys = Array.from(
+        new Map(
+          rows
+            .filter(r => normCnpj(r.cnpj_emissor) || r.isin)
+            .map(r => [ratingKey(r.cnpj_emissor, null, r.isin), { cnpj: normCnpj(r.cnpj_emissor), isin: r.isin }]),
+        ).values(),
       );
-      const resolvedMap = await resolveRatingsBatch(
-        uniqueCnpjs.map(cnpj => ({ cnpj, ticker: null })),
-      );
-      const byCnpj = new Map<string, ResolvedRatingMeta>();
-      for (const cnpj of uniqueCnpjs) {
-        byCnpj.set(cnpj, resolvedMap.get(ratingKey(cnpj, null)) ?? NR_META);
+      const resolvedMap = await resolveRatingsBatch(uniqueKeys);
+      const byKey = new Map<string, ResolvedRatingMeta>();
+      for (const { cnpj, isin } of uniqueKeys) {
+        byKey.set(ratingKey(cnpj, null, isin), resolvedMap.get(ratingKey(cnpj, null, isin)) ?? NR_META);
       }
-      return { rows, ratingsByCnpj: byCnpj };
+      return { rows, ratingsByKey: byKey };
     },
   });
 
   const rows = q.data?.rows ?? [];
-  const ratingsByCnpj = q.data?.ratingsByCnpj ?? new Map<string, ResolvedRatingMeta>();
+  const ratingsByKey = q.data?.ratingsByKey ?? new Map<string, ResolvedRatingMeta>();
   const butiaRfCpCnpjs = butiaCnpjsQuery.data ?? new Set<string>();
 
   const agg = useMemo(() => {
@@ -203,18 +204,12 @@ export function useFundoDashboard(fundo: string | null) {
 
     const classified: ClassifiedRow[] = rows.map(r => {
       const cnpj = normCnpj(r.cnpj_emissor);
-      const resolved = cnpj ? (ratingsByCnpj.get(cnpj) ?? NR_META) : NR_META;
-      // Sobrescreve o rating "cru" pela resolução por CNPJ antes de classificar.
-      // Cota intragrupo (fundo Butiá RF CP investindo em outro fundo Butiá RF CP)
-      // é tratada como caixa: força AAA aqui também, já que synthesizeIssuerFromProduct
-      // não cobre esse caso (não é Termo/LFT/Overnight).
+      const resolved = ratingsByKey.get(ratingKey(r.cnpj_emissor, null, r.isin)) ?? NR_META;
       const isCaixaGrupo = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs);
       const rowForClassify = {
         ...r,
         rating: isCaixaGrupo ? 'AAA' : (resolved.rating ?? null),
       };
-      // Indexador real: prioriza cadastro real (fidc_tipo / cota intragrupo Butiá
-      // RF CP) sobre o texto genérico do produto vindo do custodiante ("Funds BR").
       const indexadorResolvido = resolveIndexador(
         r.product ?? '',
         r.product_class ?? '',
@@ -246,7 +241,6 @@ export function useFundoDashboard(fundo: string | null) {
     const pctCredito = totalPL > 0 ? plCredito / totalPL : 0;
     const pctNaoAplicavel = totalPL > 0 ? plNaoAplicavel / totalPL : 0;
 
-    // ---- Universo TOTAL ----
     const groupSum = (list: ClassifiedRow[], key: (r: ClassifiedRow) => string): CategoryDatum[] => {
       const m = new Map<string, number>();
       for (const r of list) {
@@ -259,8 +253,6 @@ export function useFundoDashboard(fundo: string | null) {
     };
 
     const byTipo = groupSum(classified, r => (r.product_class?.trim() || 'Outros'));
-    // Agora usa a resolução completa (product + product_class + sub_indexador +
-    // cadastro real de FIDC/cota intragrupo Butiá RF CP), em vez do campo cru do trade_ativos.
     const byIndexador = groupSum(classified, r => r.indexador_resolvido || 'Outros');
 
     const durMap = new Map<string, number>();
@@ -272,7 +264,6 @@ export function useFundoDashboard(fundo: string | null) {
       .map(name => ({ name, value: durMap.get(name) ?? 0 }))
       .filter(d => d.value > 0);
 
-    // Top posições (agregando por ticker/isin)
     const posMap = new Map<string, TopPosicao>();
     for (const r of classified) {
       const key = (r.ticker?.trim() || r.isin?.trim() || `${r.product_class}-${r.nome_emissor}`) as string;
@@ -289,7 +280,7 @@ export function useFundoDashboard(fundo: string | null) {
             ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
             : !r.credit_analytics_eligible
               ? '—'
-              : !cnpj
+              : !cnpj && !r.isin
                 ? 'CNPJ emissor não mapeado'
                 : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
         posMap.set(key, {
@@ -321,12 +312,11 @@ export function useFundoDashboard(fundo: string | null) {
       .map(p => ({ ...p, pctPL: totalPL > 0 ? p.financeiro / totalPL : 0 }))
       .sort((a, b) => b.financeiro - a.financeiro);
 
-    // ---- Universo CRÉDITO ----
     const ratingMap = new Map<string, number>();
     for (const r of eligible) {
       const cnpj = normCnpj(r.cnpj_emissor);
       const nr = normalizeRating(r.resolved_rating.rating);
-      const k = nr ?? (cnpj ? 'Sem rating para o CNPJ' : 'CNPJ não mapeado');
+      const k = nr ?? (cnpj || r.isin ? 'Sem rating para o CNPJ' : 'CNPJ não mapeado');
       ratingMap.set(k, (ratingMap.get(k) ?? 0) + r.financeiro);
     }
     const byRating = [...RATING_ORDER, 'Sem rating para o CNPJ', 'CNPJ não mapeado']
@@ -336,7 +326,6 @@ export function useFundoDashboard(fundo: string | null) {
     const bySetor = groupSum(eligible, r => (r.setor?.trim() || 'Sem setor')).slice(0, 10);
     const byGrupo = groupSum(eligible, r => (r.grupo_economico?.trim() || 'Grupo não mapeado')).slice(0, 10);
 
-    // Emissores (agregados por CNPJ do emissor, rating resolvido por CNPJ)
     type Acc = {
       codigo: string; nome: string; cnpj: string | null; rating: string;
       ratingSource: RatingSource; ratingAgencia: string | null; ratingDate: string | null;
@@ -350,7 +339,7 @@ export function useFundoDashboard(fundo: string | null) {
         || (r.codigo_emissor && r.codigo_emissor.trim())
         || (r.nome_emissor ?? 'N/D');
       const dur = Number(r.duration_du) || 0;
-      const nrLabel = !cnpj
+      const nrLabel = !cnpj && !r.isin
         ? 'CNPJ emissor não mapeado'
         : (normalizeRating(r.resolved_rating.rating) ?? 'Sem rating para o CNPJ');
       const acc = emiMap.get(codigo) ?? {
@@ -395,12 +384,10 @@ export function useFundoDashboard(fundo: string | null) {
       ? { nome: topPosicoes[0].nome, pct: topPosicoes[0].pctPL }
       : { nome: '—', pct: 0 };
 
-    // Rating médio (universo crédito, ponderado por financeiro)
     const qualidadeMedia = byRating.length && plCredito > 0
       ? byRating.reduce((best, cur) => (cur.value > best.value ? cur : best)).name
       : '—';
 
-    // ---- Qualidade dos dados ----
     const plByStatus: Record<DataQualityStatus, number> = {
       ok: 0, sem_rating: 0, cnpj_nao_mapeado: 0, sem_setor: 0, sem_mapeamento: 0, nao_aplicavel: 0,
     };
@@ -419,14 +406,13 @@ export function useFundoDashboard(fundo: string | null) {
     const pctComSetor  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_mapeamento);
     const pctComGrupo  = pctOfCredito(plByStatus.ok + plByStatus.sem_rating + plByStatus.sem_setor);
 
-    // Emissores elegíveis sem rating por CNPJ / sem CNPJ mapeado
     const emissoresSemRating = new Set<string>();
     const emissoresSemCnpj = new Set<string>();
     for (const r of eligible) {
       const cnpj = normCnpj(r.cnpj_emissor);
       const nome = r.nome_emissor?.trim() || r.ticker?.trim() || 'sem-nome';
-      if (!cnpj) emissoresSemCnpj.add(nome);
-      else if (!normalizeRating(r.resolved_rating.rating)) emissoresSemRating.add(cnpj);
+      if (!cnpj && !r.isin) emissoresSemCnpj.add(nome);
+      else if (!normalizeRating(r.resolved_rating.rating)) emissoresSemRating.add(cnpj || r.isin || nome);
     }
 
     const diagnostico: DiagnosticoRow[] = [
@@ -440,7 +426,6 @@ export function useFundoDashboard(fundo: string | null) {
     ];
 
     return {
-      // KPIs
       totalPL,
       totalAtivos,
       durationMedia,
@@ -450,14 +435,11 @@ export function useFundoDashboard(fundo: string | null) {
       pctCredito,
       plNaoAplicavel,
       pctNaoAplicavel,
-      // Universo total
       total: { byTipo, byIndexador, byDuration, topPosicoes },
-      // Universo crédito
       credito: {
         byRating, bySetor, byGrupo, byEmissor,
         hasEligible: eligible.length > 0,
       },
-      // Qualidade
       qualidade: {
         pctElegivel: pctCredito,
         pctNaoAplicavel,
@@ -472,7 +454,7 @@ export function useFundoDashboard(fundo: string | null) {
       },
       rowsClassified: classified,
     };
-  }, [rows, ratingsByCnpj, butiaRfCpCnpjs]);
+  }, [rows, ratingsByKey, butiaRfCpCnpjs]);
 
   return {
     data: agg,
