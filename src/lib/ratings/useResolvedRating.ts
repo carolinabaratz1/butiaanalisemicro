@@ -18,6 +18,7 @@ export type RatingSource =
   | "emissor_conservador"
   | "grupo_conservador"
   | "fidc_isin"
+  | "regra_produto"
   | "nr";
 
 export interface ResolvedRating {
