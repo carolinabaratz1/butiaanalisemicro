@@ -13,6 +13,7 @@ import {
   isExcludedFromPL,
   resolveIndexador,
   isCaixaIntragrupo,
+  isForcedAAAProduct,
 } from '@/components/alocacao/allocationUtils';
 
 export interface DashboardRow {
@@ -206,9 +207,12 @@ export function useFundoDashboard(fundo: string | null) {
       const cnpj = normCnpj(r.cnpj_emissor);
       const resolved = ratingsByKey.get(ratingKey(r.cnpj_emissor, null, r.isin)) ?? NR_META;
       const isCaixaGrupo = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs);
+      // DPGE e Compromissada são tratados como AAA pela estrutura/garantia do
+      // próprio produto, independentemente do rating do banco emissor.
+      const isForcedAAA = isForcedAAAProduct(r.product, r.product_class);
       const rowForClassify = {
         ...r,
-        rating: isCaixaGrupo ? 'AAA' : (resolved.rating ?? null),
+        rating: (isCaixaGrupo || isForcedAAA) ? 'AAA' : (resolved.rating ?? null),
       };
       const indexadorResolvido = resolveIndexador(
         r.product ?? '',
@@ -226,7 +230,9 @@ export function useFundoDashboard(fundo: string | null) {
         financeiro: posVal(r),
         resolved_rating: isCaixaGrupo
           ? { rating: 'AAA', source: 'emissor' as RatingSource, agencia: null, data_rating: null }
-          : resolved,
+          : isForcedAAA
+            ? { rating: 'AAA', source: 'regra_produto' as RatingSource, agencia: null, data_rating: null }
+            : resolved,
         indexador_resolvido: indexadorResolvido,
       };
     });
@@ -274,7 +280,7 @@ export function useFundoDashboard(fundo: string | null) {
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
         const synth = synthesizeIssuerFromProduct(r.product ?? '', r.product_class ?? '');
-        const ratingLabel = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs)
+        const ratingLabel = (isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs) || isForcedAAAProduct(r.product, r.product_class))
           ? 'AAA'
           : synth
             ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)
