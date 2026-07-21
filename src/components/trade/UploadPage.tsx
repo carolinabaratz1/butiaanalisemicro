@@ -30,14 +30,24 @@ interface UploadResult {
   success: boolean;
   log?: UploadLog;
   error?: string;
+  ratingsImportados?: number;
+  ratingsIgnorados?: number;
 }
 
 type UploadTable = "trade_taxas" | "trade_ativos" | "trade_ntnb" | "trade_ipca_ref";
 
 type UploadRows = Record<UploadTable, Record<string, unknown>[]>;
 
+interface IssuerRatingCandidate {
+  cnpj: string;
+  rating: string;
+  agencia: string | null;
+  data_rating: string | null;
+}
+
 interface ParsedTradeUpload {
   rows: UploadRows;
+  issuerRatingCandidates: IssuerRatingCandidate[];
   summary: {
     data_inicio: string | null;
     data_fim: string | null;
@@ -78,7 +88,7 @@ export function UploadPage() {
 
   async function pollUploadLog(logId: number): Promise<UploadLog> {
     const started = Date.now();
-    let pct = 85;
+    let pct = 80;
     while (Date.now() - started < POLL_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       const { data, error } = await supabase
@@ -89,7 +99,7 @@ export function UploadPage() {
       if (error) throw new Error(error.message);
       const log = data as UploadLog;
       if (log.status === "success" || log.status === "error") return log;
-      pct = Math.min(95, pct + 2);
+      pct = Math.min(90, pct + 2);
       setProgress(pct);
       setStatusLabel("Recalculando métricas…");
     }
@@ -116,6 +126,66 @@ export function UploadPage() {
     return json;
   }
 
+  // Importa ratings de emissor extraídos da planilha (aba "Dados Emissao e
+  // emissor") para a tabela issuer_ratings. SEMPRE por inserção — nunca faz
+  // update/overwrite. Ignora candidatos cuja tupla exata (cnpj, rating,
+  // agencia, data_rating) já existe no banco, para não duplicar histórico a
+  // cada reimportação diária do mesmo arquivo. O rating mais recente por
+  // data_rating continua sendo o exibido em todo o app (via
+  // v_issuer_rating_current / get_resolved_rating), sem precisar de nenhuma
+  // lógica extra aqui.
+  async function importIssuerRatings(
+    userId: string | null,
+    candidatesRaw: IssuerRatingCandidate[],
+  ): Promise<{ importados: number; ignorados: number }> {
+    // issuer_ratings.cnpj é normalizado (só dígitos) por um trigger no banco.
+    // A planilha traz o CNPJ formatado ("08.213.823/0001-07"), então
+    // normalizamos aqui ANTES de comparar com o que já existe — senão a
+    // checagem de duplicata nunca bate e reimporta tudo a cada upload.
+    const candidates = candidatesRaw
+      .map((c) => ({ ...c, cnpj: c.cnpj.replace(/[^0-9]/g, "") }))
+      .filter((c) => c.cnpj);
+    if (candidates.length === 0) return { importados: 0, ignorados: 0 };
+
+    const cnpjs = Array.from(new Set(candidates.map((c) => c.cnpj)));
+    const existingByCnpj = new Map<string, Set<string>>();
+    for (let i = 0; i < cnpjs.length; i += 200) {
+      const batch = cnpjs.slice(i, i + 200);
+      const { data, error } = await supabase
+        .from("issuer_ratings")
+        .select("cnpj,rating,agencia,data_rating")
+        .in("cnpj", batch);
+      if (error) throw new Error(error.message);
+      for (const row of data ?? []) {
+        const key = `${row.rating ?? ""}||${row.agencia ?? ""}||${row.data_rating ?? ""}`;
+        const set = existingByCnpj.get(row.cnpj) ?? new Set<string>();
+        set.add(key);
+        existingByCnpj.set(row.cnpj, set);
+      }
+    }
+
+    const toInsert = candidates.filter((c) => {
+      const key = `${c.rating}||${c.agencia ?? ""}||${c.data_rating ?? ""}`;
+      const existing = existingByCnpj.get(c.cnpj);
+      return !existing || !existing.has(key);
+    });
+
+    for (let i = 0; i < toInsert.length; i += UPLOAD_BATCH_SIZE) {
+      const batch = toInsert.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
+        cnpj: c.cnpj,
+        rating: c.rating,
+        agencia: c.agencia,
+        data_rating: c.data_rating,
+        observacao: "Importado automaticamente da planilha diária (Dados Emissao e emissor).",
+        created_by: userId,
+      }));
+      const { error } = await supabase.from("issuer_ratings").insert(batch);
+      if (error) throw new Error(`Falha ao importar ratings de emissor: ${error.message}`);
+    }
+
+    return { importados: toInsert.length, ignorados: candidates.length - toInsert.length };
+  }
+
   const onDrop = useCallback(async (files: File[]) => {
     const file = files[0];
     if (!file) return;
@@ -137,7 +207,7 @@ export function UploadPage() {
       const totalRows = UPLOAD_TABLES.reduce((sum, table) => sum + parsed.rows[table].length, 0);
       if (totalRows === 0) throw new Error("Nenhuma linha válida encontrada na planilha.");
 
-      setProgress(30);
+      setProgress(25);
       setStatusLabel("Criando registro de upload…");
 
       const start = await invokeProcessUpload(session.access_token, {
@@ -162,11 +232,11 @@ export function UploadPage() {
             rows: batch,
           });
           sentRows += batch.length;
-          setProgress(Math.min(80, 30 + Math.round((sentRows / totalRows) * 50)));
+          setProgress(Math.min(65, 25 + Math.round((sentRows / totalRows) * 40)));
         }
       }
 
-      setProgress(85);
+      setProgress(70);
       setStatusLabel("Recalculando métricas…");
       await invokeProcessUpload(session.access_token, {
         action: "finish",
@@ -175,14 +245,32 @@ export function UploadPage() {
       });
 
       const finalLog = await pollUploadLog(logId);
-      setProgress(100);
-      setStatusLabel(finalLog.status === "success" ? "Concluído" : "Erro");
 
-      if (finalLog.status === "success") {
-        setResult({ success: true, log: finalLog });
-      } else {
+      if (finalLog.status !== "success") {
+        setProgress(100);
+        setStatusLabel("Erro");
         setResult({ success: false, error: finalLog.erro_msg ?? "Erro no processamento." });
+        await loadLogs();
+        return;
       }
+
+      // Trade Monitor OK — agora importa ratings de emissor (issuer_ratings),
+      // sempre por inserção nova, nunca sobrescrevendo histórico existente.
+      setProgress(92);
+      setStatusLabel("Importando ratings de emissor…");
+      const { importados, ignorados } = await importIssuerRatings(
+        session.user?.id ?? null,
+        parsed.issuerRatingCandidates,
+      );
+
+      setProgress(100);
+      setStatusLabel("Concluído");
+      setResult({
+        success: true,
+        log: finalLog,
+        ratingsImportados: importados,
+        ratingsIgnorados: ignorados,
+      });
 
       await loadLogs();
     } catch (e) {
@@ -208,7 +296,7 @@ export function UploadPage() {
       <div>
         <h1 className="text-2xl font-bold">Atualizar Dados de Mercado</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Faça upload da planilha Excel exportada para atualizar as taxas, spreads e PUs.
+          Faça upload da planilha Excel exportada para atualizar as taxas, spreads, PUs e ratings de emissor.
         </p>
       </div>
 
@@ -263,6 +351,10 @@ export function UploadPage() {
                     <span>Ativos:          <strong className="text-foreground">{(result.log.linhas_atualizadas ?? 0).toLocaleString("pt-BR")}</strong></span>
                     <span>DI / IPCA:       <strong className="text-foreground">{result.log.ativos_di ?? 0} / {result.log.ativos_ipca ?? 0}</strong></span>
                     <span>Período:         <strong className="text-foreground">{result.log.data_inicio} → {result.log.data_fim}</strong></span>
+                    <span className="col-span-2 pt-1 border-t border-border/50 mt-1">
+                      Ratings de emissor: <strong className="text-foreground">{result.ratingsImportados ?? 0} novos importados</strong>
+                      {" "}({result.ratingsIgnorados ?? 0} já existiam, ignorados)
+                    </span>
                   </div>
                 )}
                 {!result.success && (
@@ -356,6 +448,18 @@ function parseNomeAtivo(nome: string) {
   const spreadEmissao = spreadMatch ? parseFloat(spreadMatch[1]) : null;
 
   return { venc_date: vencDate, anos_venc: anosVenc, indexador, taxa_emissao: taxaEmissao, spread_emissao: spreadEmissao };
+}
+
+// Extrai agência + nota do campo "Rating 1" da planilha, formato
+// "AGÊNCIA | NOTA" (ex.: "S&P | AA+", "FITCH | AAA", "MOODY'S | A",
+// "FITCH | Retirado"). Se não houver "|", trata o texto todo como rating,
+// sem agência identificada.
+function parseRating1(raw: unknown): { agencia: string | null; rating: string | null } {
+  const s = String(raw ?? "").trim();
+  if (!s) return { agencia: null, rating: null };
+  const parts = s.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return { agencia: parts[0], rating: parts.slice(1).join(" | ") };
+  return { agencia: null, rating: parts[0] ?? null };
 }
 
 function excelDateToISO(val: unknown): string | null {
@@ -453,6 +557,14 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
     ativosMap.set(ticker, ativo);
   }
 
+  // Candidatos de rating de emissor (para issuer_ratings, append-only).
+  // Deduplicados aqui por (cnpj + rating + agência + data), já que várias
+  // linhas (tickers diferentes) do mesmo emissor podem repetir exatamente o
+  // mesmo rating — isso evita mandar tuplas idênticas repetidas para o banco
+  // dentro do próprio arquivo (a checagem contra o que já existe no banco é
+  // feita depois, no momento da importação).
+  const issuerRatingCandidatesMap = new Map<string, IssuerRatingCandidate>();
+
   if (sheetEmissao) {
     const rawEmissao: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheetEmissao, { defval: null });
     for (const r of rawEmissao) {
@@ -466,6 +578,16 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
         rating: r["Rating 1"] ?? existing["rating"],
         data_rating: excelDateToISO(r["Data do Rating 1"]) ?? existing["data_rating"],
       });
+
+      const cnpj = String(r["Emissor CNPJ"] ?? "").trim();
+      const { agencia, rating } = parseRating1(r["Rating 1"]);
+      const dataRating = excelDateToISO(r["Data do Rating 1"]);
+      if (cnpj && rating) {
+        const key = `${cnpj}||${rating}||${agencia ?? ""}||${dataRating ?? ""}`;
+        if (!issuerRatingCandidatesMap.has(key)) {
+          issuerRatingCandidatesMap.set(key, { cnpj, rating, agencia, data_rating: dataRating });
+        }
+      }
     }
   }
 
@@ -518,6 +640,7 @@ async function parseTradeWorkbook(file: File): Promise<ParsedTradeUpload> {
       trade_ntnb: ntnbRows,
       trade_ipca_ref: ipcaRefRows,
     },
+    issuerRatingCandidates: Array.from(issuerRatingCandidatesMap.values()),
     summary: {
       data_inicio: dataInicio,
       data_fim: dataFim,
