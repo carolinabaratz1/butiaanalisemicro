@@ -66,7 +66,7 @@ export default function AnalyticsPage() {
       if (lastValDate) {
         const { data } = await supabase
           .from("posicoes")
-          .select("isin, amount, financial_price, trading_desk_share_source")
+          .select("isin, amount, financial_price, trading_desk_share_source, product, product_class")
           .eq("val_date", lastValDate)
           .gt("financial_price", 0);
         posRows = data ?? [];
@@ -95,7 +95,15 @@ export default function AnalyticsPage() {
       const enriched: Position[] = posRows.map(r => {
         const meta = emissoesMap.get(r.isin) ?? { cnpj: null, ticker: null };
         const key = ratingKey(meta.cnpj, meta.ticker);
-        const rating = rmap.get(key)?.rating ?? null;
+        const resolved = rmap.get(key) ?? null;
+        // Aplica regras de rating por produto (Caixa intragrupo, Termo→B3,
+        // Overnight/LFT→Tesouro/Soberano, DPGE/Compromissada→AAA) ANTES de
+        // usar o rating "cru" do emissor. Sem isso, uma Compromissada
+        // apareceria com o rating do banco por trás dela.
+        const pr = resolvePositionRating(
+          { product: r.product, product_class: r.product_class, cnpj: meta.cnpj, ticker: meta.ticker, isin: r.isin },
+          resolved,
+        );
         const value = Number(r.amount ?? 0) * Number(r.financial_price ?? 0);
         return {
           isin: r.isin,
@@ -104,8 +112,8 @@ export default function AnalyticsPage() {
           financial_price: Number(r.financial_price ?? 0),
           fundo: r.trading_desk_share_source ?? "—",
           cnpj: meta.cnpj,
-          rating,
-          bucket: ratingBucket(rating),
+          rating: pr.rating,
+          bucket: ratingBucket(pr.rating),
           value,
         };
       });
