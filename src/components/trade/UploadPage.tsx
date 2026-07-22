@@ -7,10 +7,11 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
-import { CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { ratingSeverity } from "@/lib/ratings/ratingSeverity";
 
 interface UploadLog {
   id: number;
@@ -26,12 +27,21 @@ interface UploadLog {
   erro_msg: string | null;
 }
 
+interface RatingImportConflict {
+  cnpj: string;
+  agencia: string | null;
+  data_rating: string | null;
+  escolhido: string;
+  descartados: string[];
+}
+
 interface UploadResult {
   success: boolean;
   log?: UploadLog;
   error?: string;
   ratingsImportados?: number;
   ratingsIgnorados?: number;
+  ratingsConflitos?: RatingImportConflict[];
 }
 
 type UploadTable = "trade_taxas" | "trade_ativos" | "trade_ntnb" | "trade_ipca_ref";
@@ -126,58 +136,58 @@ export function UploadPage() {
     return json;
   }
 
-  // Importa ratings de emissor extraídos da planilha (aba "Dados Emissao e
-  // emissor") para a tabela issuer_ratings. SEMPRE por inserção — nunca faz
-  // update/overwrite. A tabela tem uma constraint de unicidade em
-  // (cnpj, agencia, data_rating) — NÃO inclui o texto do rating — então a
-  // deduplicação (tanto dentro do próprio arquivo quanto contra o que já
-  // existe no banco) precisa usar exatamente essa mesma chave, senão o
-  // insert é rejeitado pelo banco (duplicate key).
+  // Importa ratings de emissor extraídos da planilha para issuer_ratings.
+  // Estratégia:
+  //  1. Normaliza CNPJ (só dígitos).
+  //  2. Aplica dedup determinístico dentro do arquivo pela chave real do
+  //     banco (cnpj + agência + data): menor severidade vence; empate →
+  //     ordem lexicográfica ascendente. Conflitos são reportados na UI.
+  //  3. Usa upsert com ignoreDuplicates para não sobrescrever histórico —
+  //     conta como "importados" apenas as linhas realmente inseridas.
   async function importIssuerRatings(
     userId: string | null,
     candidatesRaw: IssuerRatingCandidate[],
-  ): Promise<{ importados: number; ignorados: number }> {
-    // issuer_ratings.cnpj é normalizado (só dígitos) por um trigger no banco.
-    // A planilha traz o CNPJ formatado ("08.213.823/0001-07"), então
-    // normalizamos aqui ANTES de comparar com o que já existe — senão a
-    // checagem de duplicata nunca bate e reimporta tudo a cada upload.
+  ): Promise<{ importados: number; ignorados: number; conflitos: RatingImportConflict[] }> {
     const candidates = candidatesRaw
       .map((c) => ({ ...c, cnpj: c.cnpj.replace(/[^0-9]/g, "") }))
-      .filter((c) => c.cnpj);
-    if (candidates.length === 0) return { importados: 0, ignorados: 0 };
+      .filter((c) => c.cnpj && c.rating && c.data_rating);
+    if (candidates.length === 0) return { importados: 0, ignorados: 0, conflitos: [] };
 
-    // Chave real de unicidade do banco: cnpj + agência + data (sem rating).
-    const uniqKey = (cnpj: string, agencia: string | null, dataRating: string | null) =>
-      `${cnpj}||${agencia ?? ""}||${dataRating ?? ""}`;
-
-    // Dedup dentro do próprio arquivo: se duas linhas caírem na mesma chave
-    // (cnpj+agência+data), mantemos só a primeira — senão o próprio lote de
-    // insert já viria com duplicata interna.
-    const dedupedMap = new Map<string, IssuerRatingCandidate>();
+    // Agrupa pela chave real de unicidade do banco.
+    const groups = new Map<string, IssuerRatingCandidate[]>();
     for (const c of candidates) {
-      const key = uniqKey(c.cnpj, c.agencia, c.data_rating);
-      if (!dedupedMap.has(key)) dedupedMap.set(key, c);
+      const key = `${c.cnpj}||${c.agencia ?? ""}||${c.data_rating ?? ""}`;
+      const arr = groups.get(key);
+      if (arr) arr.push(c);
+      else groups.set(key, [c]);
     }
-    const deduped = Array.from(dedupedMap.values());
 
-    const cnpjs = Array.from(new Set(deduped.map((c) => c.cnpj)));
-    const existingKeys = new Set<string>();
-    for (let i = 0; i < cnpjs.length; i += 200) {
-      const batch = cnpjs.slice(i, i + 200);
-      const { data, error } = await supabase
-        .from("issuer_ratings")
-        .select("cnpj,rating_agency,data_rating")
-        .in("cnpj", batch);
-      if (error) throw new Error(error.message);
-      for (const row of data ?? []) {
-        existingKeys.add(uniqKey(row.cnpj, row.rating_agency, row.data_rating));
+    const winners: IssuerRatingCandidate[] = [];
+    const conflitos: RatingImportConflict[] = [];
+    const sev = (r: string) => ratingSeverity(r) ?? Number.POSITIVE_INFINITY;
+    for (const group of groups.values()) {
+      if (group.length === 1) {
+        winners.push(group[0]);
+        continue;
       }
+      const sorted = [...group].sort((a, b) => {
+        const d = sev(a.rating) - sev(b.rating);
+        if (d !== 0) return d;
+        return a.rating.localeCompare(b.rating);
+      });
+      winners.push(sorted[0]);
+      conflitos.push({
+        cnpj: sorted[0].cnpj,
+        agencia: sorted[0].agencia,
+        data_rating: sorted[0].data_rating,
+        escolhido: sorted[0].rating,
+        descartados: sorted.slice(1).map((x) => x.rating),
+      });
     }
 
-    const toInsert = deduped.filter((c) => !existingKeys.has(uniqKey(c.cnpj, c.agencia, c.data_rating)));
-
-    for (let i = 0; i < toInsert.length; i += UPLOAD_BATCH_SIZE) {
-      const batch = toInsert.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
+    let importados = 0;
+    for (let i = 0; i < winners.length; i += UPLOAD_BATCH_SIZE) {
+      const batch = winners.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
         cnpj: c.cnpj,
         rating: c.rating,
         rating_agency: c.agencia,
@@ -185,12 +195,19 @@ export function UploadPage() {
         observacao: "Importado automaticamente da planilha diária (Dados Emissao e emissor).",
         created_by: userId,
       }));
-      const { error } = await supabase.from("issuer_ratings").insert(batch);
+      const { data, error } = await supabase
+        .from("issuer_ratings")
+        .upsert(batch, { onConflict: "cnpj,rating_agency,data_rating", ignoreDuplicates: true })
+        .select("id");
       if (error) throw new Error(`Falha ao importar ratings de emissor: ${error.message}`);
+      importados += data?.length ?? 0;
     }
 
-
-    return { importados: toInsert.length, ignorados: candidates.length - toInsert.length };
+    return {
+      importados,
+      ignorados: winners.length - importados,
+      conflitos,
+    };
   }
 
   const onDrop = useCallback(async (files: File[]) => {
@@ -265,7 +282,7 @@ export function UploadPage() {
       // sempre por inserção nova, nunca sobrescrevendo histórico existente.
       setProgress(92);
       setStatusLabel("Importando ratings de emissor…");
-      const { importados, ignorados } = await importIssuerRatings(
+      const { importados, ignorados, conflitos } = await importIssuerRatings(
         session.user?.id ?? null,
         parsed.issuerRatingCandidates,
       );
@@ -277,6 +294,7 @@ export function UploadPage() {
         log: finalLog,
         ratingsImportados: importados,
         ratingsIgnorados: ignorados,
+        ratingsConflitos: conflitos,
       });
 
       await loadLogs();
@@ -369,6 +387,52 @@ export function UploadPage() {
                 )}
               </div>
             </div>
+
+            {result.success && result.ratingsConflitos && result.ratingsConflitos.length > 0 && (
+              <div className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      {result.ratingsConflitos.length} conflito(s) interno(s) no arquivo — revisar
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Mesma chave (CNPJ + agência + data) apareceu com ratings diferentes na planilha.
+                      Regra de desempate: menor severidade vence; empate → ordem lexicográfica ascendente.
+                    </p>
+                    <details className="mt-2">
+                      <summary className="text-xs font-medium text-primary cursor-pointer hover:underline">
+                        Ver detalhes
+                      </summary>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="text-muted-foreground border-b border-border/50">
+                            <tr>
+                              <th className="text-left py-1 pr-3 font-medium">CNPJ</th>
+                              <th className="text-left py-1 pr-3 font-medium">Agência</th>
+                              <th className="text-left py-1 pr-3 font-medium">Data</th>
+                              <th className="text-left py-1 pr-3 font-medium">Escolhido</th>
+                              <th className="text-left py-1 font-medium">Descartado(s)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {result.ratingsConflitos.map((c, i) => (
+                              <tr key={i}>
+                                <td className="py-1 pr-3 font-mono">{formatCnpj(c.cnpj)}</td>
+                                <td className="py-1 pr-3">{c.agencia ?? "—"}</td>
+                                <td className="py-1 pr-3">{c.data_rating ?? "—"}</td>
+                                <td className="py-1 pr-3 font-semibold text-foreground">{c.escolhido}</td>
+                                <td className="py-1 text-muted-foreground">{c.descartados.join(", ")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -461,11 +525,45 @@ function parseNomeAtivo(nome: string) {
 // "AGÊNCIA | NOTA" (ex.: "S&P | AA+", "FITCH | AAA", "MOODY'S | A",
 // "FITCH | Retirado"). Se não houver "|", trata o texto todo como rating,
 // sem agência identificada.
+// Mapa canônico de agências de rating. Chave = forma "sanitizada" da entrada
+// (upper, sem pontuação/apóstrofo/espaços). Valor = grafia canônica no banco.
+const AGENCY_CANON: Record<string, string> = {
+  FITCH: "Fitch",
+  FITCHRATINGS: "Fitch",
+  SP: "S&P",
+  SANDP: "S&P",
+  STANDARDPOORS: "S&P",
+  STANDARDANDPOORS: "S&P",
+  MOODYS: "Moody's",
+  MOODYSINVESTORS: "Moody's",
+  MOODYSINVESTORSSERVICE: "Moody's",
+  AUSTIN: "Austin",
+  AUSTINRATING: "Austin",
+  LIBERUM: "Liberum",
+  LIBERUMRATINGS: "Liberum",
+  LF: "LF Rating",
+  LFRATING: "LF Rating",
+};
+
+function normalizeAgencia(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return AGENCY_CANON[key] ?? trimmed;
+}
+
+function formatCnpj(cnpj: string): string {
+  const d = cnpj.replace(/\D/g, "").padStart(14, "0");
+  if (d.length !== 14) return cnpj;
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+}
+
 function parseRating1(raw: unknown): { agencia: string | null; rating: string | null } {
   const s = String(raw ?? "").trim();
   if (!s) return { agencia: null, rating: null };
   const parts = s.split("|").map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 2) return { agencia: parts[0], rating: parts.slice(1).join(" | ") };
+  if (parts.length >= 2) return { agencia: normalizeAgencia(parts[0]), rating: parts.slice(1).join(" | ") };
   return { agencia: null, rating: parts[0] ?? null };
 }
 
