@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
 import type { ResolvedRating } from "@/lib/ratings/useResolvedRating";
-import { worstRating, ratingBucket, synthesizeIssuerFromProduct, isExcludedFromPL } from "@/components/alocacao/allocationUtils";
+import { worstRating, ratingBucket, synthesizeIssuerFromProduct, isExcludedFromPL, isForcedAAAProduct } from "@/components/alocacao/allocationUtils";
 import { getDisplayStatus, fetchAllPaged } from "@/utils/analiseStatus";
 
 export type StatusKey =
@@ -310,6 +310,13 @@ export function useExposicaoData(valDate: string | null) {
             agencia: null,
             data_rating: null,
           };
+        } else if (isForcedAAAProduct(p.product, p.product_class)) {
+          resolved = {
+            rating: "AAA",
+            source: "regra_produto" as const,
+            agencia: null,
+            data_rating: null,
+            };
         }
 
         // taxa
