@@ -139,7 +139,7 @@ export default function RadarDeOfertasPage() {
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as SyncLogRow | null;
+      return data as unknown as SyncLogRow | null;
     },
     refetchInterval: 30_000,
   });
@@ -153,7 +153,7 @@ export default function RadarDeOfertasPage() {
         .order("data_referencia", { ascending: false, nullsFirst: false })
         .limit(5000);
       if (error) throw error;
-      return (data ?? []) as OfertaRow[];
+      return (data ?? []) as unknown as OfertaRow[];
     },
   });
 
@@ -247,7 +247,7 @@ export default function RadarDeOfertasPage() {
 
       const hoje = new Date().toISOString().slice(0, 10);
 
-      const { error: insertAnaliseError } = await supabase.from("analises").insert({
+      const { error: insertAnaliseError } = await (supabase.from("analises") as any).insert({
         empresa_id: empresaId,
         tipo: "Crédito Privado",
         // Deixado em branco intencionalmente: a atribuição do analista responsável

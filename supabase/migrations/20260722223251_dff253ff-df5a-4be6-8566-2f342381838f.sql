@@ -1,0 +1,1 @@
+ALTER TABLE public.cvm_ofertas_sync_log ADD COLUMN IF NOT EXISTS dataset_url text;

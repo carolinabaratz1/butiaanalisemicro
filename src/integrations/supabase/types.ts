@@ -824,6 +824,7 @@ export type Database = {
       }
       cvm_ofertas_sync_log: {
         Row: {
+          dataset_url: string | null
           erro_msg: string | null
           finished_at: string | null
           id: number
@@ -833,6 +834,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          dataset_url?: string | null
           erro_msg?: string | null
           finished_at?: string | null
           id?: number
@@ -842,6 +844,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          dataset_url?: string | null
           erro_msg?: string | null
           finished_at?: string | null
           id?: number
