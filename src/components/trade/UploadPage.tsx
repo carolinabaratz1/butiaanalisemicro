@@ -282,7 +282,7 @@ export function UploadPage() {
       // sempre por inserção nova, nunca sobrescrevendo histórico existente.
       setProgress(92);
       setStatusLabel("Importando ratings de emissor…");
-      const { importados, ignorados } = await importIssuerRatings(
+      const { importados, ignorados, conflitos } = await importIssuerRatings(
         session.user?.id ?? null,
         parsed.issuerRatingCandidates,
       );
@@ -294,6 +294,7 @@ export function UploadPage() {
         log: finalLog,
         ratingsImportados: importados,
         ratingsIgnorados: ignorados,
+        ratingsConflitos: conflitos,
       });
 
       await loadLogs();
