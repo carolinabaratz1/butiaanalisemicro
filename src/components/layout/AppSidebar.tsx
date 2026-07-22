@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Kanban, Settings, Briefcase,
-  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity, Sparkles
+  CalendarDays, ArrowLeftRight, Upload, BarChart3, Activity, Sparkles, Radar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,6 +16,7 @@ const mainItems = [
   { label: 'Rating Resolver',   icon: Sparkles,         path: '/ratings/resolver' },
   { label: 'Assembleias',       icon: CalendarDays,     path: '/assembleias' },
   { label: 'Pipeline Research', icon: Kanban,           path: '/pipeline-de-research' },
+  { label: 'Radar de Ofertas',  icon: Radar,            path: '/radar-de-ofertas' },
   { label: 'Desempenho & Agenda', icon: BarChart3,      path: '/desempenho' },
   { label: 'Trade Monitor',     icon: ArrowLeftRight,   path: '/trade' },
   { label: 'Trade Activity',    icon: Activity,         path: '/trade/activity' },
