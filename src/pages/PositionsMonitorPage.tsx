@@ -13,6 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchAllPaged } from "@/utils/analiseStatus";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { resolvePositionRating } from "@/lib/ratings/resolvePositionRating";
 import { cn } from "@/lib/utils";
 
 // ---------- helpers ----------
