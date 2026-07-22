@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Download, Search, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { RatingDistributionCard } from "@/components/ratings/RatingDistributionCard";
+import { IssuerRatingSelector, type IssuerOption } from "@/components/ratings/IssuerRatingSelector";
+import { IssuerRatingTimelinePanel } from "@/components/ratings/IssuerRatingTimelinePanel";
 
 type SourceLevel = "fidc_class" | "emission" | "issuer" | "nr";
 
@@ -45,11 +49,13 @@ const sourceMeta: Record<SourceLevel, { label: string; className: string }> = {
 function formatBR(iso?: string | null) {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
+  return y && m && d ? `${d}/${m}/${y}` : iso;
 }
 
 export default function RatingResolverPage() {
+  const [selectedIssuer, setSelectedIssuer] = useState<IssuerOption | null>(null);
+
+  // Aba consulta (mantida)
   const [cnpj, setCnpj] = useState("");
   const [isin, setIsin] = useState("");
   const [classCode, setClassCode] = useState("");
@@ -67,11 +73,7 @@ export default function RatingResolverPage() {
     if (!kRes.success) errs.classCode = kRes.error.issues[0]?.message;
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    setSubmitted({
-      cnpj: cRes.data!,
-      isin: iRes.data!,
-      classCode: kRes.data!,
-    });
+    setSubmitted({ cnpj: cRes.data!, isin: iRes.data!, classCode: kRes.data! });
   }
 
   const resolvedQuery = useQuery({
@@ -134,12 +136,7 @@ export default function RatingResolverPage() {
 
   function exportJSON() {
     if (!resolved || !submitted) return;
-    const payload = {
-      input: submitted,
-      resolved,
-      history: historyQuery.data ?? [],
-      exported_at: new Date().toISOString(),
-    };
+    const payload = { input: submitted, resolved, history: historyQuery.data ?? [], exported_at: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -151,162 +148,168 @@ export default function RatingResolverPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Rating Resolver</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Rating — Dashboard</h1>
         <p className="text-sm text-muted-foreground">
-          Consulta o rating mais específico disponível por CNPJ, ISIN e Classe (FIDC), com precedência automática.
+          Visão geral por emissor, evolução histórica e atualização manual do rating cadastral.
+          Instrumentos com regra própria (Títulos Públicos, DPGE, Compromissada/Overnight, Termo, FIDCs) mantêm seu
+          tratamento e não passam pela hierarquia genérica emissor→grupo.
         </p>
       </header>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Consulta</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-            <div className="md:col-span-2">
-              <Label className="text-xs">CNPJ *</Label>
-              <Input
-                value={cnpj}
-                onChange={(e) => setCnpj(e.target.value)}
-                placeholder="00.000.000/0000-00"
-                maxLength={18}
-                className="h-9"
-              />
-              {errors.cnpj && <p className="text-xs text-destructive mt-1">{errors.cnpj}</p>}
-            </div>
-            <div>
-              <Label className="text-xs">ISIN</Label>
-              <Input
-                value={isin}
-                onChange={(e) => setIsin(e.target.value.toUpperCase())}
-                placeholder="BRXXXXDEB000"
-                maxLength={12}
-                className="h-9 font-mono"
-              />
-              {errors.isin && <p className="text-xs text-destructive mt-1">{errors.isin}</p>}
-            </div>
-            <div>
-              <Label className="text-xs">Classe (FIDC)</Label>
-              <Input
-                value={classCode}
-                onChange={(e) => setClassCode(e.target.value)}
-                placeholder="Sênior, Sub A…"
-                maxLength={50}
-                className="h-9"
-              />
-              {errors.classCode && <p className="text-xs text-destructive mt-1">{errors.classCode}</p>}
-            </div>
-            <div className="md:col-span-4 flex justify-end">
-              <Button type="submit" size="sm" className="gap-2">
-                <Search className="h-4 w-4" /> Resolver rating
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <RatingDistributionCard />
 
-      {submitted && (
-        <Card>
-          <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Resultado</CardTitle>
-            {resolved && level !== "nr" && (
-              <Button variant="outline" size="sm" onClick={exportJSON} className="gap-1">
-                <Download className="h-3 w-3" /> Exportar JSON
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {resolvedQuery.isLoading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Consultando…
-              </div>
-            )}
-            {resolvedQuery.isError && (
-              <p className="text-sm text-destructive">
-                Erro ao consultar: {(resolvedQuery.error as any)?.message ?? "desconhecido"}
-              </p>
-            )}
-            {resolved && !resolvedQuery.isLoading && (
-              <div className="flex flex-col md:flex-row md:items-center gap-6">
-                <div className="flex-1">
-                  <div className="text-5xl font-mono font-bold tracking-tight">
-                    {resolved.rating_value ?? "N/R"}
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className={sourceMeta[level].className}>
-                      {sourceMeta[level].label}
-                    </Badge>
-                    {resolved.source && (
-                      <Badge variant="outline" className="text-xs">
-                        {resolved.source}
-                      </Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      Data: {formatBR(resolved.rating_date)}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground md:max-w-xs">
-                  Precedência: Classe FIDC (ISIN + Classe) → Emissão (ISIN) → Emissor (CNPJ). A resposta
-                  vem do nível mais específico com registro disponível.
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <Tabs defaultValue="emissor" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="emissor">Emissor</TabsTrigger>
+          <TabsTrigger value="resolver">Resolver por ISIN / Classe</TabsTrigger>
+        </TabsList>
 
-      {submitted && resolved && level !== "nr" && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Histórico (últimas 5 no nível “{sourceMeta[level].label}”)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border border-border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-[11px]">Data</TableHead>
-                    <TableHead className="text-[11px]">Rating</TableHead>
-                    <TableHead className="text-[11px]">Agência</TableHead>
-                    <TableHead className="text-[11px]">Outlook</TableHead>
-                    <TableHead className="text-[11px]">Registrado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {historyQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
-                        Carregando…
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {!historyQuery.isLoading && (historyQuery.data ?? []).length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">
-                        Sem histórico.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {(historyQuery.data ?? []).map((r: any) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="text-xs">{formatBR(r.rating_date)}</TableCell>
-                      <TableCell className="text-xs font-mono font-semibold">{r.rating_value}</TableCell>
-                      <TableCell className="text-xs">{r.source ?? "—"}</TableCell>
-                      <TableCell className="text-xs">{r.outlook ?? "—"}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {r.created_at ? new Date(r.created_at).toLocaleString("pt-BR") : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <TabsContent value="emissor" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Selecione o emissor</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <IssuerRatingSelector
+                value={selectedIssuer?.cnpj ?? null}
+                onChange={(opt) => setSelectedIssuer(opt)}
+              />
+            </CardContent>
+          </Card>
+
+          {selectedIssuer ? (
+            <IssuerRatingTimelinePanel issuer={selectedIssuer} />
+          ) : (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                Escolha um emissor acima para ver a evolução do rating e registrar atualizações.
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="resolver" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Consulta por CNPJ / ISIN / Classe</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                <div className="md:col-span-2">
+                  <Label className="text-xs">CNPJ *</Label>
+                  <Input value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" maxLength={18} className="h-9" />
+                  {errors.cnpj && <p className="text-xs text-destructive mt-1">{errors.cnpj}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">ISIN</Label>
+                  <Input value={isin} onChange={(e) => setIsin(e.target.value.toUpperCase())} placeholder="BRXXXXDEB000" maxLength={12} className="h-9 font-mono" />
+                  {errors.isin && <p className="text-xs text-destructive mt-1">{errors.isin}</p>}
+                </div>
+                <div>
+                  <Label className="text-xs">Classe (FIDC)</Label>
+                  <Input value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="Sênior, Sub A…" maxLength={50} className="h-9" />
+                  {errors.classCode && <p className="text-xs text-destructive mt-1">{errors.classCode}</p>}
+                </div>
+                <div className="md:col-span-4 flex justify-end">
+                  <Button type="submit" size="sm" className="gap-2">
+                    <Search className="h-4 w-4" /> Resolver rating
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {submitted && (
+            <Card>
+              <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base">Resultado</CardTitle>
+                {resolved && level !== "nr" && (
+                  <Button variant="outline" size="sm" onClick={exportJSON} className="gap-1">
+                    <Download className="h-3 w-3" /> Exportar JSON
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {resolvedQuery.isLoading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Consultando…
+                  </div>
+                )}
+                {resolvedQuery.isError && (
+                  <p className="text-sm text-destructive">
+                    Erro ao consultar: {(resolvedQuery.error as any)?.message ?? "desconhecido"}
+                  </p>
+                )}
+                {resolved && !resolvedQuery.isLoading && (
+                  <div className="flex flex-col md:flex-row md:items-center gap-6">
+                    <div className="flex-1">
+                      <div className="text-5xl font-mono font-bold tracking-tight">
+                        {resolved.rating_value ?? "N/R"}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={sourceMeta[level].className}>
+                          {sourceMeta[level].label}
+                        </Badge>
+                        {resolved.source && (
+                          <Badge variant="outline" className="text-xs">{resolved.source}</Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">Data: {formatBR(resolved.rating_date)}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground md:max-w-xs">
+                      Precedência: Classe FIDC → Emissão → Emissor. A resposta vem do nível mais específico com registro disponível.
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {submitted && resolved && level !== "nr" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Histórico (últimas 5)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border border-border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-[11px]">Data</TableHead>
+                        <TableHead className="text-[11px]">Rating</TableHead>
+                        <TableHead className="text-[11px]">Agência</TableHead>
+                        <TableHead className="text-[11px]">Outlook</TableHead>
+                        <TableHead className="text-[11px]">Registrado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {historyQuery.isLoading && (
+                        <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Carregando…</TableCell></TableRow>
+                      )}
+                      {!historyQuery.isLoading && (historyQuery.data ?? []).length === 0 && (
+                        <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Sem histórico.</TableCell></TableRow>
+                      )}
+                      {(historyQuery.data ?? []).map((r: any) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="text-xs">{formatBR(r.rating_date)}</TableCell>
+                          <TableCell className="text-xs font-mono font-semibold">{r.rating_value}</TableCell>
+                          <TableCell className="text-xs">{r.source ?? "—"}</TableCell>
+                          <TableCell className="text-xs">{r.outlook ?? "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {r.created_at ? new Date(r.created_at).toLocaleString("pt-BR") : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
