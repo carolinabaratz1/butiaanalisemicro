@@ -356,6 +356,7 @@ Deno.serve(async (req) => {
                 INSERT INTO ${dst(table)} (${dst.unsafe(colListQuoted)})
                 SELECT ${dst.unsafe(colListQuoted)}
                 FROM jsonb_populate_recordset(NULL::${dst(table)}, ${dst.json(rows)})
+                ON CONFLICT DO NOTHING
               `;
             }
             curOffset += rows.length;
