@@ -525,11 +525,45 @@ function parseNomeAtivo(nome: string) {
 // "AGÊNCIA | NOTA" (ex.: "S&P | AA+", "FITCH | AAA", "MOODY'S | A",
 // "FITCH | Retirado"). Se não houver "|", trata o texto todo como rating,
 // sem agência identificada.
+// Mapa canônico de agências de rating. Chave = forma "sanitizada" da entrada
+// (upper, sem pontuação/apóstrofo/espaços). Valor = grafia canônica no banco.
+const AGENCY_CANON: Record<string, string> = {
+  FITCH: "Fitch",
+  FITCHRATINGS: "Fitch",
+  SP: "S&P",
+  SANDP: "S&P",
+  STANDARDPOORS: "S&P",
+  STANDARDANDPOORS: "S&P",
+  MOODYS: "Moody's",
+  MOODYSINVESTORS: "Moody's",
+  MOODYSINVESTORSSERVICE: "Moody's",
+  AUSTIN: "Austin",
+  AUSTINRATING: "Austin",
+  LIBERUM: "Liberum",
+  LIBERUMRATINGS: "Liberum",
+  LF: "LF Rating",
+  LFRATING: "LF Rating",
+};
+
+function normalizeAgencia(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return AGENCY_CANON[key] ?? trimmed;
+}
+
+function formatCnpj(cnpj: string): string {
+  const d = cnpj.replace(/\D/g, "").padStart(14, "0");
+  if (d.length !== 14) return cnpj;
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+}
+
 function parseRating1(raw: unknown): { agencia: string | null; rating: string | null } {
   const s = String(raw ?? "").trim();
   if (!s) return { agencia: null, rating: null };
   const parts = s.split("|").map((p) => p.trim()).filter(Boolean);
-  if (parts.length >= 2) return { agencia: parts[0], rating: parts.slice(1).join(" | ") };
+  if (parts.length >= 2) return { agencia: normalizeAgencia(parts[0]), rating: parts.slice(1).join(" | ") };
   return { agencia: null, rating: parts[0] ?? null };
 }
 
