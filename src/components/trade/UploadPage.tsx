@@ -27,12 +27,21 @@ interface UploadLog {
   erro_msg: string | null;
 }
 
+interface RatingImportConflict {
+  cnpj: string;
+  agencia: string | null;
+  data_rating: string | null;
+  escolhido: string;
+  descartados: string[];
+}
+
 interface UploadResult {
   success: boolean;
   log?: UploadLog;
   error?: string;
   ratingsImportados?: number;
   ratingsIgnorados?: number;
+  ratingsConflitos?: RatingImportConflict[];
 }
 
 type UploadTable = "trade_taxas" | "trade_ativos" | "trade_ntnb" | "trade_ipca_ref";
