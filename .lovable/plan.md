@@ -1,36 +1,41 @@
+## Objetivo
+Corrigir a classificação de ativos DPGE como rating AAA, estendendo a regra para também inspecionar o campo `ticker` (além de `product`/`product_class`), já que a palavra "DPGE" só aparece no ticker dessas posições.
 
-## Avaliação do fix proposto
+## Diagnóstico confirmado
+- `isForcedAAAProduct(product, productClass)` em `src/components/alocacao/allocationUtils.ts` só verifica `product` e `product_class`.
+- Posições DPGE reais vêm com `product`/`product_class` genéricos (ex: "CDB DI Spread") e o identificador "DPGE" apenas no `ticker`.
+- Por isso a regra nunca dispara e o DPGE exibe o rating real do banco emissor, em vez de AAA.
 
-O diagnóstico do usuário está correto e verificado:
-- `useAllocationData.ts` mantinha síntese própria do "Tesouro Nacional" com CNPJ `00.000.000/0001-91`, que é literalmente o CNPJ real do **Banco do Brasil**. Como esse CNPJ existe no cadastro `empresas`, o `cnpjToEmpresa.get(...)` casava e rotulava toda posição Overnight/Compromissada/LFT sem emissor como "Banco do Brasil S.A.".
-- O CNPJ correto do Tesouro (`00.394.460/0001-41`) já está em `allocationUtils.ts` dentro de `synthesizeIssuerFromProduct`, que também é usado por Posições/Exposição/Dashboard/PositionsMonitor via `resolvePositionRating`.
+## Escopo das alterações
 
-A troca por `synthesizeIssuerFromProduct` é a decisão certa (fonte única de verdade, mesma lógica do restante do app). Aplicar como está **já resolve o bug do card "Banco do Brasil" inflado**.
+### 1. `src/components/alocacao/allocationUtils.ts`
+- Adicionar terceiro parâmetro opcional `ticker?: string | null` em `isForcedAAAProduct`.
+- Incluir checagem case-insensitive por `"dpge"` no ticker, junto com as já existentes em `product` e `product_class`.
+- Manter o comportamento atual para Compromissada (ainda detectada por texto de product/product_class).
 
-## Gaps a corrigir junto (para não abrir regressão nem deixar duplicação)
+### 2. `src/lib/ratings/resolvePositionRating.ts`
+- Adicionar `ticker?: string | null` na interface `PositionLike`.
+- Passar `row.ticker` para `isForcedAAAProduct(row.product, row.product_class, row.ticker)`.
+- Isso mantém a fonte única de verdade centralizada; as demais telas que já usam `resolvePositionRating` herdam a correção automaticamente.
 
-1. **LTN/NTN param de ser sintetizados.** O regex antigo incluía `lft || ltn || ntn`; o novo `synthesizeIssuerFromProduct` só reconhece `lft`, `overnight` e `compromiss`. Posições de LTN/NTN-B/NTN-F sem emissor cadastrado voltariam a cair no fallback "sem emissor" (não somam no grupo CAIXA nem no setor "Título Público"). Ampliar a função central para reconhecer também `ltn` e `ntn` (tratados como Tesouro/Soberano, mesmo bucket AAA), em vez de deixar a regra desincronizada entre os módulos.
+### 3. `src/hooks/useFundoDashboard.ts`
+- Atualizar as duas chamadas existentes de `isForcedAAAProduct` para passar `r.ticker`:
+  - Linha ~212 (classificação principal).
+  - Linha ~283 (rótulo de "Top Posições").
 
-2. **Branch `else` do arquivo do usuário ainda duplica regex.** Quando `empresa` existe, o código refaz o teste `overnight|compromiss|lft|ltn|ntn` só para marcar `isSoberanoEff`. Substituir por uma checagem única baseada em `synthesizeIssuerFromProduct(...)?.isSoberano` — assim toda a definição de "o que é soberano por produto" fica num único lugar.
+### 4. `src/components/posicoes/useExposicaoData.ts`
+- Atualizar a chamada em ~linha 313 para passar `em?.ticker ?? null`.
 
-3. **Aproveitar `resolvePositionRating` para o rating do bucket (linha 478).** Hoje a alocação ainda faz `isTermo(...) || isForcedAAAProduct(...) ? "AAA" : ratingBucket(posResolved?.rating ?? empresa?.rating)`. Isso funciona, mas é mais uma cópia paralela da hierarquia. Trocar por `resolvePositionRating(row, posResolved)` + `ratingBucket(res.rating)` mantém a alocação alinhada às demais telas automaticamente se uma nova regra de produto surgir.
+### 5. `src/components/alocacao/useAllocationData.ts`
+- A lógica de rating já usa `resolvePositionRating`. Ajustar a chamada para incluir `ticker: emissao?.ticker ?? null` no objeto `PositionLike`, garantindo que a nova regra de ticker seja avaliada.
 
-## Plano de implementação
+### 6. `src/pages/PosicoesPage.tsx`
+- Atualizar a chamada em ~linha 250 para passar `p.ticker` (ou equivalente disponível na posição), mantendo a tela de Posições alinhada.
 
-1. `src/components/alocacao/allocationUtils.ts`
-   - Em `synthesizeIssuerFromProduct` / helpers internos: incluir `ltn` e `ntn` no mesmo grupo do Tesouro (retornando o mesmo `SyntheticIssuer` de Overnight/LFT — Tesouro Nacional, grupo CAIXA, Soberano, bucket AAA).
-   - Nenhuma mudança em Termo/DPGE/Compromissada.
-
-2. `src/components/alocacao/useAllocationData.ts` (aplicar a base do arquivo enviado, com 2 ajustes)
-   - Manter a troca por `synthesizeIssuerFromProduct` para o caso `!empresaEff` (como no upload).
-   - Simplificar o `else`: `const synth = synthesizeIssuerFromProduct(p.product, p.product_class); if (synth?.isSoberano) isSoberanoEff = true;` — remove o regex duplicado.
-   - Substituir o cálculo de `ratingB` (linha 478) por `resolvePositionRating({ product: p.product, product_class: p.product_class, cnpj: emissao?.cnpj_emissor, isin: p.isin }, posResolved)` e derivar `ratingBucket(res.rating)`. Preserva o comportamento atual (Termo/DPGE/Compromissada → AAA, Soberano → AAA) e passa a herdar automaticamente futuras regras.
-
-3. Verificação
-   - Typecheck.
-   - Query rápida em `posicoes` do fundo TOP CP na `val_date` mais recente para confirmar que as linhas com `product` contendo `LTN`/`NTN`/`Overnight`/`Compromissada` batem no bucket "Título Público"/grupo "CAIXA" e somem do card de Banco do Brasil.
+## Verificação
+- Typecheck (`bunx tsc --noEmit` / `tsgo`).
+- Revisar visualmente na aba de Alocação / Dashboard / Posições se DPGE do Mercantil (ou outro emissor) agora aparece no bucket AAA.
 
 ## Fora de escopo
-
-- Não mexer em `PosicoesPage`, `useExposicaoData`, `useFundoDashboard`, `PositionsMonitorPage`, `AnalyticsPage` — todos já consomem `synthesizeIssuerFromProduct`/`resolvePositionRating` e vão herdar automaticamente a extensão LTN/NTN feita no item 1.
-- Não alterar rating de emissor real do Banco do Brasil (as posições legítimas dele — LF Subordinada, Termo — continuam somando no card BB).
+- Não alterar a lógica de Compromissada/Overnight/LFT (já funciona por product/product_class).
+- Não mudar regras de cache do React Query nem forçar invalidações — a correção é puramente de cálculo.

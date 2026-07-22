@@ -170,6 +170,12 @@ export default function PosicoesPage() {
     return map;
   }, [emissoes]);
 
+  const isinToTicker = useMemo(() => {
+    const map: Record<string, string> = {};
+    emissoes.forEach(e => { if (e.ticker) map[e.isin] = e.ticker; });
+    return map;
+  }, [emissoes]);
+
   const cnpjToEmpresa = useMemo(() => {
     const map: Record<string, { nome: string; rating: string | null; setor: string | null; tipo: string | null }> = {};
     empresas.forEach(e => { map[e.cnpj] = { nome: e.nome, rating: e.rating, setor: e.setor, tipo: (e as any).tipo ?? null }; });
@@ -247,7 +253,8 @@ export default function PosicoesPage() {
         ? (analise?.recomendacao || (analise && isRecLike(analise.status) ? analise.status : null))
         : ((analise as any)?.recomendacao_rf || (analise && isRecLike(analise.status) ? analise.status : null));
       const empresaNome = synth ? synth.nome : empresa?.nome;
-      const empresaRating = synth ? synth.rating : (isForcedAAAProduct(p.product, p.product_class) ? 'AAA' : empresa?.rating);
+      const ticker = p.isin ? isinToTicker[p.isin] : null;
+      const empresaRating = synth ? synth.rating : (isForcedAAAProduct(p.product, p.product_class, ticker) ? 'AAA' : empresa?.rating);
       return {
         ...p,
         cnpj,
@@ -261,7 +268,7 @@ export default function PosicoesPage() {
         analiseDataConclusao: analise?.data_conclusao || null,
       };
     });
-  }, [posicoesActive, isinToCnpj, cnpjToEmpresa, latestAnaliseByEmpresa]);
+  }, [posicoesActive, isinToCnpj, isinToTicker, cnpjToEmpresa, latestAnaliseByEmpresa]);
 
   // BI filtered
   const biFiltered = useMemo(() => {

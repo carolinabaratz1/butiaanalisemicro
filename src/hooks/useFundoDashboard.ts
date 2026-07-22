@@ -209,7 +209,7 @@ export function useFundoDashboard(fundo: string | null) {
       const isCaixaGrupo = isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs);
       // DPGE e Compromissada são tratados como AAA pela estrutura/garantia do
       // próprio produto, independentemente do rating do banco emissor.
-      const isForcedAAA = isForcedAAAProduct(r.product, r.product_class);
+      const isForcedAAA = isForcedAAAProduct(r.product, r.product_class, r.ticker);
       const rowForClassify = {
         ...r,
         rating: (isCaixaGrupo || isForcedAAA) ? 'AAA' : (resolved.rating ?? null),
@@ -280,7 +280,7 @@ export function useFundoDashboard(fundo: string | null) {
       } else {
         const cnpj = normCnpj(r.cnpj_emissor);
         const synth = synthesizeIssuerFromProduct(r.product ?? '', r.product_class ?? '');
-        const ratingLabel = (isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs) || isForcedAAAProduct(r.product, r.product_class))
+        const ratingLabel = (isCaixaIntragrupo(r.cnpj_emissor, butiaRfCpCnpjs) || isForcedAAAProduct(r.product, r.product_class, r.ticker))
           ? 'AAA'
           : synth
             ? (normalizeRating(r.resolved_rating.rating) ?? synth.rating)

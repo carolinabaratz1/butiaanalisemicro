@@ -89,7 +89,7 @@ export function resolvePositionRating(
   }
 
   // 3) Produto com garantia/estrutura que força AAA (DPGE, Compromissada)
-  if (isForcedAAAProduct(row.product, row.product_class)) {
+  if (isForcedAAAProduct(row.product, row.product_class, row.ticker)) {
     return {
       rating: "AAA",
       source: "regra_produto",
