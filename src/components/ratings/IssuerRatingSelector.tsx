@@ -18,26 +18,47 @@ interface Props {
   onChange: (opt: IssuerOption | null) => void;
 }
 
+// Supabase/PostgREST impoe um teto de linhas por requisicao (Max Rows do projeto,
+// hoje 1000) independente do .range() pedido pelo cliente. Sem paginacao, so as
+// primeiras ~1000 empresas (em ordem alfabetica) eram carregadas no browser, entao
+// a busca no cliente nunca encontrava emissores fora desse recorte. Paginamos em
+// blocos ate a pagina voltar menor que o pageSize, garantindo cobertura total.
+// Order por nome+cnpj (desempate estavel) para a paginacao nao repetir/pular linhas
+// quando ha nomes duplicados.
+async function fetchAllEmpresas(): Promise<IssuerOption[]> {
+  const pageSize = 500;
+  let from = 0;
+  let all: any[] = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from("empresas")
+      .select("cnpj, nome, grupo_economico")
+      .not("cnpj", "is", null)
+      .order("nome")
+      .order("cnpj")
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  return all
+    .map((e: any) => ({
+      cnpj: (e.cnpj ?? "").replace(/[^0-9]/g, ""),
+      nome: e.nome ?? "",
+      grupo_economico: e.grupo_economico ?? null,
+    }))
+    .filter((e) => e.cnpj.length === 14);
+}
+
 export function IssuerRatingSelector({ value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
   const { data: options = [], isLoading } = useQuery({
     queryKey: ["issuerSelector"],
-    queryFn: async (): Promise<IssuerOption[]> => {
-      const { data, error } = await supabase
-        .from("empresas")
-        .select("cnpj, nome, grupo_economico")
-        .not("cnpj", "is", null)
-        .order("nome")
-        .range(0, 4999);
-      if (error) throw error;
-      return (data ?? []).map((e: any) => ({
-        cnpj: (e.cnpj ?? "").replace(/[^0-9]/g, ""),
-        nome: e.nome ?? "",
-        grupo_economico: e.grupo_economico ?? null,
-      })).filter((e) => e.cnpj.length === 14);
-    },
+    queryFn: fetchAllEmpresas,
     staleTime: 5 * 60 * 1000,
   });
 
