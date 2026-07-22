@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import * as XLSX from "xlsx";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { resolvePositionRating } from "@/lib/ratings/resolvePositionRating";
 
 const CHART_COLORS = ["#1B3864", "#2E5C99", "#4A80C9", "#7BAAD9", "#B6D0EA", "#F1B233", "#E07A5F", "#8FBC8F", "#9C89B8"];
 
