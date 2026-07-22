@@ -27,17 +27,32 @@ const SOURCE_LABEL: Record<Row["source_level"], string> = {
   nr: "Sem rating",
 };
 
+// Supabase/PostgREST impoe um teto de linhas por requisicao (Max Rows do projeto,
+// hoje 1000) independente do .range() pedido pelo cliente. Paginamos em blocos ate
+// a pagina voltar menor que o pageSize, garantindo que TODAS as linhas de
+// v_empresa_rating_resolved sejam carregadas, nao apenas as primeiras ~1000.
+async function fetchAllRatingRows(): Promise<Row[]> {
+  const pageSize = 500;
+  let from = 0;
+  let all: Row[] = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from("v_empresa_rating_resolved" as any)
+      .select("cnpj, rating, source_level")
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data as any as Row[]) ?? [];
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 export function RatingDistributionCard() {
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ["ratingDistribution"],
-    queryFn: async (): Promise<Row[]> => {
-      const { data, error } = await supabase
-        .from("v_empresa_rating_resolved" as any)
-        .select("cnpj, rating, source_level")
-        .range(0, 9999);
-      if (error) throw error;
-      return (data as any as Row[]) ?? [];
-    },
+    queryFn: fetchAllRatingRows,
     staleTime: 60_000,
   });
 
