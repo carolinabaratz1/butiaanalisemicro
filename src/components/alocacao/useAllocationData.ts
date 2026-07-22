@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
-  fidcTipoFromClasse, FidcClasse, isForcedAAAProduct,
+  fidcTipoFromClasse, FidcClasse, isForcedAAAProduct, synthesizeIssuerFromProduct,
 } from "./allocationUtils";
 import { getDisplayStatus } from "@/utils/analiseStatus";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { resolvePositionRating } from "@/lib/ratings/resolvePositionRating";
 import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 export interface FidcClassRow {
