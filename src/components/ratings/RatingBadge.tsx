@@ -23,7 +23,11 @@ function formatDateBR(iso?: string | null): string {
 const sourceLabels: Record<RatingSource, string> = {
   ticker: "Rating do ativo",
   emissor: "Rating do emissor",
+  emissor_conservador: "Rating do emissor (mais conservador do grupo)",
   grupo: "Estimativa por grupo econômico",
+  grupo_conservador: "Rating do grupo (mais conservador)",
+  fidc_isin: "Rating da cota (FIDC)",
+  regra_produto: "Rating forçado pela regra de produto",
   nr: "Sem rating cadastrado",
 };
 

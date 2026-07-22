@@ -13,6 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchAllPaged } from "@/utils/analiseStatus";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { resolvePositionRating } from "@/lib/ratings/resolvePositionRating";
 import { cn } from "@/lib/utils";
 
 // ---------- helpers ----------
@@ -143,6 +144,10 @@ async function fetchAllPositions(): Promise<Row[]> {
 
   return partials.map(({ raw, ticker, cnpj }) => {
     const rr = ratingsMap.get(ratingKey(cnpj, ticker));
+    const pr = resolvePositionRating(
+      { product: raw.product, product_class: raw.product_class, cnpj, ticker, isin: raw.isin },
+      rr ?? null,
+    );
     const amount = Number(raw.amount) || 0;
     const price = Number(raw.financial_price) || 0;
     return {
@@ -159,9 +164,9 @@ async function fetchAllPositions(): Promise<Row[]> {
       yieldPct: raw.yield != null ? Number(raw.yield) : null,
       valDate: raw.val_date,
       dateObj: parseValDate(raw.val_date),
-      rating: rr?.rating ?? null,
-      ratingBucket: bucketRating(rr?.rating),
-      sourceLevel: rr?.source ?? "nr",
+      rating: pr.rating,
+      ratingBucket: bucketRating(pr.rating),
+      sourceLevel: pr.source,
     } as Row;
   });
 }
