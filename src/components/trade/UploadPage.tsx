@@ -387,6 +387,52 @@ export function UploadPage() {
                 )}
               </div>
             </div>
+
+            {result.success && result.ratingsConflitos && result.ratingsConflitos.length > 0 && (
+              <div className="mt-4 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">
+                      {result.ratingsConflitos.length} conflito(s) interno(s) no arquivo — revisar
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Mesma chave (CNPJ + agência + data) apareceu com ratings diferentes na planilha.
+                      Regra de desempate: menor severidade vence; empate → ordem lexicográfica ascendente.
+                    </p>
+                    <details className="mt-2">
+                      <summary className="text-xs font-medium text-primary cursor-pointer hover:underline">
+                        Ver detalhes
+                      </summary>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="text-muted-foreground border-b border-border/50">
+                            <tr>
+                              <th className="text-left py-1 pr-3 font-medium">CNPJ</th>
+                              <th className="text-left py-1 pr-3 font-medium">Agência</th>
+                              <th className="text-left py-1 pr-3 font-medium">Data</th>
+                              <th className="text-left py-1 pr-3 font-medium">Escolhido</th>
+                              <th className="text-left py-1 font-medium">Descartado(s)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {result.ratingsConflitos.map((c, i) => (
+                              <tr key={i}>
+                                <td className="py-1 pr-3 font-mono">{formatCnpj(c.cnpj)}</td>
+                                <td className="py-1 pr-3">{c.agencia ?? "—"}</td>
+                                <td className="py-1 pr-3">{c.data_rating ?? "—"}</td>
+                                <td className="py-1 pr-3 font-semibold text-foreground">{c.escolhido}</td>
+                                <td className="py-1 text-muted-foreground">{c.descartados.join(", ")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
