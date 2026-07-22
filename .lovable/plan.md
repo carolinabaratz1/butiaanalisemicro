@@ -1,50 +1,40 @@
-## Plano final (execução 1 → 8)
+## Diagnóstico
 
-### 1. Migração `rating_bucket_severity` — tratar "Retirado"
+O log mostra `issuer_ratings 0 linhas, 0 chunks, 0ms — duplicate key value violates unique constraint "issuer_ratings_unique"`. As demais 46 tabelas passaram.
+
+Confirmado no banco de origem:
+- `issuer_ratings` tem 1.408 linhas, das quais **611 têm `data_rating` e `rating_agency` simultaneamente `NULL`**.
+- A constraint no destino é `UNIQUE NULLS NOT DISTINCT (cnpj, rating_agency, data_rating)`.
+
+Sob `NULLS NOT DISTINCT`, dois registros do mesmo CNPJ com `(NULL, NULL)` colidem — a origem tolera isso apenas se a constraint de lá for diferente/inexistente ou se o mesmo CNPJ não se repetir com nulos. Ao inserir no destino em bloco (`jsonb_populate_recordset` → `INSERT`), qualquer par colide e o batch inteiro aborta — daí `0 linhas` mesmo após o `TRUNCATE`.
+
+O `syncOneTable` faz `TRUNCATE ... RESTART IDENTITY CASCADE` corretamente; o problema é que o `INSERT` subsequente não tolera as duplicatas semânticas do próprio dataset de origem.
+
+## Escopo
+
+Ajustar apenas `supabase/functions/sync-external-supabase/index.ts`. Sem migração no destino (a constraint `NULLS NOT DISTINCT` é intencional para deduplicar ratings). Sem mudar UI.
+
+## Mudança
+
+Tornar o `INSERT` do sync tolerante a colisões de unique constraint, em **todas** as tabelas — não só `issuer_ratings`, para blindar futuras ocorrências (`emissoes`, `empresas`, etc. têm uniques equivalentes).
+
+Substituir no `syncOneTable` (e no bloco chunk equivalente) o SQL:
 
 ```sql
-CREATE OR REPLACE FUNCTION public.rating_bucket_severity(p_rating text)
-RETURNS integer LANGUAGE sql IMMUTABLE
-SET search_path TO 'public' AS $$
-  SELECT CASE
-    WHEN p_rating IS NULL OR trim(p_rating) = '' THEN NULL
-    WHEN upper(trim(p_rating)) IN ('RETIRADO','N/R','NR','WITHDRAWN','WD') THEN NULL
-    WHEN p_rating ILIKE '%soberano%' THEN 5
-    WHEN regexp_replace(upper(regexp_replace(p_rating,'\(.*?\)','','g')),'^BR','') LIKE 'AAA%' THEN 5
-    WHEN regexp_replace(upper(regexp_replace(p_rating,'\(.*?\)','','g')),'^BR','') LIKE 'AA%'  THEN 4
-    WHEN regexp_replace(upper(regexp_replace(p_rating,'\(.*?\)','','g')),'^BR','') LIKE 'A%'   THEN 3
-    WHEN regexp_replace(upper(regexp_replace(p_rating,'\(.*?\)','','g')),'^BR','') LIKE 'BBB%' THEN 2
-    WHEN regexp_replace(upper(regexp_replace(p_rating,'\(.*?\)','','g')),'^BR','') ~ '^(BB|B|CCC|CC|C|D)' THEN 1
-    ELSE NULL
-  END;
-$$;
+INSERT INTO <t> (<cols>)
+SELECT <cols> FROM jsonb_populate_recordset(NULL::<t>, $rows)
+ON CONFLICT DO NOTHING
 ```
 
-### 2. `parseRating1` + mapa canônico de agência (`UploadPage.tsx`)
+Adicional para transparência no relatório: capturar `result.rowCount` do driver para contar quantas linhas foram efetivamente inseridas vs. ignoradas por conflito, e expor `skipped` no `TableDetail` (opcional, apenas se trivial — caso contrário mantém só `rows` = linhas lidas da origem).
 
-Novo helper `normalizeAgencia(raw)` — trim/upper/remove pontuação, com mapa: FITCH→Fitch, SP/S&P/STANDARD&POORS→S&P, MOODYS/MOODY'S→Moody's, AUSTIN→Austin, LIBERUM→Liberum, LF/LFRATING→LF Rating. Fora do mapa: mantém `trim` original.
+## Validação
 
-### 3. Filtro "sem `data_rating` → pular" no builder de candidatos.
+1. Redeploy da função.
+2. Disparar sync manual pela UI (Configurações → Sincronizar agora).
+3. Checar log: `issuer_ratings` deve reportar ~1.408 linhas lidas, status OK. Confirmar no destino via `SELECT COUNT(*) FROM issuer_ratings`.
+4. Confirmar que as demais 46 tabelas continuam OK.
 
-### 4. Dedup determinístico com `conflitos[]`
-Regra: menor severidade vence; empate → `localeCompare` ascendente. Retorna `{ winners, conflitos }`.
+## Arquivos tocados
 
-### 5. `importIssuerRatings` — idempotente
-Troca por `.upsert(payload, { onConflict: 'cnpj,rating_agency,data_rating', ignoreDuplicates: true }).select('id')`. Retorna `{ importados, ignorados, conflitos }`.
-
-### 6. UI de conflitos
-Bloco `bg-warning/10 border-warning/40` no card de resultado com `<details>` colapsável (CNPJ · Agência · Data · Escolhido · Descartados).
-
-### 7. `src/lib/ratings/ratingSeverity.ts`
-Adiciona `RETIRADO_TOKENS` retornando null, alinhando ao banco.
-
-### 8. Smoke test
-1. Upload → 794 importados, 0 ignorados, 5 conflitos no banner.
-2. Verificar caso âncora CNPJ 12.104.241/0004-02, Fitch, 2026-04-07: vencedor 'C', descartado 'RD'.
-3. Reupload → 0 novos, 794 ignorados, 5 conflitos ainda listados.
-4. "Retirado" mantém texto na tabela, ausente da severidade.
-
-### Arquivos tocados
-1. Migração SQL.
-2. `src/lib/ratings/ratingSeverity.ts`.
-3. `src/components/trade/UploadPage.tsx`.
+- `supabase/functions/sync-external-supabase/index.ts` (2 blocos de INSERT: `syncOneTable` e o loop do modo chunk).
