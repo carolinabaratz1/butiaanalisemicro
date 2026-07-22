@@ -7,10 +7,11 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
-import { CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { CheckCircle, XCircle, Clock, FileSpreadsheet, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { ratingSeverity } from "@/lib/ratings/ratingSeverity";
 
 interface UploadLog {
   id: number;

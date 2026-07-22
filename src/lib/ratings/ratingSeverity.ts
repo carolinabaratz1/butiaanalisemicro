@@ -1,7 +1,11 @@
 // Espelha public.rating_bucket_severity (Postgres) para uso em gráficos.
 // Mantém os mesmos números para que o eixo Y do gráfico bata com o servidor.
+const RETIRADO_TOKENS = new Set(["RETIRADO", "N/R", "NR", "WITHDRAWN", "WD"]);
+
 export function ratingSeverity(rating?: string | null): number | null {
   if (!rating || !rating.trim()) return null;
+  const trimmedUpper = rating.trim().toUpperCase();
+  if (RETIRADO_TOKENS.has(trimmedUpper)) return null;
   const raw = rating.replace(/\(.*?\)/g, "").trim().toUpperCase();
   const norm = raw.replace(/^BR/, "");
   if (rating.toLowerCase().includes("soberano")) return 5;
