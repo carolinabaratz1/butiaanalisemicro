@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { Plus, ExternalLink, Loader2 } from "lucide-react";
@@ -6,14 +6,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { IssuerRatingTimelineChart, type TimelinePoint } from "@/components/ratings/IssuerRatingTimelineChart";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { safeHref } from "@/lib/safeHref";
+
 
 interface IssuerRatingHistoryDialogProps {
   open: boolean;
@@ -44,15 +55,15 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
   const [fAgencia, setFAgencia] = useState<string>("");
   const [fData, setFData] = useState<string>("");
   const [fOutlook, setFOutlook] = useState<string>("");
-  const [fObs, setFObs] = useState("");
   const [fUrl, setFUrl] = useState("");
+  const [confirmRetro, setConfirmRetro] = useState(false);
 
   const { data: history = [], isLoading } = useQuery({
     queryKey: ["issuer_ratings", normCnpj],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("issuer_ratings")
-        .select("*")
+        .select("id, rating, rating_agency, data_rating, outlook, report_url, created_at")
         .eq("cnpj", normCnpj)
         .order("data_rating", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
@@ -62,16 +73,28 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
     enabled: open && Boolean(normCnpj),
   });
 
+  const latestExisting = useMemo(() => {
+    const withDate = (history as any[]).filter((r) => r.data_rating);
+    return withDate.length > 0 ? (withDate[0].data_rating as string) : null;
+  }, [history]);
+
+  const timelinePoints: TimelinePoint[] = useMemo(() => {
+    return (history as any[])
+      .filter((r) => r.data_rating)
+      .slice()
+      .reverse()
+      .map((r) => ({ data: r.data_rating, ratingEmissor: r.rating, ratingGrupo: null }));
+  }, [history]);
+
   const insertMutation = useMutation({
     mutationFn: async () => {
       if (!fRating.trim()) throw new Error("Informe o rating");
       const payload = {
         cnpj: normCnpj,
         rating: fRating.trim(),
-        agencia: fAgencia || null,
+        rating_agency: fAgencia || null,
         data_rating: fData || null,
         outlook: fOutlook || null,
-        observacao: fObs.trim() || null,
         report_url: fUrl.trim() || null,
         created_by: currentUser?.id ?? null,
       };
@@ -82,12 +105,25 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
       toast.success("Rating registrado");
       qc.invalidateQueries({ queryKey: ["issuer_ratings", normCnpj] });
       qc.invalidateQueries({ queryKey: ["resolvedRating"] });
+      qc.invalidateQueries({ queryKey: ["ratingDistribution"] });
       qc.invalidateQueries({ queryKey: ["empresas"] });
       setShowForm(false);
-      setFRating(""); setFAgencia(""); setFData(""); setFOutlook(""); setFObs(""); setFUrl("");
+      setFRating(""); setFAgencia(""); setFData(""); setFOutlook(""); setFUrl("");
     },
     onError: (e: any) => toast.error(e.message || "Erro ao registrar rating"),
   });
+
+  function handleSave() {
+    if (!fRating.trim()) {
+      toast.error("Informe o rating");
+      return;
+    }
+    if (fData && latestExisting && fData < latestExisting) {
+      setConfirmRetro(true);
+      return;
+    }
+    insertMutation.mutate();
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,10 +134,13 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
 
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Histórico append-only: novos ratings são adicionados como uma nova entrada; registros
-            existentes não podem ser editados ou removidos. O rating mais recente (pela data) é
-            sempre o utilizado nas demais telas do app.
+            Histórico append-only: novos ratings são adicionados como uma nova entrada; registros existentes não podem
+            ser editados ou removidos. O rating mais recente (pela data) é o utilizado nas demais telas do app.
           </p>
+
+          <div className="rounded-md border border-border p-3">
+            <IssuerRatingTimelineChart points={timelinePoints} hasGrupo={false} />
+          </div>
 
           {canEdit && !showForm && (
             <div className="flex justify-end">
@@ -144,14 +183,10 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
                   <Label className="text-xs">URL do laudo</Label>
                   <Input value={fUrl} onChange={(e) => setFUrl(e.target.value)} placeholder="https://…" className="h-8" />
                 </div>
-                <div className="col-span-2">
-                  <Label className="text-xs">Observação</Label>
-                  <Textarea value={fObs} onChange={(e) => setFObs(e.target.value)} rows={2} />
-                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancelar</Button>
-                <Button size="sm" onClick={() => insertMutation.mutate()} disabled={insertMutation.isPending}>
+                <Button size="sm" onClick={handleSave} disabled={insertMutation.isPending}>
                   {insertMutation.isPending && <Loader2 className="h-3 w-3 animate-spin mr-1" />} Salvar
                 </Button>
               </div>
@@ -166,16 +201,15 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
                   <TableHead className="text-[11px]">Rating</TableHead>
                   <TableHead className="text-[11px]">Agência</TableHead>
                   <TableHead className="text-[11px]">Outlook</TableHead>
-                  <TableHead className="text-[11px]">Observação</TableHead>
                   <TableHead className="text-[11px]">Laudo</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">Carregando…</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Carregando…</TableCell></TableRow>
                 )}
                 {!isLoading && history.length === 0 && (
-                  <TableRow><TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">Sem ratings registrados.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center text-xs text-muted-foreground py-4">Sem ratings registrados.</TableCell></TableRow>
                 )}
                 {history.map((r: any, idx: number) => (
                   <TableRow key={r.id}>
@@ -184,9 +218,8 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
                       {idx === 0 && <Badge variant="outline" className="ml-2 text-[9px] bg-primary/10 text-primary border-primary/30">atual</Badge>}
                     </TableCell>
                     <TableCell className="text-xs font-mono font-semibold">{r.rating}</TableCell>
-                    <TableCell className="text-xs">{r.agencia || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.rating_agency || "—"}</TableCell>
                     <TableCell className="text-xs">{r.outlook || "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate" title={r.observacao || ""}>{r.observacao || "—"}</TableCell>
                     <TableCell className="text-xs">
                       {r.report_url ? (
                         <a href={safeHref(r.report_url) || "#"} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
@@ -204,7 +237,27 @@ export function IssuerRatingHistoryDialog({ open, onOpenChange, cnpj, emissorNom
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
         </DialogFooter>
+
+        <AlertDialog open={confirmRetro} onOpenChange={setConfirmRetro}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Registrar rating retroativo?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A data informada ({formatDateBR(fData)}) é anterior ao último registro existente
+                ({formatDateBR(latestExisting)}). Isso não altera o rating atual exibido no app,
+                mas ficará no histórico como correção retroativa.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => { setConfirmRetro(false); insertMutation.mutate(); }}>
+                Registrar mesmo assim
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
 }
+

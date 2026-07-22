@@ -1928,7 +1928,6 @@ export type Database = {
       }
       issuer_ratings: {
         Row: {
-          agencia: string | null
           cnpj: string
           created_at: string
           created_by: string | null
@@ -1937,11 +1936,11 @@ export type Database = {
           observacao: string | null
           outlook: string | null
           rating: string
+          rating_agency: string | null
           report_url: string | null
           updated_at: string
         }
         Insert: {
-          agencia?: string | null
           cnpj: string
           created_at?: string
           created_by?: string | null
@@ -1950,11 +1949,11 @@ export type Database = {
           observacao?: string | null
           outlook?: string | null
           rating: string
+          rating_agency?: string | null
           report_url?: string | null
           updated_at?: string
         }
         Update: {
-          agencia?: string | null
           cnpj?: string
           created_at?: string
           created_by?: string | null
@@ -1963,6 +1962,7 @@ export type Database = {
           observacao?: string | null
           outlook?: string | null
           rating?: string
+          rating_agency?: string | null
           report_url?: string | null
           updated_at?: string
         }
@@ -2755,6 +2755,18 @@ export type Database = {
           z_score_10d: number | null
           z_score_21d: number | null
           z_score_5d: number | null
+        }
+        Relationships: []
+      }
+      v_empresa_rating_resolved: {
+        Row: {
+          cnpj: string | null
+          data_rating: string | null
+          grupo_economico: string | null
+          nome: string | null
+          rating: string | null
+          rating_agency: string | null
+          source_level: string | null
         }
         Relationships: []
       }

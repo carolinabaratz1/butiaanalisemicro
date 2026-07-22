@@ -166,11 +166,11 @@ export function UploadPage() {
       const batch = cnpjs.slice(i, i + 200);
       const { data, error } = await supabase
         .from("issuer_ratings")
-        .select("cnpj,agencia,data_rating")
+        .select("cnpj,rating_agency,data_rating")
         .in("cnpj", batch);
       if (error) throw new Error(error.message);
       for (const row of data ?? []) {
-        existingKeys.add(uniqKey(row.cnpj, row.agencia, row.data_rating));
+        existingKeys.add(uniqKey(row.cnpj, row.rating_agency, row.data_rating));
       }
     }
 
@@ -180,7 +180,7 @@ export function UploadPage() {
       const batch = toInsert.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
         cnpj: c.cnpj,
         rating: c.rating,
-        agencia: c.agencia,
+        rating_agency: c.agencia,
         data_rating: c.data_rating,
         observacao: "Importado automaticamente da planilha diária (Dados Emissao e emissor).",
         created_by: userId,
@@ -188,6 +188,7 @@ export function UploadPage() {
       const { error } = await supabase.from("issuer_ratings").insert(batch);
       if (error) throw new Error(`Falha ao importar ratings de emissor: ${error.message}`);
     }
+
 
     return { importados: toInsert.length, ignorados: candidates.length - toInsert.length };
   }
