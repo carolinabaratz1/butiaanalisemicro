@@ -141,7 +141,16 @@ function isOvernightProduct(product: string, productClass: string): boolean {
 function isLftProduct(product: string, productClass: string): boolean {
   const p = (product || "").toLowerCase();
   const c = (productClass || "").toLowerCase();
-  return p.includes("lft") || c === "lft";
+  // Títulos públicos federais tratados como Tesouro/Soberano:
+  // LFT (Selic), LTN (Pré) e NTN-B/F/C (IPCA/Pré). Match por palavra
+  // para não confundir com nomes de emissor que contenham "ntn"/"ltn"
+  // por acaso — na prática esses códigos vêm sempre isolados em product/
+  // product_class das posições de Tesouro.
+  const hasWord = (s: string, w: string) => new RegExp(`(^|[^a-z])${w}([^a-z]|$)`, "i").test(s);
+  return hasWord(p, "lft") || hasWord(c, "lft") ||
+    hasWord(p, "ltn") || hasWord(c, "ltn") ||
+    hasWord(p, "ntn") || hasWord(c, "ntn") ||
+    hasWord(p, "ntn-b") || hasWord(p, "ntn-f") || hasWord(p, "ntn-c");
 }
 
 export function synthesizeIssuerFromProduct(

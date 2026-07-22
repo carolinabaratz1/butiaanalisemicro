@@ -1,71 +1,36 @@
-## Investigação — Regra "DPGE/Compromissada = AAA"
 
-### 1. Dados reais no banco
-Query em `posicoes` mostrou apenas **1 variante** hoje: `product = "Compromissada"`, `product_class = "Compromissada"`. Nenhum DPGE em carteira no momento. O texto bate perfeitamente com o regex `isForcedAAAProduct` (que casa "dpge" ou "compromiss"). Portanto **o problema não é de dados / variação de texto** — é de código: existem telas que não passam pelo funil da regra.
+## Avaliação do fix proposto
 
-### 2. Mapa de onde o rating de posição é lido / exibido
+O diagnóstico do usuário está correto e verificado:
+- `useAllocationData.ts` mantinha síntese própria do "Tesouro Nacional" com CNPJ `00.000.000/0001-91`, que é literalmente o CNPJ real do **Banco do Brasil**. Como esse CNPJ existe no cadastro `empresas`, o `cnpjToEmpresa.get(...)` casava e rotulava toda posição Overnight/Compromissada/LFT sem emissor como "Banco do Brasil S.A.".
+- O CNPJ correto do Tesouro (`00.394.460/0001-41`) já está em `allocationUtils.ts` dentro de `synthesizeIssuerFromProduct`, que também é usado por Posições/Exposição/Dashboard/PositionsMonitor via `resolvePositionRating`.
 
-| # | Arquivo | Fonte do rating exibido | Aplica `isForcedAAAProduct`? | Aplica `synthesizeIssuerFromProduct` (que já cobre Compromissada via Tesouro/Soberano)? | Situação |
-|---|---|---|---|---|---|
-| 1 | `src/pages/PosicoesPage.tsx` (linha 250) | `empresa?.rating` | ✅ Sim | ✅ Sim | OK |
-| 2 | `src/components/posicoes/useExposicaoData.ts` (linhas 289–320) | `get_resolved_rating` | ✅ Sim | ✅ Sim | OK |
-| 3 | `src/components/posicoes/exposicaoExport.ts` | herda de (2) | via dado | via dado | OK (segue #2) |
-| 4 | `src/components/posicoes/ExposicaoGrupoEmissorTab.tsx` (linhas 778+) | herda de (2) | via dado | via dado | OK |
-| 5 | `src/hooks/useFundoDashboard.ts` (linhas 162–235) | `resolveRatingsBatch` + override | ✅ Sim | ✅ Sim | OK |
-| 6 | `src/components/posicoes/FundoDashboard.tsx` | herda de (5) | via dado | via dado | OK |
-| 7 | `src/components/alocacao/useAllocationData.ts` (linhas 315–478) | `get_resolved_rating` + override | ✅ Sim | via `isTermo` + `isForcedAAAProduct` | OK |
-| 8 | `src/components/alocacao/IssuerExposurePanel.tsx` | herda de (7) | via dado | via dado | OK |
-| 9 | `src/components/alocacao/FundLimitsPanel.tsx` | herda de (7) | via dado | via dado | OK |
-| 10 | **`src/pages/PositionsMonitorPage.tsx`** (linhas 140–163, 415–426, 291) | `resolveRatingsBatch` puro | ❌ **NÃO** | ❌ **NÃO** | 🔴 **BUG — tabela, export CSV, ordenação, filtro por bucket, e KPI de distribuição usam rating "cru" do banco emissor** |
-| 11 | **`src/pages/AnalyticsPage.tsx`** (linhas 87–107, 178, 383) | `resolveRatingsBatch` puro | ❌ **NÃO** | ❌ **NÃO** | 🔴 **BUG — Distribuição por rating, KPI "% Sem rating", aba Compliance e export XLSX usam rating do banco** |
-| 12 | `src/components/alocacao/TargetsPanel.tsx` (linhas 381–495) | `empresas.rating` + `get_resolved_rating` por CNPJ | ❌ Não | ❌ Não | ⚠️ Rating a nível de **emissor** (não posição). Correto não aplicar a regra aqui — o override AAA só faz sentido no contexto de uma posição de DPGE/Compromissada. |
-| 13 | `src/pages/RatingResolverPage.tsx` | RPC `get_resolved_rating_v2` (ferramenta de consulta) | ❌ Não | ❌ Não | ⚠️ Consulta ad-hoc por CNPJ/ISIN — regra de produto não se aplica sem contexto de posição. OK deixar como está. |
-| 14 | RPC SQL `get_resolved_rating` / `get_resolved_rating_v2` | tabelas de histórico | — | — | Não conhece `product`; a regra é frontend-only por design. OK. |
+A troca por `synthesizeIssuerFromProduct` é a decisão certa (fonte única de verdade, mesma lógica do restante do app). Aplicar como está **já resolve o bug do card "Banco do Brasil" inflado**.
 
-### 3. Diagnóstico
+## Gaps a corrigir junto (para não abrir regressão nem deixar duplicação)
 
-O rating de **Compromissada** (e futuramente DPGE) continua aparecendo como o rating do banco emissor em duas telas:
+1. **LTN/NTN param de ser sintetizados.** O regex antigo incluía `lft || ltn || ntn`; o novo `synthesizeIssuerFromProduct` só reconhece `lft`, `overnight` e `compromiss`. Posições de LTN/NTN-B/NTN-F sem emissor cadastrado voltariam a cair no fallback "sem emissor" (não somam no grupo CAIXA nem no setor "Título Público"). Ampliar a função central para reconhecer também `ltn` e `ntn` (tratados como Tesouro/Soberano, mesmo bucket AAA), em vez de deixar a regra desincronizada entre os módulos.
 
-1. **`PositionsMonitorPage.tsx`** (rota Trade → Positions Monitor)
-2. **`AnalyticsPage.tsx`** (rota Analytics — todas as visões de distribuição, KPI de "% Sem rating" e export XLSX)
+2. **Branch `else` do arquivo do usuário ainda duplica regex.** Quando `empresa` existe, o código refaz o teste `overnight|compromiss|lft|ltn|ntn` só para marcar `isSoberanoEff`. Substituir por uma checagem única baseada em `synthesizeIssuerFromProduct(...)?.isSoberano` — assim toda a definição de "o que é soberano por produto" fica num único lugar.
 
-Ambas chamam `resolveRatingsBatch` direto e nunca consultam `synthesizeIssuerFromProduct` nem `isForcedAAAProduct`. Como o RPC `get_resolved_rating` resolve o CNPJ do banco por trás da compromissada, o resultado é o rating "AA+" / "A" do banco em vez de "AAA".
+3. **Aproveitar `resolvePositionRating` para o rating do bucket (linha 478).** Hoje a alocação ainda faz `isTermo(...) || isForcedAAAProduct(...) ? "AAA" : ratingBucket(posResolved?.rating ?? empresa?.rating)`. Isso funciona, mas é mais uma cópia paralela da hierarquia. Trocar por `resolvePositionRating(row, posResolved)` + `ratingBucket(res.rating)` mantém a alocação alinhada às demais telas automaticamente se uma nova regra de produto surgir.
 
-Bônus: também não há verificação de `isExcludedFromPL` em PositionsMonitorPage / AnalyticsPage, então DAP/Futuros vazam para os KPIs — fora do escopo deste ticket mas cabe registrar.
+## Plano de implementação
 
-### 4. Verificações adicionais solicitadas
+1. `src/components/alocacao/allocationUtils.ts`
+   - Em `synthesizeIssuerFromProduct` / helpers internos: incluir `ltn` e `ntn` no mesmo grupo do Tesouro (retornando o mesmo `SyntheticIssuer` de Overnight/LFT — Tesouro Nacional, grupo CAIXA, Soberano, bucket AAA).
+   - Nenhuma mudança em Termo/DPGE/Compromissada.
 
-- **Sobrescrita posterior do rating**: nenhuma encontrada. Em `useAllocationData.ts` linha 321 (`if (r?.rating) e.rating = r.rating`) o override só ocorre se `r.rating` estiver preenchido — o valor forçado 'AAA' já foi injetado antes e é preservado.
-- **Cache do React Query**: as queries afetadas usam `staleTime` de 60s (FundoDashboard) e 5 min (`useResolvedRating`). Nada de `Infinity`. Não é a causa.
-- **Deploy dos commits 1f999ec / 7233e32**: as linhas 250 (`PosicoesPage.tsx`) e 313 (`useExposicaoData.ts`) já contêm `isForcedAAAProduct`. Está deployado.
+2. `src/components/alocacao/useAllocationData.ts` (aplicar a base do arquivo enviado, com 2 ajustes)
+   - Manter a troca por `synthesizeIssuerFromProduct` para o caso `!empresaEff` (como no upload).
+   - Simplificar o `else`: `const synth = synthesizeIssuerFromProduct(p.product, p.product_class); if (synth?.isSoberano) isSoberanoEff = true;` — remove o regex duplicado.
+   - Substituir o cálculo de `ratingB` (linha 478) por `resolvePositionRating({ product: p.product, product_class: p.product_class, cnpj: emissao?.cnpj_emissor, isin: p.isin }, posResolved)` e derivar `ratingBucket(res.rating)`. Preserva o comportamento atual (Termo/DPGE/Compromissada → AAA, Soberano → AAA) e passa a herdar automaticamente futuras regras.
 
-### 5. Proposta — centralizar em `resolvePositionRating()`
+3. Verificação
+   - Typecheck.
+   - Query rápida em `posicoes` do fundo TOP CP na `val_date` mais recente para confirmar que as linhas com `product` contendo `LTN`/`NTN`/`Overnight`/`Compromissada` batem no bucket "Título Público"/grupo "CAIXA" e somem do card de Banco do Brasil.
 
-Criar `src/lib/ratings/resolvePositionRating.ts` com uma única função (e um helper batch) que encapsule TODA a hierarquia de decisão de rating de posição, na ordem correta:
+## Fora de escopo
 
-```text
-resolvePositionRating(row, ratingResolved, butiaRfCpCnpjs) →
-  1. isCaixaIntragrupo(cnpj, butiaRfCp)   → { rating: 'AAA', source: 'regra_produto', label: 'AAA' }
-  2. synthesizeIssuerFromProduct(product, class) presente
-     → { rating: synth.rating (Soberano/AAA), bucket: 'AAA', source: 'regra_produto', synthIssuer }
-  3. isForcedAAAProduct(product, class)    → { rating: 'AAA', source: 'regra_produto' }
-  4. ratingResolved (get_resolved_rating)  → passthrough
-  5. fallback                              → { rating: null, source: 'nr' }
-```
-
-E um `resolvePositionRatingsBatch(rows)` que já embute a chamada a `resolveRatingsBatch` para não duplicar código.
-
-**Migrar as 5 telas de posição** (`PosicoesPage`, `useExposicaoData`, `useFundoDashboard`, `useAllocationData`, **`PositionsMonitorPage`**, **`AnalyticsPage`**) para consumir esse helper. Isso:
-
-- Corrige de imediato PositionsMonitor e Analytics (raiz do bug atual).
-- Elimina a duplicação atual (cada tela reimplementa a mesma ordem: caixa → synth → forçado → resolved).
-- Garante que qualquer nova regra futura (novo produto forçado AAA, novo emissor sintético) vire uma edição em 1 arquivo, não em 6.
-
-### 6. Fora de escopo (registrado para acompanhamento)
-
-- Adicionar filtro `isExcludedFromPL` em PositionsMonitor e Analytics (DAP/Futuros vazando para KPIs).
-- Considerar mover a regra de produto para o RPC SQL, se no futuro os relatórios/edge functions também precisarem — hoje só o frontend consome.
-
----
-
-**Próximo passo:** aprovar este plano para que eu implemente `resolvePositionRating()` e migre as 6 telas listadas. Nenhum código foi alterado nesta rodada.
+- Não mexer em `PosicoesPage`, `useExposicaoData`, `useFundoDashboard`, `PositionsMonitorPage`, `AnalyticsPage` — todos já consomem `synthesizeIssuerFromProduct`/`resolvePositionRating` e vão herdar automaticamente a extensão LTN/NTN feita no item 1.
+- Não alterar rating de emissor real do Banco do Brasil (as posições legítimas dele — LF Subordinada, Termo — continuam somando no card BB).
