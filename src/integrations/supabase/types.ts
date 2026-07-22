@@ -339,6 +339,7 @@ export type Database = {
           justificativa_rejeicao: string | null
           link_analise: string | null
           observacoes: string | null
+          oferta_cvm_id: number | null
           prazo: string | null
           preco_maximo: number | null
           preco_medio: number | null
@@ -373,6 +374,7 @@ export type Database = {
           justificativa_rejeicao?: string | null
           link_analise?: string | null
           observacoes?: string | null
+          oferta_cvm_id?: number | null
           prazo?: string | null
           preco_maximo?: number | null
           preco_medio?: number | null
@@ -407,6 +409,7 @@ export type Database = {
           justificativa_rejeicao?: string | null
           link_analise?: string | null
           observacoes?: string | null
+          oferta_cvm_id?: number | null
           prazo?: string | null
           preco_maximo?: number | null
           preco_medio?: number | null
@@ -421,7 +424,22 @@ export type Database = {
           updated_at?: string
           versao?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "analises_oferta_cvm_id_fkey"
+            columns: ["oferta_cvm_id"]
+            isOneToOne: false
+            referencedRelation: "ofertas_publicas_cvm"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analises_oferta_cvm_id_fkey"
+            columns: ["oferta_cvm_id"]
+            isOneToOne: false
+            referencedRelation: "v_ofertas_publicas_cvm_enriquecida"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       assembleia_participacoes: {
         Row: {
@@ -803,6 +821,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cvm_ofertas_sync_log: {
+        Row: {
+          erro_msg: string | null
+          finished_at: string | null
+          id: number
+          linhas_atualizadas: number | null
+          linhas_novas: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          erro_msg?: string | null
+          finished_at?: string | null
+          id?: number
+          linhas_atualizadas?: number | null
+          linhas_novas?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          erro_msg?: string | null
+          finished_at?: string | null
+          id?: number
+          linhas_atualizadas?: number | null
+          linhas_novas?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
       }
       emissoes: {
         Row: {
@@ -2007,6 +2055,81 @@ export type Database = {
         }
         Relationships: []
       }
+      ofertas_publicas_cvm: {
+        Row: {
+          cnpj_emissor: string | null
+          coordenador_lider: string | null
+          data_inicio_oferta: string | null
+          data_registro_dispensa: string | null
+          data_vencimento: string | null
+          first_seen_at: string
+          fonte_arquivo: string
+          id: number
+          last_seen_at: string
+          modalidade_dispensa_registro: string | null
+          modalidade_registro: string | null
+          nome_emissor: string | null
+          numero_emissao: string | null
+          numero_registro: string | null
+          numero_serie: string | null
+          raw_data: Json
+          rito: string | null
+          row_hash: string
+          situacao: string | null
+          taxa_emissao: string | null
+          tipo_valor_mobiliario: string | null
+          valor_total_oferta: number | null
+        }
+        Insert: {
+          cnpj_emissor?: string | null
+          coordenador_lider?: string | null
+          data_inicio_oferta?: string | null
+          data_registro_dispensa?: string | null
+          data_vencimento?: string | null
+          first_seen_at?: string
+          fonte_arquivo: string
+          id?: number
+          last_seen_at?: string
+          modalidade_dispensa_registro?: string | null
+          modalidade_registro?: string | null
+          nome_emissor?: string | null
+          numero_emissao?: string | null
+          numero_registro?: string | null
+          numero_serie?: string | null
+          raw_data: Json
+          rito?: string | null
+          row_hash: string
+          situacao?: string | null
+          taxa_emissao?: string | null
+          tipo_valor_mobiliario?: string | null
+          valor_total_oferta?: number | null
+        }
+        Update: {
+          cnpj_emissor?: string | null
+          coordenador_lider?: string | null
+          data_inicio_oferta?: string | null
+          data_registro_dispensa?: string | null
+          data_vencimento?: string | null
+          first_seen_at?: string
+          fonte_arquivo?: string
+          id?: number
+          last_seen_at?: string
+          modalidade_dispensa_registro?: string | null
+          modalidade_registro?: string | null
+          nome_emissor?: string | null
+          numero_emissao?: string | null
+          numero_registro?: string | null
+          numero_serie?: string | null
+          raw_data?: Json
+          rito?: string | null
+          row_hash?: string
+          situacao?: string | null
+          taxa_emissao?: string | null
+          tipo_valor_mobiliario?: string | null
+          valor_total_oferta?: number | null
+        }
+        Relationships: []
+      }
       pipeline_eventos: {
         Row: {
           acao: string
@@ -2781,9 +2904,45 @@ export type Database = {
         }
         Relationships: []
       }
+      v_ofertas_publicas_cvm_enriquecida: {
+        Row: {
+          cnpj_emissor: string | null
+          coordenador_lider: string | null
+          data_inicio_oferta: string | null
+          data_registro_dispensa: string | null
+          data_vencimento: string | null
+          emissor_conhecido_nome: string | null
+          emissor_ja_conhecido: boolean | null
+          first_seen_at: string | null
+          fonte_arquivo: string | null
+          id: number | null
+          last_seen_at: string | null
+          modalidade_dispensa_registro: string | null
+          modalidade_registro: string | null
+          nome_emissor: string | null
+          numero_emissao: string | null
+          numero_registro: string | null
+          numero_serie: string | null
+          raw_data: Json | null
+          rito: string | null
+          row_hash: string | null
+          situacao: string | null
+          taxa_emissao: string | null
+          tipo_valor_mobiliario: string | null
+          valor_total_oferta: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       apply_forward_fill: { Args: never; Returns: number }
+      bulk_upsert_ofertas_cvm: {
+        Args: { p_rows: Json }
+        Returns: {
+          atualizados: number
+          inseridos: number
+        }[]
+      }
       derive_sub_indexador: {
         Args: { p_indexador: string; p_taxa_emissao: string }
         Returns: string
