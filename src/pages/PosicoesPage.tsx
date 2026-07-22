@@ -32,6 +32,7 @@ interface PosicaoRow {
   val_date: string;
   product_class: string;
   product: string;
+  ticker: string | null;
   amount: number;
   isin: string | null;
   financial_price: number | null;
