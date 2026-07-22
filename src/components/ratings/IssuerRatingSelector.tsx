@@ -67,8 +67,13 @@ export function IssuerRatingSelector({ value, onChange }: Props) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return options.slice(0, 100);
+    // Só compara por CNPJ quando o texto digitado tiver algum dígito. Sem essa
+    // guarda, needle sem dígitos vira "" após o replace, e "qualquerCnpj".includes("")
+    // é sempre true em JS — isso fazia o filtro deixar passar TODAS as linhas
+    // (bug real por trás da busca "não funcionar", distinto do truncamento de 1000).
+    const cnpjNeedle = needle.replace(/[^0-9]/g, "");
     return options
-      .filter((o) => o.nome.toLowerCase().includes(needle) || o.cnpj.includes(needle.replace(/[^0-9]/g, "")))
+      .filter((o) => o.nome.toLowerCase().includes(needle) || (cnpjNeedle.length > 0 && o.cnpj.includes(cnpjNeedle)))
       .slice(0, 100);
   }, [options, q]);
 
