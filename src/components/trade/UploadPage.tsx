@@ -136,58 +136,58 @@ export function UploadPage() {
     return json;
   }
 
-  // Importa ratings de emissor extraídos da planilha (aba "Dados Emissao e
-  // emissor") para a tabela issuer_ratings. SEMPRE por inserção — nunca faz
-  // update/overwrite. A tabela tem uma constraint de unicidade em
-  // (cnpj, agencia, data_rating) — NÃO inclui o texto do rating — então a
-  // deduplicação (tanto dentro do próprio arquivo quanto contra o que já
-  // existe no banco) precisa usar exatamente essa mesma chave, senão o
-  // insert é rejeitado pelo banco (duplicate key).
+  // Importa ratings de emissor extraídos da planilha para issuer_ratings.
+  // Estratégia:
+  //  1. Normaliza CNPJ (só dígitos).
+  //  2. Aplica dedup determinístico dentro do arquivo pela chave real do
+  //     banco (cnpj + agência + data): menor severidade vence; empate →
+  //     ordem lexicográfica ascendente. Conflitos são reportados na UI.
+  //  3. Usa upsert com ignoreDuplicates para não sobrescrever histórico —
+  //     conta como "importados" apenas as linhas realmente inseridas.
   async function importIssuerRatings(
     userId: string | null,
     candidatesRaw: IssuerRatingCandidate[],
-  ): Promise<{ importados: number; ignorados: number }> {
-    // issuer_ratings.cnpj é normalizado (só dígitos) por um trigger no banco.
-    // A planilha traz o CNPJ formatado ("08.213.823/0001-07"), então
-    // normalizamos aqui ANTES de comparar com o que já existe — senão a
-    // checagem de duplicata nunca bate e reimporta tudo a cada upload.
+  ): Promise<{ importados: number; ignorados: number; conflitos: RatingImportConflict[] }> {
     const candidates = candidatesRaw
       .map((c) => ({ ...c, cnpj: c.cnpj.replace(/[^0-9]/g, "") }))
-      .filter((c) => c.cnpj);
-    if (candidates.length === 0) return { importados: 0, ignorados: 0 };
+      .filter((c) => c.cnpj && c.rating && c.data_rating);
+    if (candidates.length === 0) return { importados: 0, ignorados: 0, conflitos: [] };
 
-    // Chave real de unicidade do banco: cnpj + agência + data (sem rating).
-    const uniqKey = (cnpj: string, agencia: string | null, dataRating: string | null) =>
-      `${cnpj}||${agencia ?? ""}||${dataRating ?? ""}`;
-
-    // Dedup dentro do próprio arquivo: se duas linhas caírem na mesma chave
-    // (cnpj+agência+data), mantemos só a primeira — senão o próprio lote de
-    // insert já viria com duplicata interna.
-    const dedupedMap = new Map<string, IssuerRatingCandidate>();
+    // Agrupa pela chave real de unicidade do banco.
+    const groups = new Map<string, IssuerRatingCandidate[]>();
     for (const c of candidates) {
-      const key = uniqKey(c.cnpj, c.agencia, c.data_rating);
-      if (!dedupedMap.has(key)) dedupedMap.set(key, c);
+      const key = `${c.cnpj}||${c.agencia ?? ""}||${c.data_rating ?? ""}`;
+      const arr = groups.get(key);
+      if (arr) arr.push(c);
+      else groups.set(key, [c]);
     }
-    const deduped = Array.from(dedupedMap.values());
 
-    const cnpjs = Array.from(new Set(deduped.map((c) => c.cnpj)));
-    const existingKeys = new Set<string>();
-    for (let i = 0; i < cnpjs.length; i += 200) {
-      const batch = cnpjs.slice(i, i + 200);
-      const { data, error } = await supabase
-        .from("issuer_ratings")
-        .select("cnpj,rating_agency,data_rating")
-        .in("cnpj", batch);
-      if (error) throw new Error(error.message);
-      for (const row of data ?? []) {
-        existingKeys.add(uniqKey(row.cnpj, row.rating_agency, row.data_rating));
+    const winners: IssuerRatingCandidate[] = [];
+    const conflitos: RatingImportConflict[] = [];
+    const sev = (r: string) => ratingSeverity(r) ?? Number.POSITIVE_INFINITY;
+    for (const group of groups.values()) {
+      if (group.length === 1) {
+        winners.push(group[0]);
+        continue;
       }
+      const sorted = [...group].sort((a, b) => {
+        const d = sev(a.rating) - sev(b.rating);
+        if (d !== 0) return d;
+        return a.rating.localeCompare(b.rating);
+      });
+      winners.push(sorted[0]);
+      conflitos.push({
+        cnpj: sorted[0].cnpj,
+        agencia: sorted[0].agencia,
+        data_rating: sorted[0].data_rating,
+        escolhido: sorted[0].rating,
+        descartados: sorted.slice(1).map((x) => x.rating),
+      });
     }
 
-    const toInsert = deduped.filter((c) => !existingKeys.has(uniqKey(c.cnpj, c.agencia, c.data_rating)));
-
-    for (let i = 0; i < toInsert.length; i += UPLOAD_BATCH_SIZE) {
-      const batch = toInsert.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
+    let importados = 0;
+    for (let i = 0; i < winners.length; i += UPLOAD_BATCH_SIZE) {
+      const batch = winners.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
         cnpj: c.cnpj,
         rating: c.rating,
         rating_agency: c.agencia,
@@ -195,12 +195,19 @@ export function UploadPage() {
         observacao: "Importado automaticamente da planilha diária (Dados Emissao e emissor).",
         created_by: userId,
       }));
-      const { error } = await supabase.from("issuer_ratings").insert(batch);
+      const { data, error } = await supabase
+        .from("issuer_ratings")
+        .upsert(batch, { onConflict: "cnpj,rating_agency,data_rating", ignoreDuplicates: true })
+        .select("id");
       if (error) throw new Error(`Falha ao importar ratings de emissor: ${error.message}`);
+      importados += data?.length ?? 0;
     }
 
-
-    return { importados: toInsert.length, ignorados: candidates.length - toInsert.length };
+    return {
+      importados,
+      ignorados: winners.length - importados,
+      conflitos,
+    };
   }
 
   const onDrop = useCallback(async (files: File[]) => {
