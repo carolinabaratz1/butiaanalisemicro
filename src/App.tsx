@@ -18,6 +18,7 @@ import EmpresasPage from "./pages/EmpresasPage";
 import EmpresaDetailPage from "./pages/EmpresaDetailPage";
 import AnalisesPage from "./pages/AnalisesPage";
 import PipelineResearchPage from "./pages/PipelineResearchPage";
+import RadarDeOfertasPage from "./pages/RadarDeOfertasPage";
 import PosicoesPage from "./pages/PosicoesPage";
 import ConfiguracoesPage from "./pages/ConfiguracoesPage";
 import AssembleiasPage from "./pages/AssembleiasPage";
@@ -114,6 +115,7 @@ function ProtectedRoutes() {
         <Route path="/empresas/:cnpj" element={<LegacyEmpresaRedirect />} />
         <Route path="/analises" element={<RouteGuard path="/emissores"><AnalisesPage /></RouteGuard>} />
         <Route path="/pipeline-de-research" element={<RouteGuard path="/pipeline-de-research"><PipelineResearchPage /></RouteGuard>} />
+        <Route path="/radar-de-ofertas" element={<RouteGuard path="/radar-de-ofertas"><RadarDeOfertasPage /></RouteGuard>} />
         <Route path="/configuracoes" element={<RouteGuard path="/configuracoes"><ConfiguracoesPage /></RouteGuard>} />
         <Route path="/assembleias" element={<RouteGuard path="/assembleias"><AssembleiasPage /></RouteGuard>} />
         <Route path="/desempenho" element={<RouteGuard path="/desempenho"><DesempenhoPage /></RouteGuard>} />
