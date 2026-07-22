@@ -128,12 +128,11 @@ export function UploadPage() {
 
   // Importa ratings de emissor extraídos da planilha (aba "Dados Emissao e
   // emissor") para a tabela issuer_ratings. SEMPRE por inserção — nunca faz
-  // update/overwrite. Ignora candidatos cuja tupla exata (cnpj, rating,
-  // agencia, data_rating) já existe no banco, para não duplicar histórico a
-  // cada reimportação diária do mesmo arquivo. O rating mais recente por
-  // data_rating continua sendo o exibido em todo o app (via
-  // v_issuer_rating_current / get_resolved_rating), sem precisar de nenhuma
-  // lógica extra aqui.
+  // update/overwrite. A tabela tem uma constraint de unicidade em
+  // (cnpj, agencia, data_rating) — NÃO inclui o texto do rating — então a
+  // deduplicação (tanto dentro do próprio arquivo quanto contra o que já
+  // existe no banco) precisa usar exatamente essa mesma chave, senão o
+  // insert é rejeitado pelo banco (duplicate key).
   async function importIssuerRatings(
     userId: string | null,
     candidatesRaw: IssuerRatingCandidate[],
@@ -147,28 +146,35 @@ export function UploadPage() {
       .filter((c) => c.cnpj);
     if (candidates.length === 0) return { importados: 0, ignorados: 0 };
 
-    const cnpjs = Array.from(new Set(candidates.map((c) => c.cnpj)));
-    const existingByCnpj = new Map<string, Set<string>>();
+    // Chave real de unicidade do banco: cnpj + agência + data (sem rating).
+    const uniqKey = (cnpj: string, agencia: string | null, dataRating: string | null) =>
+      `${cnpj}||${agencia ?? ""}||${dataRating ?? ""}`;
+
+    // Dedup dentro do próprio arquivo: se duas linhas caírem na mesma chave
+    // (cnpj+agência+data), mantemos só a primeira — senão o próprio lote de
+    // insert já viria com duplicata interna.
+    const dedupedMap = new Map<string, IssuerRatingCandidate>();
+    for (const c of candidates) {
+      const key = uniqKey(c.cnpj, c.agencia, c.data_rating);
+      if (!dedupedMap.has(key)) dedupedMap.set(key, c);
+    }
+    const deduped = Array.from(dedupedMap.values());
+
+    const cnpjs = Array.from(new Set(deduped.map((c) => c.cnpj)));
+    const existingKeys = new Set<string>();
     for (let i = 0; i < cnpjs.length; i += 200) {
       const batch = cnpjs.slice(i, i + 200);
       const { data, error } = await supabase
         .from("issuer_ratings")
-        .select("cnpj,rating,agencia,data_rating")
+        .select("cnpj,agencia,data_rating")
         .in("cnpj", batch);
       if (error) throw new Error(error.message);
       for (const row of data ?? []) {
-        const key = `${row.rating ?? ""}||${row.agencia ?? ""}||${row.data_rating ?? ""}`;
-        const set = existingByCnpj.get(row.cnpj) ?? new Set<string>();
-        set.add(key);
-        existingByCnpj.set(row.cnpj, set);
+        existingKeys.add(uniqKey(row.cnpj, row.agencia, row.data_rating));
       }
     }
 
-    const toInsert = candidates.filter((c) => {
-      const key = `${c.rating}||${c.agencia ?? ""}||${c.data_rating ?? ""}`;
-      const existing = existingByCnpj.get(c.cnpj);
-      return !existing || !existing.has(key);
-    });
+    const toInsert = deduped.filter((c) => !existingKeys.has(uniqKey(c.cnpj, c.agencia, c.data_rating)));
 
     for (let i = 0; i < toInsert.length; i += UPLOAD_BATCH_SIZE) {
       const batch = toInsert.slice(i, i + UPLOAD_BATCH_SIZE).map((c) => ({
