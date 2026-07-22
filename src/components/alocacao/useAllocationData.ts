@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   FundoKey, sourceFromFundo, tipoAtivoFromProduct, ratingBucket, worstRating,
   isExcludedFromPL, isTermo, isTesouroNacional, resolveIndexador, CREDITO_PRIVADO_TIPOS,
-  fidcTipoFromClasse, FidcClasse, isForcedAAAProduct,
+  fidcTipoFromClasse, FidcClasse, isForcedAAAProduct, synthesizeIssuerFromProduct,
 } from "./allocationUtils";
 import { getDisplayStatus } from "@/utils/analiseStatus";
 import { resolveRatingsBatch, ratingKey } from "@/lib/ratings/resolveRatingsBatch";
+import { resolvePositionRating } from "@/lib/ratings/resolvePositionRating";
 import type { RatingSource } from "@/lib/ratings/useResolvedRating";
 
 export interface FidcClassRow {
@@ -473,11 +474,15 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         // FIDC, onde cada cota tem seu próprio rating) e cai para o rating
         // resolvido por CNPJ do emissor nos demais casos.
         const posResolved = (p.isin ? ratingByIsin.get(p.isin) : null) ?? (emissao?.cnpj_emissor ? ratingByCnpj.get(emissao.cnpj_emissor) : null);
-        // DPGE e Compromissada são tratados como AAA pela estrutura/garantia
-        // do próprio produto, independentemente do rating do banco emissor.
-        const ratingB = (isTermo(p.product, p.product_class) || isForcedAAAProduct(p.product, p.product_class))
-          ? "AAA"
-          : ratingBucket(posResolved?.rating ?? empresa?.rating);
+        // Fonte única de verdade para o rating final da posição (Caixa
+        // intragrupo, emissor sintético Termo/Overnight/LFT, DPGE/Compromissada
+        // → AAA, rating resolvido do RPC como fallback). Alinhado com Posições,
+        // Exposição, Dashboard e PositionsMonitor.
+        const posRating = resolvePositionRating(
+          { product: p.product, product_class: p.product_class, cnpj: emissao?.cnpj_emissor, isin: p.isin },
+          posResolved ?? null,
+        );
+        const ratingB = ratingBucket(posRating.rating ?? empresa?.rating);
         addTo(porRating, ratingB, fin);
 
         if (isTermo(p.product, p.product_class)) {
@@ -491,28 +496,25 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
           continue;
         }
 
-        // Overnight / Compromissadas / LFT (Tesouro) — agregar sob Tesouro Nacional
-        const prodLc = (p.product || "").toLowerCase();
-        const classLc = (p.product_class || "").toLowerCase();
-        const isOvernightOrTesouro =
-          prodLc.includes("overnight") || classLc.includes("overnight") ||
-          prodLc.includes("compromiss") || classLc.includes("compromiss") ||
-          prodLc.includes("lft") || prodLc.includes("ltn") || prodLc.includes("ntn");
-
+        // Overnight / Compromissadas / LFT / LTN / NTN (Tesouro) — agregar sob
+        // Tesouro Nacional. Usa synthesizeIssuerFromProduct (fonte única de
+        // verdade), evitando o bug antigo de hardcodar CNPJ 00.000.000/0001-91
+        // (que é o CNPJ real do Banco do Brasil e rotulava essas posições
+        // erradamente como "Banco do Brasil S.A.").
         let empresaEff = empresa;
         let isSoberanoEff = !!empresa && (isTesouroNacional(empresa.nome) || isTesouroNacional(empresa.grupo_economico));
-        if (!empresaEff && isOvernightOrTesouro) {
-          // Sintetiza emissor Tesouro Nacional para garantir agregação no grupo
-          empresaEff = cnpjToEmpresa.get("00.000.000/0001-91") || {
+        const synth = synthesizeIssuerFromProduct(p.product, p.product_class);
+        if (!empresaEff && synth) {
+          empresaEff = {
             id: null,
-            cnpj: "00.000.000/0001-91",
-            nome: "TESOURO NACIONAL",
-            grupo_economico: "Tesouro Nacional",
-            rating: "AAA",
-            setor: "Título Público",
+            cnpj: synth.cnpj,
+            nome: synth.nome,
+            grupo_economico: synth.grupoEconomico,
+            rating: synth.rating,
+            setor: synth.setor,
           } as any;
-          isSoberanoEff = true;
-        } else if (empresaEff && isOvernightOrTesouro) {
+          isSoberanoEff = synth.isSoberano;
+        } else if (synth?.isSoberano) {
           isSoberanoEff = true;
         }
 
