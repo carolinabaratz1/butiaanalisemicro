@@ -247,7 +247,7 @@ export default function PosicoesPage() {
         ? (analise?.recomendacao || (analise && isRecLike(analise.status) ? analise.status : null))
         : ((analise as any)?.recomendacao_rf || (analise && isRecLike(analise.status) ? analise.status : null));
       const empresaNome = synth ? synth.nome : empresa?.nome;
-      const empresaRating = synth ? synth.rating : (isForcedAAAProduct(p.product, p.product_class) ? 'AAA' : empresa?.rating);
+      const empresaRating = synth ? synth.rating : (isForcedAAAProduct(p.product, p.product_class, p.ticker) ? 'AAA' : empresa?.rating);
       return {
         ...p,
         cnpj,

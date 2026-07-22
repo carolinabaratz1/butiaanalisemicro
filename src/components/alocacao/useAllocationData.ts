@@ -479,7 +479,7 @@ export function useAllocationData(fundo: FundoKey, valDateOverride?: string | nu
         // → AAA, rating resolvido do RPC como fallback). Alinhado com Posições,
         // Exposição, Dashboard e PositionsMonitor.
         const posRating = resolvePositionRating(
-          { product: p.product, product_class: p.product_class, cnpj: emissao?.cnpj_emissor, isin: p.isin },
+          { product: p.product, product_class: p.product_class, cnpj: emissao?.cnpj_emissor, ticker: emissao?.ticker, isin: p.isin },
           posResolved ?? null,
         );
         const ratingB = ratingBucket(posRating.rating ?? empresa?.rating);

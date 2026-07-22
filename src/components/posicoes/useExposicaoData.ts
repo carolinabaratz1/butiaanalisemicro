@@ -310,7 +310,7 @@ export function useExposicaoData(valDate: string | null) {
             agencia: null,
             data_rating: null,
           };
-        } else if (isForcedAAAProduct(p.product, p.product_class)) {
+        } else if (isForcedAAAProduct(p.product, p.product_class, em?.ticker)) {
           resolved = {
             rating: "AAA",
             source: "regra_produto" as const,

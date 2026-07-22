@@ -107,10 +107,16 @@ export function isCaixaIntragrupo(
 // Regra genérica por texto do produto — qualquer ativo com "DPGE" ou
 // "Compromissada" no nome/classe entra automaticamente, sem precisar
 // cadastrar CNPJ nenhum.
-export function isForcedAAAProduct(product: string | null | undefined, productClass: string | null | undefined): boolean {
+export function isForcedAAAProduct(
+  product: string | null | undefined,
+  productClass: string | null | undefined,
+  ticker?: string | null | undefined,
+): boolean {
   const p = (product || "").toLowerCase();
   const c = (productClass || "").toLowerCase();
-  return p.includes("dpge") || c.includes("dpge") || p.includes("compromiss") || c.includes("compromiss");
+  const t = (ticker || "").toLowerCase();
+  return p.includes("dpge") || c.includes("dpge") || t.includes("dpge") ||
+    p.includes("compromiss") || c.includes("compromiss");
 }
 
 // ── Emissor sintético por tipo de produto ──
