@@ -20,7 +20,7 @@ const FIDC_PATHS = [
 
 export const rolePermissions: Record<UserRole, RolePermissions> = {
   'Gestor': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/radar-de-ofertas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
     canWrite: true,
     canManageUsers: true,
     canViewAllDashboards: true,
@@ -29,7 +29,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: true,
   },
   'Coordenação/Especialista': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/radar-de-ofertas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
     canWrite: true,
     canManageUsers: false,
     canViewAllDashboards: true,
@@ -38,7 +38,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: true,
   },
   'Analista': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/assembleias', '/trade', '/trade/upload', ...FIDC_PATHS],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/radar-de-ofertas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
     canWrite: true,
     canManageUsers: false,
     canViewAllDashboards: false,
@@ -47,7 +47,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
   'Risco e Compliance': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/configuracoes', '/assembleias', '/trade', ...FIDC_PATHS],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/radar-de-ofertas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
     canWrite: false,
     canManageUsers: false,
     canViewAllDashboards: false,
@@ -56,7 +56,7 @@ export const rolePermissions: Record<UserRole, RolePermissions> = {
     canEditOthersAnalyses: false,
   },
   'Consulta': {
-    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline-de-research', '/assembleias', '/trade', ...FIDC_PATHS],
+    sections: ['/', '/posicoes', '/empresas', '/analises', '/pipeline', '/pipeline-de-research', '/radar-de-ofertas', '/configuracoes', '/assembleias', '/trade', '/trade/upload', '/desempenho', ...FIDC_PATHS],
     canWrite: false,
     canManageUsers: false,
     canViewAllDashboards: false,
