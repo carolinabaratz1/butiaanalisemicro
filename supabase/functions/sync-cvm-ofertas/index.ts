@@ -2,8 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { unzipSync } from "https://esm.sh/fflate@0.8.2";
 
-declare const EdgeRuntime: { waitUntil(p: Promise<any>): void };
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -188,12 +186,19 @@ function parseBrNumber(s: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function fetchWithRetry(url: string, maxAttempts = 4): Promise<Response> {
+// Timeout explícito por tentativa: sem isso, uma conexão que trava (comum no portal
+// de dados abertos da CVM) nunca rejeita nem resolve, e o fetch fica pendurado para
+// sempre — o que deixa toda a sincronização "em_andamento" indefinidamente, sem nunca
+// cair no catch() que atualizaria o log com um erro visível.
+async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = 45_000): Promise<Response> {
   const RETRYABLE = [502, 503, 504, 520, 521, 522, 523, 524];
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
       if (res.ok) return res;
       if (RETRYABLE.includes(res.status) && attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
@@ -201,7 +206,9 @@ async function fetchWithRetry(url: string, maxAttempts = 4): Promise<Response> {
       }
       throw new Error(`HTTP ${res.status} ao baixar ${url}`);
     } catch (err) {
-      lastError = err;
+      clearTimeout(timer);
+      const isTimeout = err instanceof Error && err.name === "AbortError";
+      lastError = isTimeout ? new Error(`Timeout de ${timeoutMs}ms ao baixar ${url}`) : err;
       if (attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
         continue;
@@ -212,7 +219,13 @@ async function fetchWithRetry(url: string, maxAttempts = 4): Promise<Response> {
 }
 
 // deno-lint-ignore no-explicit-any
-async function runSync(supabase: any, logId: string) {
+async function runSync(supabase: any, logId: string): Promise<{
+  status: "sucesso" | "parcial" | "erro";
+  totalProcessadas: number;
+  totalInseridas: number;
+  totalAtualizadas: number;
+  mensagemErro?: string;
+}> {
   let totalProcessadas = 0;
   let totalInseridas = 0;
   let totalAtualizadas = 0;
@@ -314,19 +327,25 @@ async function runSync(supabase: any, logId: string) {
         finished_at: new Date().toISOString(),
       })
       .eq("id", logId);
+
+    return { status: "sucesso", totalProcessadas, totalInseridas, totalAtualizadas };
   } catch (err) {
     console.error("sync-cvm-ofertas: erro durante sincronização", err);
+    const mensagemErro = String(err instanceof Error ? err.message : err);
+    const status = totalProcessadas > 0 ? "parcial" : "erro";
     await supabase
       .from("cvm_ofertas_sync_log")
       .update({
-        status: totalProcessadas > 0 ? "parcial" : "erro",
+        status,
         total_linhas_processadas: totalProcessadas,
         total_inseridas: totalInseridas,
         total_atualizadas: totalAtualizadas,
-        mensagem_erro: String(err instanceof Error ? err.message : err),
+        mensagem_erro: mensagemErro,
         finished_at: new Date().toISOString(),
       })
       .eq("id", logId);
+
+    return { status, totalProcessadas, totalInseridas, totalAtualizadas, mensagemErro };
   }
 }
 
@@ -363,12 +382,17 @@ serve(async (req: Request) => {
     if (logError) throw logError;
     logId = logRow.id;
 
-    // Roda em segundo plano: o chamador HTTP recebe o log_id imediatamente e a UI
-    // pode acompanhar o progresso consultando cvm_ofertas_sync_log (card "última sincronização").
-    const syncPromise = runSync(supabase, logId!);
-    EdgeRuntime.waitUntil(syncPromise);
+    const resultado = await runSync(supabase, logId!);
 
-    return jsonResponse({ started: true, log_id: logId });
+    return jsonResponse({
+      started: true,
+      log_id: logId,
+      status: resultado.status,
+      total_linhas_processadas: resultado.totalProcessadas,
+      total_inseridas: resultado.totalInseridas,
+      total_atualizadas: resultado.totalAtualizadas,
+      mensagem_erro: resultado.mensagemErro,
+    });
   } catch (err) {
     console.error("sync-cvm-ofertas: erro ao iniciar", err);
     if (logId) {
