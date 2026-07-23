@@ -1,6 +1,31 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
-import { Unzip, UnzipInflate } from "npm:fflate@0.8.2";
+
+// ============================================================================
+// sync-cvm-ofertas — v2 (2026-07-23)
+//
+// Trocou a fonte de dados: em vez de baixar o ZIP/CSV diário da CVM
+// (dados.cvm.gov.br), que nunca populou situacao/valor_total/numero_registro
+// (mismatch de nome de coluna) e não tem Coordenador Líder/Gestora em nenhum
+// lugar, agora consome a API própria (não documentada, mas aberta, sem auth)
+// do site de consulta pública da CVM: web.cvm.gov.br/sre-publico-cvm.
+//
+// Duas fases, resumíveis entre invocações (mesmo padrão de "loop limitado"
+// que o front-end (RadarDeOfertasPage.tsx) já implementa — reaproveita os
+// MESMOS nomes de campo (file_index/row_offset) para não precisar tocar no
+// front-end：
+//   fase 0 (file_index=0): "listagem" — pagina por /pesquisar/detalhado e
+//     grava tipo_ativo, status, volume, coordenador líder, público-alvo
+//     (inferido) para TODAS as ofertas do período. Cada página tem até 500
+//     registros; ~15-30 páginas cobre o histórico inteiro, então isso cabe
+//     numa invocação só (mas ainda é resumível via row_offset=página, por
+//     segurança caso o volume cresça).
+//   fase 1 (file_index=1): "enriquecimento" — só para ofertas de Cotas de
+//     FIDC / FIAGRO-FIDC, busca o Gestor via /pesquisar/infOferta/{id} (não
+//     vem na listagem). Processa em lotes pequenos (ENRICH_BATCH_SIZE) com
+//     um delay entre chamadas — a API não documenta rate limit, então
+//     preferimos ser conservadores.
+// ============================================================================
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -9,16 +34,28 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-const CVM_ZIP_URL = "https://dados.cvm.gov.br/dados/OFERTA/DISTRIB/DADOS/oferta_distribuicao.zip";
-const TARGET_CSV_FILES = ["oferta_distribuicao.csv", "oferta_resolucao_160.csv"];
-const BATCH_SIZE = 500;
-const MAX_ROWS_PER_INVOCATION = 5_000;
-const FETCH_TIMEOUT_MS = 45_000;
+const SRE_BASE = "https://web.cvm.gov.br/sre-publico-cvm/rest/sitePublico";
+const LISTAGEM_PERIODO_DE = "01/01/1990";
+const LISTAGEM_PAGE_SIZE = 500;
+// Conservador de propósito: já vimos a Edge Function anterior estourar
+// WORKER_RESOURCE_LIMIT ao tentar processar tudo de uma vez. Preferimos mais
+// invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
+// de recursos numa invocação só.
+const MAX_PAGES_PER_INVOCATION = 15; // histórico inteiro (~28 páginas) cabe em ~2 invocações
+// ~4.900 ofertas de FIDC/FIAGRO-FIDC no total. Com processamento sequencial
+// (1 a 1 + delay) isso exigiria ~80+ invocações, estourando o loop de 30
+// chamadas que o front-end já tem. Por isso usamos um pool com concorrência
+// limitada (ENRICH_CONCURRENCY) em vez de fila estritamente sequencial —
+// ainda é um limite deliberado (não dispara tudo de uma vez), só que várias
+// chamadas em paralelo por lote em vez de uma atrás da outra.
+const ENRICH_BATCH_SIZE = 300;
+const ENRICH_CONCURRENCY = 8;
+const FETCH_TIMEOUT_MS = 30_000;
 
 type SyncBody = {
   log_id?: string;
-  file_index?: number;
-  row_offset?: number;
+  file_index?: number; // 0 = listagem, 1 = enriquecimento (Gestora), 2 = concluído
+  row_offset?: number; // durante a fase 0, é o número da próxima página a buscar
   totals?: Partial<SyncTotals>;
 };
 
@@ -28,148 +65,11 @@ type SyncTotals = {
   totalAtualizadas: number;
 };
 
-type FileProcessResult = SyncTotals & {
-  nextFileIndex: number;
-  nextRowOffset: number;
-  fileDone: boolean;
-  allDone: boolean;
-};
-
 function normalizeKey(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-const FIELD_ALIASES: Record<string, string[]> = {
-  tipo_ativo: [
-    "TipoOferta",
-    "Tipo_Oferta",
-    "Tipo_Valor_Mobiliario",
-    "Especie_Valor_Mobiliario",
-    "Tipo_Ativo",
-    "Classe_Ativo",
-    "Tipo_Fundo_Investimento",
-  ],
-  cnpj_emissor: ["CNPJ_Emissor", "CNPJ_Ofertante", "CNPJ_Companhia", "CNPJ"],
-  nome_emissor: [
-    "Nome_Emissor",
-    "Denominacao_Social_Emissor",
-    "Nome_Ofertante",
-    "Razao_Social_Emissor",
-    "Emissor",
-  ],
-  numero_registro_cvm: [
-    "Numero_Registro_CVM",
-    "Numero_Protocolo",
-    "Protocolo",
-    "Numero_Registro",
-  ],
-  numero_emissao: ["Numero_Emissao", "Numero_Emissao_Valor_Mobiliario"],
-  numero_serie: ["Numero_Serie", "Numero_Serie_Valor_Mobiliario"],
-  situacao: ["Situacao_Registro", "Situacao_Oferta", "Situacao"],
-  modalidade: [
-    "Modalidade_Registro",
-    "Modalidade_Registro_Oferta",
-    "Modalidade_Oferta",
-    "Modalidade_Dispensa_Registro",
-    "Modalidade_Dispensa_Oferta",
-    "Rito",
-  ],
-  data_referencia: [
-    "Data_Registro",
-    "Data_Referencia",
-    "Data_Inicio_Oferta",
-    "Data_Protocolo",
-    "Data_Comunicado",
-  ],
-  data_encerramento: ["Data_Encerramento_Oferta", "Data_Encerramento", "Data_Fechamento"],
-  valor_total: [
-    "Valor_Total_Oferta",
-    "Valor_Total_Distribuido",
-    "Montante_Total_Oferta",
-    "Valor_Mobiliario_Total",
-  ],
-};
-
-const NORMALIZED_ALIASES: Record<string, string[]> = Object.fromEntries(
-  Object.entries(FIELD_ALIASES).map(([field, aliases]) => [field, aliases.map(normalizeKey)]),
-);
-
-function resolveHeaderMap(headerRow: string[]): Record<string, number> {
-  const normalizedHeader = headerRow.map(normalizeKey);
-  const map: Record<string, number> = {};
-  for (const [field, aliases] of Object.entries(NORMALIZED_ALIASES)) {
-    for (const alias of aliases) {
-      const idx = normalizedHeader.indexOf(alias);
-      if (idx !== -1) {
-        map[field] = idx;
-        break;
-      }
-    }
-  }
-  return map;
-}
-
-function* iterateCsv(text: string): Generator<string[]> {
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ";") {
-      row.push(field);
-      field = "";
-    } else if (c === "\r") {
-      // skip
-    } else if (c === "\n") {
-      row.push(field);
-      if (row.length > 1 || (row.length === 1 && row[0] !== "")) yield row;
-      row = [];
-      field = "";
-    } else field += c;
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    if (row.length > 1 || (row.length === 1 && row[0] !== "")) yield row;
-  }
-}
-
-function decodeLatin1(bytes: Uint8Array): string {
-  try {
-    return new TextDecoder("iso-8859-1").decode(bytes);
-  } catch {
-    return new TextDecoder("utf-8").decode(bytes);
-  }
-}
-
-function parseBrDate(s: string | undefined): string | null {
-  if (!s) return null;
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
-  const m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  return null;
-}
-
-function parseBrNumber(s: string | undefined): number | null {
-  if (!s) return null;
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  const normalized = trimmed.replace(/\./g, "").replace(",", ".");
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : null;
+    .toLowerCase();
 }
 
 function errorMessage(err: unknown): string {
@@ -182,27 +82,76 @@ function errorMessage(err: unknown): string {
   }
 }
 
-async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
-  const retryable = [502, 503, 504, 520, 521, 522, 523, 524];
+function parseBrDate(s: string | undefined | null): string | null {
+  if (!s) return null;
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+  return null;
+}
+
+function parseBrNumber(s: string | undefined | null): number | null {
+  if (!s) return null;
+  const trimmed = String(s).trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\./g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Inferência best-effort: a API não tem um campo dedicado de "público-alvo".
+// Só assumimos quando o texto é explícito; caso contrário fica null (melhor
+// não saber do que errar silenciosamente).
+function inferPublicoAlvo(nomeTipoRequerimento: string | null | undefined): string | null {
+  if (!nomeTipoRequerimento) return null;
+  const norm = normalizeKey(nomeTipoRequerimento);
+  if (norm.includes("profissional")) return "Investidor Profissional";
+  if (norm.includes("qualificado")) return "Investidor Qualificado";
+  return null;
+}
+
+function isFidc(tipoAtivo: string | null | undefined): boolean {
+  if (!tipoAtivo) return false;
+  const norm = normalizeKey(tipoAtivo);
+  return norm.includes("fidc");
+}
+
+function todayBr(): string {
+  const now = new Date();
+  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = now.getUTCFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit | undefined,
+  maxAttempts = 4,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const retryable = [429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { signal: controller.signal });
+      const res = await fetch(url, { ...init, signal: controller.signal });
       clearTimeout(timer);
       if (res.ok) return res;
       if (retryable.includes(res.status) && attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
+        await new Promise((r) => setTimeout(r, 2 ** attempt * 500));
         continue;
       }
-      throw new Error(`HTTP ${res.status} ao baixar ${url}`);
+      throw new Error(`HTTP ${res.status} ao chamar ${url}`);
     } catch (err) {
       clearTimeout(timer);
       const isTimeout = err instanceof Error && err.name === "AbortError";
-      lastError = isTimeout ? new Error(`Timeout de ${timeoutMs}ms ao baixar ${url}`) : err;
+      lastError = isTimeout ? new Error(`Timeout de ${timeoutMs}ms ao chamar ${url}`) : err;
       if (attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
+        await new Promise((r) => setTimeout(r, 2 ** attempt * 500));
         continue;
       }
     }
@@ -210,114 +159,80 @@ async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = FETCH_TI
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-async function extractCsvFromZip(fileName: string): Promise<Uint8Array | null> {
-  const res = await fetchWithRetry(CVM_ZIP_URL);
-  const body = res.body;
-  if (!body) throw new Error("Resposta da CVM sem corpo para leitura");
-
-  return await new Promise<Uint8Array | null>(async (resolve, reject) => {
-    const chunks: Uint8Array[] = [];
-    const unzip = new Unzip((file) => {
-      const normalized = file.name.toLowerCase();
-      const isTarget = normalized === fileName.toLowerCase() || normalized.endsWith("/" + fileName.toLowerCase());
-      if (!isTarget) return;
-
-      file.ondata = (err, data, final) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-        chunks.push(data);
-        if (final) {
-          const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-          const merged = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const chunk of chunks) {
-            merged.set(chunk, offset);
-            offset += chunk.length;
-          }
-          resolve(merged);
-        }
-      };
-      file.start();
-    });
-
-    unzip.register(UnzipInflate);
-    const reader = body.getReader();
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          unzip.push(new Uint8Array(0), true);
-          if (chunks.length === 0) resolve(null);
-          break;
-        }
-        unzip.push(value, false);
-      }
-    } catch (err) {
-      reject(err);
-    }
+async function buscarPaginaDetalhado(pagina: number) {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/detalhado`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      periodoCriacaoProcesso: { de: LISTAGEM_PERIODO_DE, ate: todayBr() },
+      opa: false,
+      tipoOferta: "OFERTA_REGULAR",
+      modalidade: "TODAS",
+      direcaoOrdenacao: "DESC",
+      colunaOrdenacao: "data",
+      pagina,
+      tamanhoPagina: String(LISTAGEM_PAGE_SIZE),
+    }),
   });
-}
-
-function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
-  return {
-    totalProcessadas: Number(totals?.totalProcessadas ?? 0),
-    totalInseridas: Number(totals?.totalInseridas ?? 0),
-    totalAtualizadas: Number(totals?.totalAtualizadas ?? 0),
+  return (await res.json()) as {
+    totalRegistros: number;
+    totalPaginas: number;
+    registros: Array<Record<string, unknown>>;
   };
 }
 
+async function buscarGestorInfOferta(idRequerimento: string): Promise<string> {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/infOferta/${idRequerimento}`, { method: "GET" });
+  const campos = (await res.json()) as Array<{ campoNome?: string; valor?: string }>;
+  const gestor = Array.isArray(campos) ? campos.find((c) => c.campoNome === "Gestor") : null;
+  return gestor?.valor?.trim() || "";
+}
+
 // deno-lint-ignore no-explicit-any
-async function processFileStep(supabase: any, logId: string, fileIndex: number, rowOffset: number, totals: SyncTotals): Promise<FileProcessResult> {
-  const fileName = TARGET_CSV_FILES[fileIndex];
-  if (!fileName) {
-    return { ...totals, nextFileIndex: fileIndex, nextRowOffset: 0, fileDone: true, allDone: true };
-  }
-
-  const csvBytes = await extractCsvFromZip(fileName);
-  if (!csvBytes) {
-    console.warn(`sync-cvm-ofertas: arquivo ${fileName} não encontrado no ZIP, pulando`);
-    const nextFileIndex = fileIndex + 1;
-    return {
-      ...totals,
-      nextFileIndex,
-      nextRowOffset: 0,
-      fileDone: true,
-      allDone: nextFileIndex >= TARGET_CSV_FILES.length,
-    };
-  }
-
-  const csvText = decodeLatin1(csvBytes);
-  const iter = iterateCsv(csvText);
-  const first = iter.next();
-  if (first.done) {
-    const nextFileIndex = fileIndex + 1;
-    return {
-      ...totals,
-      nextFileIndex,
-      nextRowOffset: 0,
-      fileDone: true,
-      allDone: nextFileIndex >= TARGET_CSV_FILES.length,
-    };
-  }
-
-  const header = first.value;
-  const colMap = resolveHeaderMap(header);
-  let physicalRowIndex = 0;
-  let processedThisInvocation = 0;
-  let batch: Record<string, unknown>[] = [];
+async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: number, totals: SyncTotals) {
+  let pagina = Math.max(1, paginaInicial);
   let runningTotals = { ...totals };
+  let totalPaginas = 1;
+  let paginasProcessadasNestaInvocacao = 0;
 
-  const flush = async () => {
-    if (batch.length === 0) return;
-    const { data: rpcResult, error: rpcError } = await supabase.rpc("bulk_upsert_ofertas_cvm", { p_rows: batch });
-    if (rpcError) throw rpcError;
-    const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
-    runningTotals.totalInseridas += result?.inseridas ?? 0;
-    runningTotals.totalAtualizadas += result?.atualizadas ?? 0;
-    batch = [];
+  do {
+    const resultado = await buscarPaginaDetalhado(pagina);
+    totalPaginas = resultado.totalPaginas || 1;
+
+    const linhas = (resultado.registros || []).map((r) => {
+      const tipoAtivo = String(r["nomeValorMobiliario"] ?? "Não classificado");
+      const idRequerimento = r["idRequerimento"] != null ? String(r["idRequerimento"]) : null;
+      return {
+        tipo_ativo: tipoAtivo,
+        cnpj_emissor: r["cnpjEmissor"] ? String(r["cnpjEmissor"]) : null,
+        nome_emissor: r["nomeEmissor"] ? String(r["nomeEmissor"]) : null,
+        numero_registro_cvm: r["numeroRegistro"] ? String(r["numeroRegistro"]) : null,
+        situacao: r["statusDaOferta"] ? String(r["statusDaOferta"]) : null,
+        data_referencia: parseBrDate(r["data"] as string | undefined),
+        data_encerramento: null, // não vem na listagem; precisaria de historicoStatus/{id} por oferta
+        valor_total: parseBrNumber(r["valorTotalEmReais"] as string | undefined),
+        id_requerimento_cvm: idRequerimento,
+        numero_processo_cvm: r["numeroProcesso"] ? String(r["numeroProcesso"]) : null,
+        coordenador_lider: r["nomeCoordenadorLider"] ? String(r["nomeCoordenadorLider"]) : null,
+        cnpj_coordenador_lider: r["cnpjCoordenadorLider"] ? String(r["cnpjCoordenadorLider"]) : null,
+        gestora: null, // preenchido na fase de enriquecimento, só para FIDC
+        publico_alvo: inferPublicoAlvo(r["nomeTipoRequerimento"] as string | undefined),
+        nome_tipo_requerimento: r["nomeTipoRequerimento"] ? String(r["nomeTipoRequerimento"]) : null,
+        raw_data: r,
+      };
+    });
+
+    if (linhas.length > 0) {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc("bulk_upsert_ofertas_cvm_sre", {
+        p_rows: linhas,
+      });
+      if (rpcError) throw rpcError;
+      const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+      runningTotals.totalInseridas += result?.inseridas ?? 0;
+      runningTotals.totalAtualizadas += result?.atualizadas ?? 0;
+      runningTotals.totalProcessadas += linhas.length;
+    }
+
     await supabase
       .from("cvm_ofertas_sync_log")
       .update({
@@ -326,61 +241,78 @@ async function processFileStep(supabase: any, logId: string, fileIndex: number, 
         total_atualizadas: runningTotals.totalAtualizadas,
       })
       .eq("id", logId);
+
+    pagina++;
+    paginasProcessadasNestaInvocacao++;
+  } while (pagina <= totalPaginas && paginasProcessadasNestaInvocacao < MAX_PAGES_PER_INVOCATION);
+
+  const listagemConcluida = pagina > totalPaginas;
+  return {
+    totals: runningTotals,
+    nextFileIndex: listagemConcluida ? 1 : 0,
+    nextRowOffset: listagemConcluida ? 0 : pagina,
+    allDone: false,
   };
+}
 
-  for (const cols of iter) {
-    physicalRowIndex++;
-    if (physicalRowIndex <= rowOffset) continue;
+// deno-lint-ignore no-explicit-any
+async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: SyncTotals) {
+  const { data: pendentes, error: selectError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id, id_requerimento_cvm")
+    .is("gestora", null)
+    .ilike("tipo_ativo", "%FIDC%")
+    .not("id_requerimento_cvm", "is", null)
+    .order("id_requerimento_cvm", { ascending: true })
+    .limit(ENRICH_BATCH_SIZE);
 
-    const get = (field: string) => (colMap[field] !== undefined ? cols[colMap[field]] : undefined);
-    const tipoAtivoRaw = get("tipo_ativo") || fileName.replace(".csv", "");
-    const numeroRegistro = get("numero_registro_cvm") || "";
-    const numeroEmissao = get("numero_emissao") || "";
-    const numeroSerie = get("numero_serie") || "";
-    const cnpj = get("cnpj_emissor") || "";
-    const hashSource = [fileName, tipoAtivoRaw, numeroRegistro, numeroEmissao, numeroSerie, cnpj].join("|");
+  if (selectError) throw selectError;
 
-    batch.push({
-      tipo_ativo: tipoAtivoRaw || "Não classificado",
-      cnpj_emissor: cnpj || null,
-      nome_emissor: get("nome_emissor") || null,
-      numero_registro_cvm: numeroRegistro || null,
-      numero_emissao: numeroEmissao || null,
-      numero_serie: numeroSerie || null,
-      situacao: get("situacao") || null,
-      modalidade: get("modalidade") || null,
-      data_referencia: parseBrDate(get("data_referencia")),
-      data_encerramento: parseBrDate(get("data_encerramento")),
-      valor_total: parseBrNumber(get("valor_total")),
-      raw_data: null,
-      source_dataset: fileName,
-      hash_source: hashSource,
-    });
+  let runningTotals = { ...totals };
 
-    runningTotals.totalProcessadas++;
-    processedThisInvocation++;
-
-    if (batch.length >= BATCH_SIZE) await flush();
-    if (processedThisInvocation >= MAX_ROWS_PER_INVOCATION) {
-      await flush();
-      return {
-        ...runningTotals,
-        nextFileIndex: fileIndex,
-        nextRowOffset: physicalRowIndex,
-        fileDone: false,
-        allDone: false,
-      };
-    }
+  if (!pendentes || pendentes.length === 0) {
+    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: true };
   }
 
-  await flush();
-  const nextFileIndex = fileIndex + 1;
+  // Pool com concorrência limitada: processa até ENRICH_CONCURRENCY ofertas
+  // por vez (em vez de uma fila 100% sequencial), pra caber no orçamento de
+  // tempo de uma invocação sem martelar a API da CVM com tudo de uma vez.
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pendentes.length) {
+      const row = pendentes[cursor];
+      cursor++;
+      try {
+        const gestor = await buscarGestorInfOferta(row.id_requerimento_cvm);
+        await supabase
+          .from("ofertas_publicas_cvm")
+          .update({ gestora: gestor }) // string vazia = "já verificado, sem Gestor informado" (evita reprocessar pra sempre)
+          .eq("id", row.id);
+        runningTotals.totalAtualizadas += 1;
+      } catch (err) {
+        console.warn(`sync-cvm-ofertas: falha ao buscar Gestor de idRequerimento=${row.id_requerimento_cvm}`, err);
+        // não interrompe o lote inteiro por causa de uma oferta específica
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, pendentes.length) }, () => worker()));
+
+  await supabase
+    .from("cvm_ofertas_sync_log")
+    .update({
+      total_atualizadas: runningTotals.totalAtualizadas,
+    })
+    .eq("id", logId);
+
+  const aindaHaMais = pendentes.length === ENRICH_BATCH_SIZE;
+  return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: !aindaHaMais };
+}
+
+function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
   return {
-    ...runningTotals,
-    nextFileIndex,
-    nextRowOffset: 0,
-    fileDone: true,
-    allDone: nextFileIndex >= TARGET_CSV_FILES.length,
+    totalProcessadas: Number(totals?.totalProcessadas ?? 0),
+    totalInseridas: Number(totals?.totalInseridas ?? 0),
+    totalAtualizadas: Number(totals?.totalAtualizadas ?? 0),
   };
 }
 
@@ -413,27 +345,32 @@ Deno.serve(async (req: Request) => {
     if (!logId) {
       const { data: logRow, error: logError } = await supabase
         .from("cvm_ofertas_sync_log")
-        .insert({ status: "em_andamento", dataset_url: CVM_ZIP_URL })
+        .insert({ status: "em_andamento", dataset_url: `${SRE_BASE}/pesquisar/detalhado` })
         .select("id")
         .single();
       if (logError) throw logError;
       logId = logRow.id;
     }
 
-    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), TARGET_CSV_FILES.length));
+    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 2));
     const rowOffset = Math.max(0, Number(body.row_offset ?? 0));
     const totals = normalizeTotals(body.totals);
 
-    const result = await processFileStep(supabase, logId, fileIndex, rowOffset, totals);
+    const resultado =
+      fileIndex >= 1
+        ? await rodarFaseEnriquecimento(supabase, logId, totals)
+        : await rodarFaseListagem(supabase, logId, rowOffset || 1, totals);
 
-    if (result.allDone) {
+    const tudoConcluido = resultado.nextFileIndex >= 2 || resultado.allDone;
+
+    if (tudoConcluido) {
       await supabase
         .from("cvm_ofertas_sync_log")
         .update({
           status: "sucesso",
-          total_linhas_processadas: result.totalProcessadas,
-          total_inseridas: result.totalInseridas,
-          total_atualizadas: result.totalAtualizadas,
+          total_linhas_processadas: resultado.totals.totalProcessadas,
+          total_inseridas: resultado.totals.totalInseridas,
+          total_atualizadas: resultado.totals.totalAtualizadas,
           finished_at: new Date().toISOString(),
         })
         .eq("id", logId);
@@ -442,13 +379,13 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       started: true,
       log_id: logId,
-      status: result.allDone ? "sucesso" : "em_andamento",
-      total_linhas_processadas: result.totalProcessadas,
-      total_inseridas: result.totalInseridas,
-      total_atualizadas: result.totalAtualizadas,
-      next_file_index: result.nextFileIndex,
-      next_row_offset: result.nextRowOffset,
-      done: result.allDone,
+      status: tudoConcluido ? "sucesso" : "em_andamento",
+      total_linhas_processadas: resultado.totals.totalProcessadas,
+      total_inseridas: resultado.totals.totalInseridas,
+      total_atualizadas: resultado.totals.totalAtualizadas,
+      next_file_index: resultado.nextFileIndex,
+      next_row_offset: resultado.nextRowOffset,
+      done: tudoConcluido,
     });
   } catch (err) {
     console.error("sync-cvm-ofertas: erro durante sincronização", err);
