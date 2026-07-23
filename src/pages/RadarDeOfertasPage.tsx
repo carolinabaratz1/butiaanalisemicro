@@ -1,25 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -122,6 +110,7 @@ function situacaoBadgeVariant(situacao: string | null): "default" | "secondary" 
 }
 
 export default function RadarDeOfertasPage() {
+  const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
   const [tipoFiltro, setTipoFiltro] = useState<string>("todos");
@@ -139,7 +128,7 @@ export default function RadarDeOfertasPage() {
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as unknown as SyncLogRow | null;
+      return data as SyncLogRow | null;
     },
     refetchInterval: 30_000,
   });
@@ -153,7 +142,7 @@ export default function RadarDeOfertasPage() {
         .order("data_referencia", { ascending: false, nullsFirst: false })
         .limit(5000);
       if (error) throw error;
-      return (data ?? []) as unknown as OfertaRow[];
+      return (data ?? []) as OfertaRow[];
     },
   });
 
@@ -188,17 +177,38 @@ export default function RadarDeOfertasPage() {
 
   const sincronizarAgora = useMutation({
     mutationFn: async () => {
+      // A function agora roda de forma síncrona (aguarda o processamento completo antes de
+      // responder) — por isso esta chamada pode levar de alguns segundos a cerca de um
+      // minuto, dependendo do tamanho do arquivo da CVM no momento. Isso é intencional: a
+      // versão anterior disparava em segundo plano (EdgeRuntime.waitUntil) e ficava presa em
+      // "em_andamento" para sempre neste ambiente, sem nunca reportar erro.
       const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: {} });
       if (error) throw error;
-      return data;
+      return data as {
+        status?: "sucesso" | "parcial" | "erro";
+        total_linhas_processadas?: number;
+        total_inseridas?: number;
+        total_atualizadas?: number;
+        mensagem_erro?: string;
+      };
     },
-    onSuccess: () => {
-      toast.success("Sincronização iniciada — os dados serão atualizados em instantes");
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ["radar-ofertas-cvm"] });
-        queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
-      }, 15_000);
+      queryClient.invalidateQueries({ queryKey: ["radar-ofertas-cvm"] });
+
+      if (data?.status === "sucesso") {
+        toast.success(
+          `Sincronização concluída: ${data.total_inseridas ?? 0} novas, ${data.total_atualizadas ?? 0} atualizadas`,
+        );
+      } else if (data?.status === "parcial") {
+        toast.warning(
+          `Sincronização parcial (${data.total_linhas_processadas ?? 0} linhas processadas) — ${data.mensagem_erro ?? "erro desconhecido"}`,
+        );
+      } else if (data?.status === "erro") {
+        toast.error(data.mensagem_erro || "Erro durante a sincronização");
+      } else {
+        toast.success("Sincronização concluída");
+      }
     },
     onError: (err: any) => toast.error(err?.message || "Erro ao iniciar sincronização"),
   });
@@ -247,13 +257,10 @@ export default function RadarDeOfertasPage() {
 
       const hoje = new Date().toISOString().slice(0, 10);
 
-      const { error: insertAnaliseError } = await (supabase.from("analises") as any).insert({
+      const { error: insertAnaliseError } = await supabase.from("analises").insert({
         empresa_id: empresaId,
         tipo: "Crédito Privado",
-        // Deixado em branco intencionalmente: a atribuição do analista responsável
-        // fica pendente e deve ser feita manualmente (ex.: pelo Gestor/Coordenador,
-        // via o mesmo fluxo de reatribuição já existente no Pipeline de Research).
-        analista_responsavel: null,
+        analista_responsavel: currentUser?.nome || currentUser?.email || "",
         data_inicio: hoje,
         status: "Pendente",
         versao: novaVersao,
