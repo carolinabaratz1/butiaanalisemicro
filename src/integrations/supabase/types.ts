@@ -2072,19 +2072,25 @@ export type Database = {
       }
       ofertas_publicas_cvm: {
         Row: {
+          cnpj_coordenador_lider: string | null
           cnpj_emissor: string | null
           coordenador_lider: string | null
           data_encerramento: string | null
           data_referencia: string | null
           first_seen_at: string
+          gestora: string | null
           hash_linha: string
           id: number
+          id_requerimento_cvm: string | null
           last_seen_at: string
           modalidade: string | null
           nome_emissor: string | null
+          nome_tipo_requerimento: string | null
           numero_emissao: string | null
+          numero_processo_cvm: string | null
           numero_registro_cvm: string | null
           numero_serie: string | null
+          publico_alvo: string | null
           raw_data: Json
           situacao: string | null
           source_dataset: string
@@ -2093,19 +2099,25 @@ export type Database = {
           valor_total: number | null
         }
         Insert: {
+          cnpj_coordenador_lider?: string | null
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
           data_encerramento?: string | null
           data_referencia?: string | null
           first_seen_at?: string
+          gestora?: string | null
           hash_linha: string
           id?: number
+          id_requerimento_cvm?: string | null
           last_seen_at?: string
           modalidade?: string | null
           nome_emissor?: string | null
+          nome_tipo_requerimento?: string | null
           numero_emissao?: string | null
+          numero_processo_cvm?: string | null
           numero_registro_cvm?: string | null
           numero_serie?: string | null
+          publico_alvo?: string | null
           raw_data?: Json
           situacao?: string | null
           source_dataset: string
@@ -2114,19 +2126,25 @@ export type Database = {
           valor_total?: number | null
         }
         Update: {
+          cnpj_coordenador_lider?: string | null
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
           data_encerramento?: string | null
           data_referencia?: string | null
           first_seen_at?: string
+          gestora?: string | null
           hash_linha?: string
           id?: number
+          id_requerimento_cvm?: string | null
           last_seen_at?: string
           modalidade?: string | null
           nome_emissor?: string | null
+          nome_tipo_requerimento?: string | null
           numero_emissao?: string | null
+          numero_processo_cvm?: string | null
           numero_registro_cvm?: string | null
           numero_serie?: string | null
+          publico_alvo?: string | null
           raw_data?: Json
           situacao?: string | null
           source_dataset?: string
@@ -2940,6 +2958,13 @@ export type Database = {
     Functions: {
       apply_forward_fill: { Args: never; Returns: number }
       bulk_upsert_ofertas_cvm: {
+        Args: { p_rows: Json }
+        Returns: {
+          atualizadas: number
+          inseridas: number
+        }[]
+      }
+      bulk_upsert_ofertas_cvm_sre: {
         Args: { p_rows: Json }
         Returns: {
           atualizadas: number

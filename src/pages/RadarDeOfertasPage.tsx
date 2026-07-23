@@ -200,7 +200,7 @@ export default function RadarDeOfertasPage() {
         };
       } = {};
 
-      for (let step = 0; step < 30; step++) {
+      for (let step = 0; step < 80; step++) {
         const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: payload });
         if (error) throw error;
         const result = data as SyncResponse;

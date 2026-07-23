@@ -41,16 +41,17 @@ const LISTAGEM_PAGE_SIZE = 150;
 // WORKER_RESOURCE_LIMIT ao tentar processar tudo de uma vez. Preferimos mais
 // invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
 // de recursos numa invocação só.
-const MAX_PAGES_PER_INVOCATION = 4; // reduzido de 15 para 4 apos OOM (Memory limit exceeded) em producao 2026-07-23
+const MAX_PAGES_PER_INVOCATION = 3; // reduzido para evitar WORKER_RESOURCE_LIMIT em produção
 // ~4.900 ofertas de FIDC/FIAGRO-FIDC no total. Com processamento sequencial
 // (1 a 1 + delay) isso exigiria ~80+ invocações, estourando o loop de 30
 // chamadas que o front-end já tem. Por isso usamos um pool com concorrência
 // limitada (ENRICH_CONCURRENCY) em vez de fila estritamente sequencial —
 // ainda é um limite deliberado (não dispara tudo de uma vez), só que várias
 // chamadas em paralelo por lote em vez de uma atrás da outra.
-const ENRICH_BATCH_SIZE = 300;
-const ENRICH_CONCURRENCY = 8;
-const FETCH_TIMEOUT_MS = 30_000;
+const ENRICH_BATCH_SIZE = 60;
+const ENRICH_CONCURRENCY = 2;
+const FETCH_TIMEOUT_MS = 20_000;
+const INVOCATION_SOFT_DEADLINE_MS = 40_000;
 
 type SyncBody = {
   log_id?: string;
@@ -189,7 +190,7 @@ async function buscarGestorInfOferta(idRequerimento: string): Promise<string> {
 }
 
 // deno-lint-ignore no-explicit-any
-async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: number, totals: SyncTotals) {
+async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: number, totals: SyncTotals, deadlineAt: number) {
   let pagina = Math.max(1, paginaInicial);
   let runningTotals = { ...totals };
   let totalPaginas = 1;
@@ -243,7 +244,11 @@ async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: nu
 
     pagina++;
     paginasProcessadasNestaInvocacao++;
-  } while (pagina <= totalPaginas && paginasProcessadasNestaInvocacao < MAX_PAGES_PER_INVOCATION);
+  } while (
+    pagina <= totalPaginas &&
+    paginasProcessadasNestaInvocacao < MAX_PAGES_PER_INVOCATION &&
+    Date.now() < deadlineAt
+  );
 
   const listagemConcluida = pagina > totalPaginas;
   return {
@@ -255,7 +260,7 @@ async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: nu
 }
 
 // deno-lint-ignore no-explicit-any
-async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: SyncTotals) {
+async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: SyncTotals, deadlineAt: number) {
   const { data: pendentes, error: selectError } = await supabase
     .from("ofertas_publicas_cvm")
     .select("id, id_requerimento_cvm")
@@ -277,8 +282,9 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
   // por vez (em vez de uma fila 100% sequencial), pra caber no orçamento de
   // tempo de uma invocação sem martelar a API da CVM com tudo de uma vez.
   let cursor = 0;
+  let processedThisInvocation = 0;
   async function worker() {
-    while (cursor < pendentes.length) {
+    while (cursor < pendentes.length && Date.now() < deadlineAt) {
       const row = pendentes[cursor];
       cursor++;
       try {
@@ -288,6 +294,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
           .update({ gestora: gestor }) // string vazia = "já verificado, sem Gestor informado" (evita reprocessar pra sempre)
           .eq("id", row.id);
         runningTotals.totalAtualizadas += 1;
+        processedThisInvocation += 1;
       } catch (err) {
         console.warn(`sync-cvm-ofertas: falha ao buscar Gestor de idRequerimento=${row.id_requerimento_cvm}`, err);
         // não interrompe o lote inteiro por causa de uma oferta específica
@@ -303,8 +310,20 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     })
     .eq("id", logId);
 
-  const aindaHaMais = pendentes.length === ENRICH_BATCH_SIZE;
-  return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: !aindaHaMais };
+  if (cursor < pendentes.length || processedThisInvocation === 0) {
+    return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: false };
+  }
+
+  const { data: restante, error: remainingError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id")
+    .is("gestora", null)
+    .ilike("tipo_ativo", "%FIDC%")
+    .not("id_requerimento_cvm", "is", null)
+    .limit(1);
+  if (remainingError) throw remainingError;
+
+  return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: !restante || restante.length === 0 };
 }
 
 function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
@@ -354,11 +373,12 @@ Deno.serve(async (req: Request) => {
     const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 2));
     const rowOffset = Math.max(0, Number(body.row_offset ?? 0));
     const totals = normalizeTotals(body.totals);
+    const deadlineAt = Date.now() + INVOCATION_SOFT_DEADLINE_MS;
 
     const resultado =
       fileIndex >= 1
-        ? await rodarFaseEnriquecimento(supabase, logId, totals)
-        : await rodarFaseListagem(supabase, logId, rowOffset || 1, totals);
+        ? await rodarFaseEnriquecimento(supabase, logId, totals, deadlineAt)
+        : await rodarFaseListagem(supabase, logId, rowOffset || 1, totals, deadlineAt);
 
     const tudoConcluido = resultado.nextFileIndex >= 2 || resultado.allDone;
 
