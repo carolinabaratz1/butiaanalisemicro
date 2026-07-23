@@ -830,8 +830,12 @@ export type Database = {
           id: number
           linhas_atualizadas: number | null
           linhas_novas: number | null
+          mensagem_erro: string | null
           started_at: string
           status: string
+          total_atualizadas: number | null
+          total_inseridas: number | null
+          total_linhas_processadas: number | null
         }
         Insert: {
           dataset_url?: string | null
@@ -840,8 +844,12 @@ export type Database = {
           id?: number
           linhas_atualizadas?: number | null
           linhas_novas?: number | null
+          mensagem_erro?: string | null
           started_at?: string
           status?: string
+          total_atualizadas?: number | null
+          total_inseridas?: number | null
+          total_linhas_processadas?: number | null
         }
         Update: {
           dataset_url?: string | null
@@ -850,8 +858,12 @@ export type Database = {
           id?: number
           linhas_atualizadas?: number | null
           linhas_novas?: number | null
+          mensagem_erro?: string | null
           started_at?: string
           status?: string
+          total_atualizadas?: number | null
+          total_inseridas?: number | null
+          total_linhas_processadas?: number | null
         }
         Relationships: []
       }
@@ -2062,74 +2074,65 @@ export type Database = {
         Row: {
           cnpj_emissor: string | null
           coordenador_lider: string | null
-          data_inicio_oferta: string | null
-          data_registro_dispensa: string | null
-          data_vencimento: string | null
+          data_encerramento: string | null
+          data_referencia: string | null
           first_seen_at: string
-          fonte_arquivo: string
+          hash_linha: string
           id: number
           last_seen_at: string
-          modalidade_dispensa_registro: string | null
-          modalidade_registro: string | null
+          modalidade: string | null
           nome_emissor: string | null
           numero_emissao: string | null
-          numero_registro: string | null
+          numero_registro_cvm: string | null
           numero_serie: string | null
           raw_data: Json
-          rito: string | null
-          row_hash: string
           situacao: string | null
+          source_dataset: string
           taxa_emissao: string | null
-          tipo_valor_mobiliario: string | null
-          valor_total_oferta: number | null
+          tipo_ativo: string | null
+          valor_total: number | null
         }
         Insert: {
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
-          data_inicio_oferta?: string | null
-          data_registro_dispensa?: string | null
-          data_vencimento?: string | null
+          data_encerramento?: string | null
+          data_referencia?: string | null
           first_seen_at?: string
-          fonte_arquivo: string
+          hash_linha: string
           id?: number
           last_seen_at?: string
-          modalidade_dispensa_registro?: string | null
-          modalidade_registro?: string | null
+          modalidade?: string | null
           nome_emissor?: string | null
           numero_emissao?: string | null
-          numero_registro?: string | null
+          numero_registro_cvm?: string | null
           numero_serie?: string | null
-          raw_data: Json
-          rito?: string | null
-          row_hash: string
+          raw_data?: Json
           situacao?: string | null
+          source_dataset: string
           taxa_emissao?: string | null
-          tipo_valor_mobiliario?: string | null
-          valor_total_oferta?: number | null
+          tipo_ativo?: string | null
+          valor_total?: number | null
         }
         Update: {
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
-          data_inicio_oferta?: string | null
-          data_registro_dispensa?: string | null
-          data_vencimento?: string | null
+          data_encerramento?: string | null
+          data_referencia?: string | null
           first_seen_at?: string
-          fonte_arquivo?: string
+          hash_linha?: string
           id?: number
           last_seen_at?: string
-          modalidade_dispensa_registro?: string | null
-          modalidade_registro?: string | null
+          modalidade?: string | null
           nome_emissor?: string | null
           numero_emissao?: string | null
-          numero_registro?: string | null
+          numero_registro_cvm?: string | null
           numero_serie?: string | null
           raw_data?: Json
-          rito?: string | null
-          row_hash?: string
           situacao?: string | null
+          source_dataset?: string
           taxa_emissao?: string | null
-          tipo_valor_mobiliario?: string | null
-          valor_total_oferta?: number | null
+          tipo_ativo?: string | null
+          valor_total?: number | null
         }
         Relationships: []
       }
@@ -2911,28 +2914,25 @@ export type Database = {
         Row: {
           cnpj_emissor: string | null
           coordenador_lider: string | null
-          data_inicio_oferta: string | null
-          data_registro_dispensa: string | null
-          data_vencimento: string | null
+          data_encerramento: string | null
+          data_referencia: string | null
           emissor_conhecido_nome: string | null
           emissor_ja_conhecido: boolean | null
           first_seen_at: string | null
-          fonte_arquivo: string | null
+          hash_linha: string | null
           id: number | null
           last_seen_at: string | null
-          modalidade_dispensa_registro: string | null
-          modalidade_registro: string | null
+          modalidade: string | null
           nome_emissor: string | null
           numero_emissao: string | null
-          numero_registro: string | null
+          numero_registro_cvm: string | null
           numero_serie: string | null
           raw_data: Json | null
-          rito: string | null
-          row_hash: string | null
           situacao: string | null
+          source_dataset: string | null
           taxa_emissao: string | null
-          tipo_valor_mobiliario: string | null
-          valor_total_oferta: number | null
+          tipo_ativo: string | null
+          valor_total: number | null
         }
         Relationships: []
       }
@@ -2942,8 +2942,8 @@ export type Database = {
       bulk_upsert_ofertas_cvm: {
         Args: { p_rows: Json }
         Returns: {
-          atualizados: number
-          inseridos: number
+          atualizadas: number
+          inseridas: number
         }[]
       }
       derive_sub_indexador: {
