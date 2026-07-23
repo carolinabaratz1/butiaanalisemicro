@@ -109,47 +109,31 @@ function resolveHeaderMap(headerRow: string[]): Record<string, number> {
 // --------------------------------------------------------------------------------
 // Parser CSV minimalista (arquivos da CVM: separador ";", encoding ISO-8859-1)
 // --------------------------------------------------------------------------------
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
+function* iterateCsv(text: string): Generator<string[]> {
   let row: string[] = [];
   let field = "";
   let inQuotes = false;
-
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (inQuotes) {
       if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ";") {
+        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ";") { row.push(field); field = ""; }
+    else if (c === "\r") { /* skip */ }
+    else if (c === "\n") {
       row.push(field);
-      field = "";
-    } else if (c === "\r") {
-      // ignora
-    } else if (c === "\n") {
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += c;
-    }
+      if (row.length > 1 || (row.length === 1 && row[0] !== "")) yield row;
+      row = []; field = "";
+    } else field += c;
   }
   if (field.length > 0 || row.length > 0) {
     row.push(field);
-    rows.push(row);
+    if (row.length > 1 || (row.length === 1 && row[0] !== "")) yield row;
   }
-  return rows.filter((r) => r.length > 1 || (r.length === 1 && r[0] !== ""));
 }
+
 
 function decodeLatin1(bytes: Uint8Array): string {
   try {
