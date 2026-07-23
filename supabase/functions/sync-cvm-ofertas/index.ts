@@ -1,11 +1,6 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { unzipSync } from "https://esm.sh/fflate@0.8.2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { Unzip, UnzipInflate } from "npm:fflate@0.8.2";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -15,19 +10,31 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const CVM_ZIP_URL = "https://dados.cvm.gov.br/dados/OFERTA/DISTRIB/DADOS/oferta_distribuicao.zip";
-
-// Arquivos CSV dentro do ZIP que nos interessam. A CVM mistura vários tipos de valor
-// mobiliário no mesmo arquivo; a coluna "tipo_ativo" (resolvida abaixo) é quem sub-classifica.
 const TARGET_CSV_FILES = ["oferta_distribuicao.csv", "oferta_resolucao_160.csv"];
+const BATCH_SIZE = 500;
+const MAX_ROWS_PER_INVOCATION = 5_000;
+const FETCH_TIMEOUT_MS = 45_000;
 
-// --------------------------------------------------------------------------------
-// Resolução resiliente de colunas
-// --------------------------------------------------------------------------------
-// A CVM já renomeou/adicionou colunas ao longo do tempo (ex: Modalidade_Registro_Oferta
-// -> Modalidade_Registro). Em vez de depender de um cabeçalho exato, casamos contra uma
-// lista de aliases conhecidos, normalizados (minúsculas, sem acento, sem pontuação) — assim
-// um pequeno drift no cabeçalho não quebra a sincronização. Independente do header real,
-// o valor bruto de TODAS as colunas sempre é preservado em raw_data (nada se perde).
+type SyncBody = {
+  log_id?: string;
+  file_index?: number;
+  row_offset?: number;
+  totals?: Partial<SyncTotals>;
+};
+
+type SyncTotals = {
+  totalProcessadas: number;
+  totalInseridas: number;
+  totalAtualizadas: number;
+};
+
+type FileProcessResult = SyncTotals & {
+  nextFileIndex: number;
+  nextRowOffset: number;
+  fileDone: boolean;
+  allDone: boolean;
+};
+
 function normalizeKey(s: string): string {
   return s
     .normalize("NFD")
@@ -106,9 +113,6 @@ function resolveHeaderMap(headerRow: string[]): Record<string, number> {
   return map;
 }
 
-// --------------------------------------------------------------------------------
-// Parser CSV minimalista (arquivos da CVM: separador ";", encoding ISO-8859-1)
-// --------------------------------------------------------------------------------
 function* iterateCsv(text: string): Generator<string[]> {
   let row: string[] = [];
   let field = "";
@@ -117,15 +121,22 @@ function* iterateCsv(text: string): Generator<string[]> {
     const c = text[i];
     if (inQuotes) {
       if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
       } else field += c;
     } else if (c === '"') inQuotes = true;
-    else if (c === ";") { row.push(field); field = ""; }
-    else if (c === "\r") { /* skip */ }
-    else if (c === "\n") {
+    else if (c === ";") {
+      row.push(field);
+      field = "";
+    } else if (c === "\r") {
+      // skip
+    } else if (c === "\n") {
       row.push(field);
       if (row.length > 1 || (row.length === 1 && row[0] !== "")) yield row;
-      row = []; field = "";
+      row = [];
+      field = "";
     } else field += c;
   }
   if (field.length > 0 || row.length > 0) {
@@ -134,21 +145,12 @@ function* iterateCsv(text: string): Generator<string[]> {
   }
 }
 
-
 function decodeLatin1(bytes: Uint8Array): string {
   try {
     return new TextDecoder("iso-8859-1").decode(bytes);
   } catch {
     return new TextDecoder("utf-8").decode(bytes);
   }
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 function parseBrDate(s: string | undefined): string | null {
@@ -170,12 +172,18 @@ function parseBrNumber(s: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Timeout explícito por tentativa: sem isso, uma conexão que trava (comum no portal
-// de dados abertos da CVM) nunca rejeita nem resolve, e o fetch fica pendurado para
-// sempre — o que deixa toda a sincronização "em_andamento" indefinidamente, sem nunca
-// cair no catch() que atualizaria o log com um erro visível.
-async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = 45_000): Promise<Response> {
-  const RETRYABLE = [502, 503, 504, 520, 521, 522, 523, 524];
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+  const retryable = [502, 503, 504, 520, 521, 522, 523, 524];
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
@@ -184,7 +192,7 @@ async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = 45_000):
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
       if (res.ok) return res;
-      if (RETRYABLE.includes(res.status) && attempt < maxAttempts) {
+      if (retryable.includes(res.status) && attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
         continue;
       }
@@ -202,191 +210,259 @@ async function fetchWithRetry(url: string, maxAttempts = 4, timeoutMs = 45_000):
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-// deno-lint-ignore no-explicit-any
-async function runSync(supabase: any, logId: string): Promise<{
-  status: "sucesso" | "parcial" | "erro";
-  totalProcessadas: number;
-  totalInseridas: number;
-  totalAtualizadas: number;
-  mensagemErro?: string;
-}> {
-  let totalProcessadas = 0;
-  let totalInseridas = 0;
-  let totalAtualizadas = 0;
+async function extractCsvFromZip(fileName: string): Promise<Uint8Array | null> {
+  const res = await fetchWithRetry(CVM_ZIP_URL);
+  const body = res.body;
+  if (!body) throw new Error("Resposta da CVM sem corpo para leitura");
 
-  try {
-    const zipRes = await fetchWithRetry(CVM_ZIP_URL);
-    const zipBuffer = new Uint8Array(await zipRes.arrayBuffer());
-    const unzipped = unzipSync(zipBuffer);
+  return await new Promise<Uint8Array | null>(async (resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    const unzip = new Unzip((file) => {
+      const normalized = file.name.toLowerCase();
+      const isTarget = normalized === fileName.toLowerCase() || normalized.endsWith("/" + fileName.toLowerCase());
+      if (!isTarget) return;
 
-    for (const fileName of TARGET_CSV_FILES) {
-      const matchKey = Object.keys(unzipped).find(
-        (k) =>
-          k.toLowerCase() === fileName.toLowerCase() ||
-          k.toLowerCase().endsWith("/" + fileName.toLowerCase()),
-      );
-      if (!matchKey) {
-        console.warn(`sync-cvm-ofertas: arquivo ${fileName} não encontrado no ZIP, pulando`);
-        continue;
-      }
-
-      const csvText = decodeLatin1(unzipped[matchKey]);
-      // Libera o buffer descomprimido: já temos o texto decodificado.
-      delete unzipped[matchKey];
-
-      const iter = iterateCsv(csvText);
-      const first = iter.next();
-      if (first.done) continue;
-      const header = first.value;
-      const colMap = resolveHeaderMap(header);
-
-      const BATCH_SIZE = 200;
-      let batch: Record<string, unknown>[] = [];
-
-      const flush = async () => {
-        if (batch.length === 0) return;
-        const { data: rpcResult, error: rpcError } = await supabase.rpc("bulk_upsert_ofertas_cvm", {
-          p_rows: batch,
-        });
-        if (rpcError) throw rpcError;
-        const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
-        totalInseridas += result?.inseridas ?? 0;
-        totalAtualizadas += result?.atualizadas ?? 0;
-        batch = [];
-        await supabase
-          .from("cvm_ofertas_sync_log")
-          .update({
-            total_linhas_processadas: totalProcessadas,
-            total_inseridas: totalInseridas,
-            total_atualizadas: totalAtualizadas,
-          })
-          .eq("id", logId);
+      file.ondata = (err, data, final) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        chunks.push(data);
+        if (final) {
+          const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+          const merged = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const chunk of chunks) {
+            merged.set(chunk, offset);
+            offset += chunk.length;
+          }
+          resolve(merged);
+        }
       };
+      file.start();
+    });
 
-      for (const cols of iter) {
-        totalProcessadas++;
-        const get = (field: string) => (colMap[field] !== undefined ? cols[colMap[field]] : undefined);
+    unzip.register(UnzipInflate);
+    const reader = body.getReader();
 
-        const tipoAtivoRaw = get("tipo_ativo") || fileName.replace(".csv", "");
-        const numeroRegistro = get("numero_registro_cvm") || "";
-        const numeroEmissao = get("numero_emissao") || "";
-        const numeroSerie = get("numero_serie") || "";
-        const cnpj = get("cnpj_emissor") || "";
-
-        const hashSource = [fileName, tipoAtivoRaw, numeroRegistro, numeroEmissao, numeroSerie, cnpj].join("|");
-        const hashLinha = await sha256Hex(hashSource);
-
-        batch.push({
-          tipo_ativo: tipoAtivoRaw || "Não classificado",
-          cnpj_emissor: cnpj || null,
-          nome_emissor: get("nome_emissor") || null,
-          numero_registro_cvm: numeroRegistro || null,
-          numero_emissao: numeroEmissao || null,
-          numero_serie: numeroSerie || null,
-          situacao: get("situacao") || null,
-          modalidade: get("modalidade") || null,
-          data_referencia: parseBrDate(get("data_referencia")),
-          data_encerramento: parseBrDate(get("data_encerramento")),
-          valor_total: parseBrNumber(get("valor_total")),
-          raw_data: null,
-          source_dataset: fileName,
-          hash_linha: hashLinha,
-        });
-
-        if (batch.length >= BATCH_SIZE) await flush();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          unzip.push(new Uint8Array(0), true);
+          if (chunks.length === 0) resolve(null);
+          break;
+        }
+        unzip.push(value, false);
       }
-      await flush();
+    } catch (err) {
+      reject(err);
     }
-
-
-    await supabase
-      .from("cvm_ofertas_sync_log")
-      .update({
-        status: "sucesso",
-        total_linhas_processadas: totalProcessadas,
-        total_inseridas: totalInseridas,
-        total_atualizadas: totalAtualizadas,
-        finished_at: new Date().toISOString(),
-      })
-      .eq("id", logId);
-
-    return { status: "sucesso", totalProcessadas, totalInseridas, totalAtualizadas };
-  } catch (err) {
-    console.error("sync-cvm-ofertas: erro durante sincronização", err);
-    const mensagemErro = String(err instanceof Error ? err.message : err);
-    const status = totalProcessadas > 0 ? "parcial" : "erro";
-    await supabase
-      .from("cvm_ofertas_sync_log")
-      .update({
-        status,
-        total_linhas_processadas: totalProcessadas,
-        total_inseridas: totalInseridas,
-        total_atualizadas: totalAtualizadas,
-        mensagem_erro: mensagemErro,
-        finished_at: new Date().toISOString(),
-      })
-      .eq("id", logId);
-
-    return { status, totalProcessadas, totalInseridas, totalAtualizadas, mensagemErro };
-  }
+  });
 }
 
-serve(async (req: Request) => {
+function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
+  return {
+    totalProcessadas: Number(totals?.totalProcessadas ?? 0),
+    totalInseridas: Number(totals?.totalInseridas ?? 0),
+    totalAtualizadas: Number(totals?.totalAtualizadas ?? 0),
+  };
+}
+
+// deno-lint-ignore no-explicit-any
+async function processFileStep(supabase: any, logId: string, fileIndex: number, rowOffset: number, totals: SyncTotals): Promise<FileProcessResult> {
+  const fileName = TARGET_CSV_FILES[fileIndex];
+  if (!fileName) {
+    return { ...totals, nextFileIndex: fileIndex, nextRowOffset: 0, fileDone: true, allDone: true };
+  }
+
+  const csvBytes = await extractCsvFromZip(fileName);
+  if (!csvBytes) {
+    console.warn(`sync-cvm-ofertas: arquivo ${fileName} não encontrado no ZIP, pulando`);
+    const nextFileIndex = fileIndex + 1;
+    return {
+      ...totals,
+      nextFileIndex,
+      nextRowOffset: 0,
+      fileDone: true,
+      allDone: nextFileIndex >= TARGET_CSV_FILES.length,
+    };
+  }
+
+  const csvText = decodeLatin1(csvBytes);
+  const iter = iterateCsv(csvText);
+  const first = iter.next();
+  if (first.done) {
+    const nextFileIndex = fileIndex + 1;
+    return {
+      ...totals,
+      nextFileIndex,
+      nextRowOffset: 0,
+      fileDone: true,
+      allDone: nextFileIndex >= TARGET_CSV_FILES.length,
+    };
+  }
+
+  const header = first.value;
+  const colMap = resolveHeaderMap(header);
+  let physicalRowIndex = 0;
+  let processedThisInvocation = 0;
+  let batch: Record<string, unknown>[] = [];
+  let runningTotals = { ...totals };
+
+  const flush = async () => {
+    if (batch.length === 0) return;
+    const { data: rpcResult, error: rpcError } = await supabase.rpc("bulk_upsert_ofertas_cvm", { p_rows: batch });
+    if (rpcError) throw rpcError;
+    const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
+    runningTotals.totalInseridas += result?.inseridas ?? 0;
+    runningTotals.totalAtualizadas += result?.atualizadas ?? 0;
+    batch = [];
+    await supabase
+      .from("cvm_ofertas_sync_log")
+      .update({
+        total_linhas_processadas: runningTotals.totalProcessadas,
+        total_inseridas: runningTotals.totalInseridas,
+        total_atualizadas: runningTotals.totalAtualizadas,
+      })
+      .eq("id", logId);
+  };
+
+  for (const cols of iter) {
+    physicalRowIndex++;
+    if (physicalRowIndex <= rowOffset) continue;
+
+    const get = (field: string) => (colMap[field] !== undefined ? cols[colMap[field]] : undefined);
+    const tipoAtivoRaw = get("tipo_ativo") || fileName.replace(".csv", "");
+    const numeroRegistro = get("numero_registro_cvm") || "";
+    const numeroEmissao = get("numero_emissao") || "";
+    const numeroSerie = get("numero_serie") || "";
+    const cnpj = get("cnpj_emissor") || "";
+    const hashSource = [fileName, tipoAtivoRaw, numeroRegistro, numeroEmissao, numeroSerie, cnpj].join("|");
+
+    batch.push({
+      tipo_ativo: tipoAtivoRaw || "Não classificado",
+      cnpj_emissor: cnpj || null,
+      nome_emissor: get("nome_emissor") || null,
+      numero_registro_cvm: numeroRegistro || null,
+      numero_emissao: numeroEmissao || null,
+      numero_serie: numeroSerie || null,
+      situacao: get("situacao") || null,
+      modalidade: get("modalidade") || null,
+      data_referencia: parseBrDate(get("data_referencia")),
+      data_encerramento: parseBrDate(get("data_encerramento")),
+      valor_total: parseBrNumber(get("valor_total")),
+      raw_data: null,
+      source_dataset: fileName,
+      hash_source: hashSource,
+    });
+
+    runningTotals.totalProcessadas++;
+    processedThisInvocation++;
+
+    if (batch.length >= BATCH_SIZE) await flush();
+    if (processedThisInvocation >= MAX_ROWS_PER_INVOCATION) {
+      await flush();
+      return {
+        ...runningTotals,
+        nextFileIndex: fileIndex,
+        nextRowOffset: physicalRowIndex,
+        fileDone: false,
+        allDone: false,
+      };
+    }
+  }
+
+  await flush();
+  const nextFileIndex = fileIndex + 1;
+  return {
+    ...runningTotals,
+    nextFileIndex,
+    nextRowOffset: 0,
+    fileDone: true,
+    allDone: nextFileIndex >= TARGET_CSV_FILES.length,
+  };
+}
+
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  // Autenticação: um usuário autenticado (qualquer papel) pode disparar uma sincronização manual;
-  // a chamada diária agendada (cron) invoca esta função com a service role key diretamente
-  // (sem JWT de usuário), o que também é aceito por ser o caminho confiável do cron.
   const authHeader = req.headers.get("Authorization");
   if (authHeader && authHeader !== `Bearer ${serviceRoleKey}`) {
     const authClient = createClient(supabaseUrl, anonKey);
     const token = authHeader.replace("Bearer ", "");
     const { data: claims, error: claimsError } = await authClient.auth.getClaims(token);
-    if (claimsError || !claims) {
-      return jsonResponse({ error: "Não autorizado" }, 401);
-    }
+    if (claimsError || !claims) return jsonResponse({ error: "Não autorizado" }, 401);
   }
 
-  let logId: string | null = null;
+  let body: SyncBody = {};
+  try {
+    body = await req.json();
+  } catch {
+    // chamadas sem body iniciam uma nova sincronização
+  }
+
+  let logId = body.log_id ?? null;
 
   try {
-    const { data: logRow, error: logError } = await supabase
-      .from("cvm_ofertas_sync_log")
-      .insert({ status: "em_andamento", dataset_url: CVM_ZIP_URL })
-      .select("id")
-      .single();
-    if (logError) throw logError;
-    logId = logRow.id;
+    if (!logId) {
+      const { data: logRow, error: logError } = await supabase
+        .from("cvm_ofertas_sync_log")
+        .insert({ status: "em_andamento", dataset_url: CVM_ZIP_URL })
+        .select("id")
+        .single();
+      if (logError) throw logError;
+      logId = logRow.id;
+    }
 
-    const resultado = await runSync(supabase, logId!);
+    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), TARGET_CSV_FILES.length));
+    const rowOffset = Math.max(0, Number(body.row_offset ?? 0));
+    const totals = normalizeTotals(body.totals);
 
-    return jsonResponse({
-      started: true,
-      log_id: logId,
-      status: resultado.status,
-      total_linhas_processadas: resultado.totalProcessadas,
-      total_inseridas: resultado.totalInseridas,
-      total_atualizadas: resultado.totalAtualizadas,
-      mensagem_erro: resultado.mensagemErro,
-    });
-  } catch (err) {
-    console.error("sync-cvm-ofertas: erro ao iniciar", err);
-    if (logId) {
+    const result = await processFileStep(supabase, logId, fileIndex, rowOffset, totals);
+
+    if (result.allDone) {
       await supabase
         .from("cvm_ofertas_sync_log")
         .update({
-          status: "erro",
-          mensagem_erro: String(err instanceof Error ? err.message : err),
+          status: "sucesso",
+          total_linhas_processadas: result.totalProcessadas,
+          total_inseridas: result.totalInseridas,
+          total_atualizadas: result.totalAtualizadas,
           finished_at: new Date().toISOString(),
         })
         .eq("id", logId);
     }
-    return jsonResponse({ error: "Falha ao iniciar sincronização" }, 500);
+
+    return jsonResponse({
+      started: true,
+      log_id: logId,
+      status: result.allDone ? "sucesso" : "em_andamento",
+      total_linhas_processadas: result.totalProcessadas,
+      total_inseridas: result.totalInseridas,
+      total_atualizadas: result.totalAtualizadas,
+      next_file_index: result.nextFileIndex,
+      next_row_offset: result.nextRowOffset,
+      done: result.allDone,
+    });
+  } catch (err) {
+    console.error("sync-cvm-ofertas: erro durante sincronização", err);
+    const mensagemErro = errorMessage(err);
+    if (logId) {
+      await supabase
+        .from("cvm_ofertas_sync_log")
+        .update({
+          status: body.totals?.totalProcessadas ? "parcial" : "erro",
+          mensagem_erro: mensagemErro,
+          finished_at: new Date().toISOString(),
+        })
+        .eq("id", logId);
+    }
+    return jsonResponse({ error: "Falha ao sincronizar ofertas CVM", mensagem_erro: mensagemErro }, 500);
   }
 });

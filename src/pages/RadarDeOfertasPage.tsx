@@ -177,20 +177,53 @@ export default function RadarDeOfertasPage() {
 
   const sincronizarAgora = useMutation({
     mutationFn: async () => {
-      // A function agora roda de forma síncrona (aguarda o processamento completo antes de
-      // responder) — por isso esta chamada pode levar de alguns segundos a cerca de um
-      // minuto, dependendo do tamanho do arquivo da CVM no momento. Isso é intencional: a
-      // versão anterior disparava em segundo plano (EdgeRuntime.waitUntil) e ficava presa em
-      // "em_andamento" para sempre neste ambiente, sem nunca reportar erro.
-      const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: {} });
-      if (error) throw error;
-      return data as {
-        status?: "sucesso" | "parcial" | "erro";
+      type SyncResponse = {
+        log_id?: string;
+        status?: "em_andamento" | "sucesso" | "parcial" | "erro";
         total_linhas_processadas?: number;
         total_inseridas?: number;
         total_atualizadas?: number;
+        next_file_index?: number;
+        next_row_offset?: number;
+        done?: boolean;
         mensagem_erro?: string;
       };
+
+      let payload: {
+        log_id?: string;
+        file_index?: number;
+        row_offset?: number;
+        totals?: {
+          totalProcessadas: number;
+          totalInseridas: number;
+          totalAtualizadas: number;
+        };
+      } = {};
+
+      for (let step = 0; step < 30; step++) {
+        const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: payload });
+        if (error) throw error;
+        const result = data as SyncResponse;
+
+        queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
+
+        if (result.done || result.status === "sucesso") return result;
+        if (result.status === "erro" || result.status === "parcial") return result;
+        if (!result.log_id) throw new Error("Sincronização sem identificador de log");
+
+        payload = {
+          log_id: result.log_id,
+          file_index: result.next_file_index ?? 0,
+          row_offset: result.next_row_offset ?? 0,
+          totals: {
+            totalProcessadas: result.total_linhas_processadas ?? 0,
+            totalInseridas: result.total_inseridas ?? 0,
+            totalAtualizadas: result.total_atualizadas ?? 0,
+          },
+        };
+      }
+
+      throw new Error("Sincronização não terminou dentro do limite de etapas");
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
