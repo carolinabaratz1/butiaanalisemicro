@@ -231,65 +231,28 @@ async function runSync(supabase: any, logId: string): Promise<{
       }
 
       const csvText = decodeLatin1(unzipped[matchKey]);
-      const rows = parseCsv(csvText);
-      if (rows.length === 0) continue;
+      // Libera o buffer descomprimido: já temos o texto decodificado.
+      delete unzipped[matchKey];
 
-      const header = rows[0];
+      const iter = iterateCsv(csvText);
+      const first = iter.next();
+      if (first.done) continue;
+      const header = first.value;
       const colMap = resolveHeaderMap(header);
-      const dataRows = rows.slice(1);
 
-      const BATCH_SIZE = 500;
-      for (let i = 0; i < dataRows.length; i += BATCH_SIZE) {
-        const batch = dataRows.slice(i, i + BATCH_SIZE);
-        const payload: Record<string, unknown>[] = [];
+      const BATCH_SIZE = 200;
+      let batch: Record<string, unknown>[] = [];
 
-        for (const cols of batch) {
-          totalProcessadas++;
-          const rawObj: Record<string, string> = {};
-          header.forEach((h, idx) => {
-            rawObj[h] = cols[idx] ?? "";
-          });
-
-          const get = (field: string) => (colMap[field] !== undefined ? cols[colMap[field]] : undefined);
-
-          const tipoAtivoRaw = get("tipo_ativo") || fileName.replace(".csv", "");
-          const numeroRegistro = get("numero_registro_cvm") || "";
-          const numeroEmissao = get("numero_emissao") || "";
-          const numeroSerie = get("numero_serie") || "";
-          const cnpj = get("cnpj_emissor") || "";
-
-          const hashSource = [fileName, tipoAtivoRaw, numeroRegistro, numeroEmissao, numeroSerie, cnpj].join("|");
-          const hashLinha = await sha256Hex(hashSource);
-
-          payload.push({
-            tipo_ativo: tipoAtivoRaw || "Não classificado",
-            cnpj_emissor: cnpj || null,
-            nome_emissor: get("nome_emissor") || null,
-            numero_registro_cvm: numeroRegistro || null,
-            numero_emissao: numeroEmissao || null,
-            numero_serie: numeroSerie || null,
-            situacao: get("situacao") || null,
-            modalidade: get("modalidade") || null,
-            data_referencia: parseBrDate(get("data_referencia")),
-            data_encerramento: parseBrDate(get("data_encerramento")),
-            valor_total: parseBrNumber(get("valor_total")),
-            raw_data: rawObj,
-            source_dataset: fileName,
-            hash_linha: hashLinha,
-          });
-        }
-
-        if (payload.length === 0) continue;
-
+      const flush = async () => {
+        if (batch.length === 0) return;
         const { data: rpcResult, error: rpcError } = await supabase.rpc("bulk_upsert_ofertas_cvm", {
-          p_rows: payload,
+          p_rows: batch,
         });
         if (rpcError) throw rpcError;
-
         const result = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
         totalInseridas += result?.inseridas ?? 0;
         totalAtualizadas += result?.atualizadas ?? 0;
-
+        batch = [];
         await supabase
           .from("cvm_ofertas_sync_log")
           .update({
@@ -298,8 +261,43 @@ async function runSync(supabase: any, logId: string): Promise<{
             total_atualizadas: totalAtualizadas,
           })
           .eq("id", logId);
+      };
+
+      for (const cols of iter) {
+        totalProcessadas++;
+        const get = (field: string) => (colMap[field] !== undefined ? cols[colMap[field]] : undefined);
+
+        const tipoAtivoRaw = get("tipo_ativo") || fileName.replace(".csv", "");
+        const numeroRegistro = get("numero_registro_cvm") || "";
+        const numeroEmissao = get("numero_emissao") || "";
+        const numeroSerie = get("numero_serie") || "";
+        const cnpj = get("cnpj_emissor") || "";
+
+        const hashSource = [fileName, tipoAtivoRaw, numeroRegistro, numeroEmissao, numeroSerie, cnpj].join("|");
+        const hashLinha = await sha256Hex(hashSource);
+
+        batch.push({
+          tipo_ativo: tipoAtivoRaw || "Não classificado",
+          cnpj_emissor: cnpj || null,
+          nome_emissor: get("nome_emissor") || null,
+          numero_registro_cvm: numeroRegistro || null,
+          numero_emissao: numeroEmissao || null,
+          numero_serie: numeroSerie || null,
+          situacao: get("situacao") || null,
+          modalidade: get("modalidade") || null,
+          data_referencia: parseBrDate(get("data_referencia")),
+          data_encerramento: parseBrDate(get("data_encerramento")),
+          valor_total: parseBrNumber(get("valor_total")),
+          raw_data: null,
+          source_dataset: fileName,
+          hash_linha: hashLinha,
+        });
+
+        if (batch.length >= BATCH_SIZE) await flush();
       }
+      await flush();
     }
+
 
     await supabase
       .from("cvm_ofertas_sync_log")
