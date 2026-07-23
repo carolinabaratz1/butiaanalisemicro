@@ -36,12 +36,12 @@ function jsonResponse(body: unknown, status = 200) {
 
 const SRE_BASE = "https://web.cvm.gov.br/sre-publico-cvm/rest/sitePublico";
 const LISTAGEM_PERIODO_DE = "01/01/1990";
-const LISTAGEM_PAGE_SIZE = 500;
+const LISTAGEM_PAGE_SIZE = 150;
 // Conservador de propósito: já vimos a Edge Function anterior estourar
 // WORKER_RESOURCE_LIMIT ao tentar processar tudo de uma vez. Preferimos mais
 // invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
 // de recursos numa invocação só.
-const MAX_PAGES_PER_INVOCATION = 15; // histórico inteiro (~28 páginas) cabe em ~2 invocações
+const MAX_PAGES_PER_INVOCATION = 4; // reduzido de 15 para 4 apos OOM (Memory limit exceeded) em producao 2026-07-23
 // ~4.900 ofertas de FIDC/FIAGRO-FIDC no total. Com processamento sequencial
 // (1 a 1 + delay) isso exigiria ~80+ invocações, estourando o loop de 30
 // chamadas que o front-end já tem. Por isso usamos um pool com concorrência
@@ -218,7 +218,6 @@ async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: nu
         gestora: null, // preenchido na fase de enriquecimento, só para FIDC
         publico_alvo: inferPublicoAlvo(r["nomeTipoRequerimento"] as string | undefined),
         nome_tipo_requerimento: r["nomeTipoRequerimento"] ? String(r["nomeTipoRequerimento"]) : null,
-        raw_data: r,
       };
     });
 
