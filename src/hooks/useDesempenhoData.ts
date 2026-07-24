@@ -131,6 +131,7 @@ interface EmpresaRow {
 interface ProfileRow {
   id: string;
   nome: string;
+  funcao: string | null;
 }
 
 interface EventoRow {
@@ -153,7 +154,7 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
       supabase.from('empresas').select('cnpj,nome,tipo,setor,grupo_economico').range(from, to),
     ).then((data) => ({ data, error: null as any })),
     fetchAllPaged<ProfileRow>((from, to) =>
-      supabase.from('profiles').select('id,nome').range(from, to),
+      supabase.from('profiles').select('id,nome,funcao').range(from, to),
     ).then((data) => ({ data, error: null as any })),
   ]);
 
@@ -191,7 +192,17 @@ async function fetchDesempenho(periodo: Periodo): Promise<AnaliseEntry[]> {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
-  return analises.map((a) => {
+  return analises
+    .filter((a) => {
+      // Gestores podem ser atribuídos como responsáveis no Pipeline Research, mas não entram
+      // no acompanhamento de Desempenho & Agenda (que é focado em Analista/Coordenação).
+      if (!a.analista_responsavel) return true;
+      const p = isUuid(a.analista_responsavel)
+        ? profileById.get(a.analista_responsavel)
+        : profileByNome.get(normNome(a.analista_responsavel));
+      return p?.funcao !== 'Gestor';
+    })
+    .map((a) => {
     const empresa = empresaByCnpj.get(a.empresa_id);
     const titulo = empresa?.nome ?? a.empresa_id;
     const grupoEconomico = empresa?.grupo_economico ?? undefined;
