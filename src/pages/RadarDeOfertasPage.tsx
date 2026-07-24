@@ -85,7 +85,40 @@ type OfertaRow = {
   emissor_ja_cadastrado: boolean;
   analise_id_existente: string | null;
   analise_status_existente: string | null;
+  escriturador: string | null;
+  custodiante: string | null;
+  administrador: string | null;
+  avaliador_risco: string | null;
+  agente_fiduciario: string | null;
+  tipo_lastro: string | null;
+  regime_distribuicao: string | null;
+  detalhe_oferta: Record<string, unknown> | null;
+  documentos_publicados: Array<Record<string, unknown>> | null;
+  historico_status: Array<Record<string, unknown>> | null;
 };
+
+const CAMPOS_PROMOVIDOS: Array<{ key: keyof OfertaRow; label: string; campoNome: string }> = [
+  { key: "escriturador", label: "Escriturador", campoNome: "Escriturador" },
+  { key: "custodiante", label: "Custodiante", campoNome: "Custodiante" },
+  { key: "administrador", label: "Administrador", campoNome: "Administrador" },
+  { key: "avaliador_risco", label: "Avaliador de risco", campoNome: "Avaliador de risco" },
+  { key: "agente_fiduciario", label: "Agente fiduciário", campoNome: "Agente fiduciario" },
+  { key: "tipo_lastro", label: "Tipo de lastro", campoNome: "Tipo de lastro" },
+  { key: "regime_distribuicao", label: "Regime de distribuição", campoNome: "Regime de distribuicao" },
+];
+
+function cvmOfertaUrl(idRequerimento: string | null): string {
+  if (!idRequerimento) return CVM_DATASET_URL;
+  return `https://web.cvm.gov.br/sre-publico-cvm/#/oferta-publica/${idRequerimento}`;
+}
+
+function formatBytes(v: unknown): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+  if (n >= 1_000) return `${(n / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} KB`;
+  return `${n} B`;
+}
 
 type SyncLogRow = {
   id: string;
