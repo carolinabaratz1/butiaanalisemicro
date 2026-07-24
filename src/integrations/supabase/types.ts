@@ -624,6 +624,13 @@ export type Database = {
             referencedColumns: ["cnpj"]
           },
           {
+            foreignKeyName: "assembleias_cnpj_empresa_fkey"
+            columns: ["cnpj_empresa"]
+            isOneToOne: false
+            referencedRelation: "v_ofertas_publicas_cvm_enriquecida"
+            referencedColumns: ["empresa_id_existente"]
+          },
+          {
             foreignKeyName: "assembleias_isin_fkey"
             columns: ["isin"]
             isOneToOne: false
@@ -2930,12 +2937,18 @@ export type Database = {
       }
       v_ofertas_publicas_cvm_enriquecida: {
         Row: {
+          analise_id_existente: string | null
+          analise_status_existente: string | null
           cnpj_emissor: string | null
           coordenador_lider: string | null
           data_encerramento: string | null
           data_referencia: string | null
           emissor_conhecido_nome: string | null
+          emissor_ja_cadastrado: boolean | null
           emissor_ja_conhecido: boolean | null
+          empresa_id_existente: string | null
+          empresa_nome_cadastrado: string | null
+          empresa_rating_atual: string | null
           first_seen_at: string | null
           hash_linha: string | null
           id: number | null
