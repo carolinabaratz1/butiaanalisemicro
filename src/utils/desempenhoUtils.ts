@@ -47,10 +47,19 @@ export function periodoAnterior(periodo: Periodo, ref: Date = new Date()): { ini
 
 export function filtrarPorPeriodo(analises: AnaliseEntry[], inicio: Date, fim?: Date): AnaliseEntry[] {
   return analises.filter((a) => {
-    const d = new Date(a.dataInicio);
-    if (d < inicio) return false;
-    if (fim && d >= fim) return false;
-    return true;
+    // Análises já entregues contam no período em que a ENTREGA aconteceu (não a data de início) -
+    // uma análise iniciada há meses mas entregue esta semana deve aparecer como entrega desta semana.
+    if (a.dataEntregueEm) {
+      const entrega = new Date(a.dataEntregueEm);
+      if (entrega < inicio) return false;
+      if (fim && entrega >= fim) return false;
+      return true;
+    }
+    // Análises ainda em aberto representam trabalho atual e não devem sumir só porque começaram
+    // antes da janela selecionada. Isso só vale para o período "atual" (sem `fim`) - numa janela
+    // histórica ("período anterior", com `fim` definido) uma análise ainda aberta hoje não fazia
+    // parte, por definição, daquele período já encerrado no passado.
+    return !fim;
   });
 }
 
