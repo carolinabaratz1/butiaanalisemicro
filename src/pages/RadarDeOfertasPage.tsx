@@ -17,7 +17,8 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, ExternalLink, Search, FileSearch } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink, Search, FileSearch, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { statusBadgeClass } from "@/utils/analiseStatus";
 
