@@ -2079,14 +2079,22 @@ export type Database = {
       }
       ofertas_publicas_cvm: {
         Row: {
+          administrador: string | null
+          agente_fiduciario: string | null
+          avaliador_risco: string | null
           cnpj_coordenador_lider: string | null
           cnpj_emissor: string | null
           coordenador_lider: string | null
+          custodiante: string | null
           data_encerramento: string | null
           data_referencia: string | null
+          detalhe_oferta: Json | null
+          documentos_publicados: Json | null
+          escriturador: string | null
           first_seen_at: string
           gestora: string | null
           hash_linha: string
+          historico_status: Json | null
           id: number
           id_requerimento_cvm: string | null
           last_seen_at: string
@@ -2099,21 +2107,31 @@ export type Database = {
           numero_serie: string | null
           publico_alvo: string | null
           raw_data: Json
+          regime_distribuicao: string | null
           situacao: string | null
           source_dataset: string
           taxa_emissao: string | null
           tipo_ativo: string | null
+          tipo_lastro: string | null
           valor_total: number | null
         }
         Insert: {
+          administrador?: string | null
+          agente_fiduciario?: string | null
+          avaliador_risco?: string | null
           cnpj_coordenador_lider?: string | null
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
+          custodiante?: string | null
           data_encerramento?: string | null
           data_referencia?: string | null
+          detalhe_oferta?: Json | null
+          documentos_publicados?: Json | null
+          escriturador?: string | null
           first_seen_at?: string
           gestora?: string | null
           hash_linha: string
+          historico_status?: Json | null
           id?: number
           id_requerimento_cvm?: string | null
           last_seen_at?: string
@@ -2126,21 +2144,31 @@ export type Database = {
           numero_serie?: string | null
           publico_alvo?: string | null
           raw_data?: Json
+          regime_distribuicao?: string | null
           situacao?: string | null
           source_dataset: string
           taxa_emissao?: string | null
           tipo_ativo?: string | null
+          tipo_lastro?: string | null
           valor_total?: number | null
         }
         Update: {
+          administrador?: string | null
+          agente_fiduciario?: string | null
+          avaliador_risco?: string | null
           cnpj_coordenador_lider?: string | null
           cnpj_emissor?: string | null
           coordenador_lider?: string | null
+          custodiante?: string | null
           data_encerramento?: string | null
           data_referencia?: string | null
+          detalhe_oferta?: Json | null
+          documentos_publicados?: Json | null
+          escriturador?: string | null
           first_seen_at?: string
           gestora?: string | null
           hash_linha?: string
+          historico_status?: Json | null
           id?: number
           id_requerimento_cvm?: string | null
           last_seen_at?: string
@@ -2153,10 +2181,12 @@ export type Database = {
           numero_serie?: string | null
           publico_alvo?: string | null
           raw_data?: Json
+          regime_distribuicao?: string | null
           situacao?: string | null
           source_dataset?: string
           taxa_emissao?: string | null
           tipo_ativo?: string | null
+          tipo_lastro?: string | null
           valor_total?: number | null
         }
         Relationships: []
