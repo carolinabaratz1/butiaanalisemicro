@@ -864,11 +864,110 @@ export default function RadarDeOfertasPage() {
                 </div>
               </div>
 
-              {/* Todos os campos brutos vindos do CSV da CVM — inclui qualquer coluna
-                  que a Edge Function ainda não normalizou, para nunca esconder dado disponível.
-                  Para ofertas da fonte sre_api, raw_data é intencionalmente vazio (os campos
-                  já vêm normalizados acima), então mostramos uma nota em vez de uma caixa vazia. */}
-              {Object.keys(detalheOferta.raw_data || {}).length > 0 ? (
+              {/* Campos promovidos (só quando não nulos — cobertura varia por tipo de ativo). */}
+              {(() => {
+                const promovidos = CAMPOS_PROMOVIDOS.filter((c) => detalheOferta[c.key]);
+                if (promovidos.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-xs font-medium text-foreground mb-2">Estrutura da oferta</p>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      {promovidos.map((c) => (
+                        <div key={c.key as string}>
+                          <p className="text-muted-foreground">{c.label}</p>
+                          <p className="font-medium break-words">{String(detalheOferta[c.key])}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Histórico de status. */}
+              {Array.isArray(detalheOferta.historico_status) && detalheOferta.historico_status.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Histórico de status</p>
+                  <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto">
+                    {detalheOferta.historico_status.map((item, idx) => {
+                      const it = item as Record<string, unknown>;
+                      const data = (it.data as string) || "";
+                      const hora = (it.hora as string) || "";
+                      const status = (it.status as string) || "—";
+                      const obs = (it.observacao as string) || "";
+                      return (
+                        <div key={idx} className="px-3 py-2 text-[11px]">
+                          <div className="flex justify-between gap-4">
+                            <span className="text-muted-foreground shrink-0">
+                              {[data, hora].filter(Boolean).join(" ") || "—"}
+                            </span>
+                            <span className="font-medium text-right">{status}</span>
+                          </div>
+                          {obs && <p className="text-muted-foreground mt-0.5 break-words">{obs}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Documentos publicados. */}
+              {Array.isArray(detalheOferta.documentos_publicados) && detalheOferta.documentos_publicados.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Documentos publicados</p>
+                  <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto">
+                    {detalheOferta.documentos_publicados.map((item, idx) => {
+                      const it = item as Record<string, unknown>;
+                      const nome = (it.nome as string) || "Documento";
+                      const data = (it.data as string) || "";
+                      const ext = (it.extencao as string) || (it.extensao as string) || "";
+                      return (
+                        <div key={idx} className="flex justify-between gap-4 px-3 py-1.5 text-[11px]">
+                          <span className="font-medium break-words">{nome}</span>
+                          <span className="text-muted-foreground shrink-0 text-right">
+                            {[data, ext ? ext.toUpperCase() : "", formatBytes(it.tamanho)]
+                              .filter((s) => s && s !== "—")
+                              .join(" · ") || "—"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Outros campos do detalhe_oferta que não estão cobertos pelos dedicados. */}
+              {(() => {
+                const detalhe = detalheOferta.detalhe_oferta;
+                if (!detalhe || typeof detalhe !== "object") return null;
+                const cobertos = new Set<string>([
+                  ...CAMPOS_PROMOVIDOS.map((c) => c.campoNome),
+                  "Gestor",
+                ]);
+                const extras = Object.entries(detalhe as Record<string, unknown>).filter(
+                  ([k, v]) => !cobertos.has(k) && v !== null && v !== undefined && String(v).trim() !== "",
+                );
+                if (extras.length === 0) return null;
+                return (
+                  <Collapsible>
+                    <CollapsibleTrigger className="flex items-center gap-1 text-xs font-medium text-foreground hover:underline">
+                      <ChevronDown className="h-3.5 w-3.5" /> Outros campos ({extras.length})
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto mt-2">
+                        {extras.map(([campo, valor]) => (
+                          <div key={campo} className="flex justify-between gap-4 px-3 py-1.5 text-[11px]">
+                            <span className="text-muted-foreground shrink-0">{campo}</span>
+                            <span className="text-right break-all">{String(valor)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })()}
+
+              {/* Campos brutos do CSV legado (só existe quando source_dataset != sre_api). */}
+              {Object.keys(detalheOferta.raw_data || {}).length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-foreground mb-2">Todos os campos disponíveis (fonte CVM)</p>
                   <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto">
@@ -880,19 +979,18 @@ export default function RadarDeOfertasPage() {
                     ))}
                   </div>
                 </div>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  Todos os campos disponíveis para esta oferta já estão normalizados acima (fonte: API da CVM).
-                </p>
               )}
 
               <a
-                href={CVM_DATASET_URL}
+                href={cvmOfertaUrl(detalheOferta.id_requerimento_cvm)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
               >
-                <ExternalLink className="h-3.5 w-3.5" /> Ver fonte de dados na CVM
+                <ExternalLink className="h-3.5 w-3.5" />
+                {detalheOferta.id_requerimento_cvm
+                  ? "Ver esta oferta no site da CVM"
+                  : "Ver fonte de dados na CVM"}
               </a>
             </div>
           )}
