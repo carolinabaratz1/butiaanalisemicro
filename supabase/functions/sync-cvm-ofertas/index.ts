@@ -42,16 +42,28 @@ const LISTAGEM_PAGE_SIZE = 150;
 // invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
 // de recursos numa invocação só.
 const MAX_PAGES_PER_INVOCATION = 3; // reduzido para evitar WORKER_RESOURCE_LIMIT em produção
-// ~4.900 ofertas de FIDC/FIAGRO-FIDC no total. Com processamento sequencial
-// (1 a 1 + delay) isso exigiria ~80+ invocações, estourando o loop de 30
-// chamadas que o front-end já tem. Por isso usamos um pool com concorrência
-// limitada (ENRICH_CONCURRENCY) em vez de fila estritamente sequencial —
-// ainda é um limite deliberado (não dispara tudo de uma vez), só que várias
-// chamadas em paralelo por lote em vez de uma atrás da outra.
-const ENRICH_BATCH_SIZE = 60;
+// Agora são 3 chamadas HTTP por oferta na fase de enriquecimento (infOferta +
+// documentosPublicados + historicoStatus), aplicado a TODOS os tipos de ativo
+// (não só FIDC). Reduzimos batch e concorrência proporcionalmente para não
+// estourar memória/tempo por invocação — o front-end já resume em loop.
+const ENRICH_BATCH_SIZE = 20;
 const ENRICH_CONCURRENCY = 2;
 const FETCH_TIMEOUT_MS = 20_000;
 const INVOCATION_SOFT_DEADLINE_MS = 40_000;
+
+// Mapa exato campoNome (como vem da CVM, com acentuação) → coluna dedicada.
+// Qualquer campo fora deste mapa vai inteiro para detalhe_oferta (jsonb).
+// "Gestor" continua sendo tratado à parte e vai para a coluna `gestora`
+// (mantido do comportamento anterior — não mexer).
+const CAMPO_TO_COLUMN: Record<string, string> = {
+  "Escriturador": "escriturador",
+  "Custodiante": "custodiante",
+  "Administrador": "administrador",
+  "Avaliador de risco": "avaliador_risco",
+  "Agente fiduciário": "agente_fiduciario",
+  "Tipo de lastro": "tipo_lastro",
+  "Regime de distribuição": "regime_distribuicao",
+};
 
 type SyncBody = {
   log_id?: string;
@@ -182,11 +194,22 @@ async function buscarPaginaDetalhado(pagina: number) {
   };
 }
 
-async function buscarGestorInfOferta(idRequerimento: string): Promise<string> {
+async function buscarInfOferta(idRequerimento: string): Promise<Array<{ campoNome?: string; valor?: string }>> {
   const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/infOferta/${idRequerimento}`, { method: "GET" });
   const campos = (await res.json()) as Array<{ campoNome?: string; valor?: string }>;
-  const gestor = Array.isArray(campos) ? campos.find((c) => c.campoNome === "Gestor") : null;
-  return gestor?.valor?.trim() || "";
+  return Array.isArray(campos) ? campos : [];
+}
+
+async function buscarDocumentosPublicados(idRequerimento: string): Promise<unknown[]> {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/documentosPublicados/${idRequerimento}`, { method: "GET" });
+  const arr = await res.json();
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function buscarHistoricoStatus(idRequerimento: string): Promise<unknown[]> {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/historicoStatus/${idRequerimento}`, { method: "GET" });
+  const arr = await res.json();
+  return Array.isArray(arr) ? arr : [];
 }
 
 // deno-lint-ignore no-explicit-any
@@ -261,11 +284,15 @@ async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: nu
 
 // deno-lint-ignore no-explicit-any
 async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: SyncTotals, deadlineAt: number) {
+  // Enriquecimento agora vale para TODOS os tipos de ativo (não só FIDC).
+  // Usamos `detalhe_oferta IS NULL` como marcador de "ainda não enriquecido"
+  // — depois do enriquecimento essa coluna sempre fica preenchida (nem que
+  // seja com {} para ofertas em que a API retornou lista vazia), então a
+  // fase não reprocessa infinitamente as mesmas linhas.
   const { data: pendentes, error: selectError } = await supabase
     .from("ofertas_publicas_cvm")
-    .select("id, id_requerimento_cvm")
-    .is("gestora", null)
-    .ilike("tipo_ativo", "%FIDC%")
+    .select("id, id_requerimento_cvm, tipo_ativo")
+    .is("detalhe_oferta", null)
     .not("id_requerimento_cvm", "is", null)
     .order("id_requerimento_cvm", { ascending: true })
     .limit(ENRICH_BATCH_SIZE);
@@ -278,9 +305,6 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: true };
   }
 
-  // Pool com concorrência limitada: processa até ENRICH_CONCURRENCY ofertas
-  // por vez (em vez de uma fila 100% sequencial), pra caber no orçamento de
-  // tempo de uma invocação sem martelar a API da CVM com tudo de uma vez.
   let cursor = 0;
   let processedThisInvocation = 0;
   async function worker() {
@@ -288,16 +312,61 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
       const row = pendentes[cursor];
       cursor++;
       try {
-        const gestor = await buscarGestorInfOferta(row.id_requerimento_cvm);
-        await supabase
-          .from("ofertas_publicas_cvm")
-          .update({ gestora: gestor }) // string vazia = "já verificado, sem Gestor informado" (evita reprocessar pra sempre)
-          .eq("id", row.id);
+        // 3 chamadas em paralelo por oferta (independentes entre si). Usamos
+        // allSettled para que a falha de um endpoint específico não descarte
+        // as outras duas — assim ainda registramos o que deu certo.
+        const [infoRes, docsRes, histRes] = await Promise.allSettled([
+          buscarInfOferta(row.id_requerimento_cvm),
+          buscarDocumentosPublicados(row.id_requerimento_cvm),
+          buscarHistoricoStatus(row.id_requerimento_cvm),
+        ]);
+
+        // deno-lint-ignore no-explicit-any
+        const update: Record<string, any> = {};
+
+        if (infoRes.status === "fulfilled") {
+          const campos = infoRes.value;
+          // Mapa completo campoNome:valor — fonte de verdade caso a CVM
+          // mude/adicione campos no futuro.
+          const detalhe: Record<string, string> = {};
+          for (const c of campos) {
+            const nome = c.campoNome?.trim();
+            const valor = c.valor?.trim() ?? "";
+            if (!nome) continue;
+            detalhe[nome] = valor;
+            if (nome === "Gestor") {
+              update.gestora = valor;
+              continue;
+            }
+            const col = CAMPO_TO_COLUMN[nome];
+            if (col) update[col] = valor;
+          }
+          update.detalhe_oferta = detalhe;
+        } else {
+          console.warn(`sync-cvm-ofertas: infOferta falhou id=${row.id_requerimento_cvm}`, infoRes.reason);
+          // Marca como {} pra não travar essa oferta na fila para sempre;
+          // uma próxima sincronização não a reprocessa (fica fora do
+          // filtro `detalhe_oferta IS NULL`).
+          update.detalhe_oferta = {};
+        }
+
+        if (docsRes.status === "fulfilled") {
+          update.documentos_publicados = docsRes.value;
+        } else {
+          console.warn(`sync-cvm-ofertas: documentosPublicados falhou id=${row.id_requerimento_cvm}`, docsRes.reason);
+        }
+
+        if (histRes.status === "fulfilled") {
+          update.historico_status = histRes.value;
+        } else {
+          console.warn(`sync-cvm-ofertas: historicoStatus falhou id=${row.id_requerimento_cvm}`, histRes.reason);
+        }
+
+        await supabase.from("ofertas_publicas_cvm").update(update).eq("id", row.id);
         runningTotals.totalAtualizadas += 1;
         processedThisInvocation += 1;
       } catch (err) {
-        console.warn(`sync-cvm-ofertas: falha ao buscar Gestor de idRequerimento=${row.id_requerimento_cvm}`, err);
-        // não interrompe o lote inteiro por causa de uma oferta específica
+        console.warn(`sync-cvm-ofertas: falha ao enriquecer idRequerimento=${row.id_requerimento_cvm}`, err);
       }
     }
   }
@@ -317,8 +386,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
   const { data: restante, error: remainingError } = await supabase
     .from("ofertas_publicas_cvm")
     .select("id")
-    .is("gestora", null)
-    .ilike("tipo_ativo", "%FIDC%")
+    .is("detalhe_oferta", null)
     .not("id_requerimento_cvm", "is", null)
     .limit(1);
   if (remainingError) throw remainingError;
