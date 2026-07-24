@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -17,6 +18,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, ExternalLink, Search, FileSearch } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 // ----------------------------------------------------------------------------
 // Radar de Ofertas
@@ -32,6 +34,22 @@ import { Loader2, RefreshCw, ExternalLink, Search, FileSearch } from "lucide-rea
 // exibe raw_data completo, além dos campos normalizados, para nunca esconder
 // informação que a CVM disponibilizou mas que não foi mapeada para uma coluna
 // dedicada.
+//
+// DUAS FONTES DE DADOS na mesma tabela/view (source_dataset):
+//  - "sre_api": ~900 linhas, sincronizadas via API própria da CVM (SRE), com
+//    campos ricos (situação, volume, coordenador líder, público-alvo, etc.).
+//  - "oferta_distribuicao.csv": ~16 mil linhas históricas do dataset CSV legado,
+//    com quase todos os campos ricos vazios (só tipo/emissor/datas).
+// Por padrão o Dashboard mostra só "sre_api" (dados completos) — misturar as
+// duas fontes nos KPIs/gráficos diluiria os números com milhares de linhas
+// sem situação/volume/coordenador. Quem quiser o histórico completo pode
+// ligar o toggle "Incluir histórico CSV".
+//
+// Gestora (gestor do fundo, só para Cotas de FIDC/FIAGRO-FIDC) depende de uma
+// segunda etapa de enriquecimento que roda de forma incremental e pode não ter
+// terminado — por isso é tratada como "pendente" quando nula, não como erro.
+// Taxa de emissão NÃO existe nos dados da CVM (API de registro, não de termos
+// de remuneração) — não é exibida nesta página.
 // ----------------------------------------------------------------------------
 
 const CVM_DATASET_URL = "https://dados.cvm.gov.br/dataset/oferta-distrib";
@@ -49,9 +67,17 @@ type OfertaRow = {
   data_referencia: string | null;
   data_encerramento: string | null;
   valor_total: number | null;
+  coordenador_lider: string | null;
+  cnpj_coordenador_lider: string | null;
+  gestora: string | null;
+  publico_alvo: string | null;
+  id_requerimento_cvm: string | null;
+  numero_processo_cvm: string | null;
+  nome_tipo_requerimento: string | null;
   raw_data: Record<string, string>;
   source_dataset: string | null;
-  synced_at: string;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
   empresa_id_existente: string | null;
   empresa_nome_cadastrado: string | null;
   empresa_rating_atual: string | null;
@@ -78,9 +104,35 @@ const PERIODO_OPTIONS = [
   { value: "all", label: "Todo o histórico" },
 ];
 
+// Só para Cotas de FIDC que a Gestora é enriquecida — para os demais tipos de
+// ativo o campo nunca é preenchido e isso é esperado (não é uma pendência),
+// então o dialog de detalhes diferencia os dois casos.
+const TIPOS_COM_ENRIQUECIMENTO_GESTORA = ["Cotas de Fundo de Investimento em Direitos Creditórios (FIDC)"];
+
+const CHART_COLORS = [
+  "hsl(142 71% 45%)",
+  "hsl(200 70% 50%)",
+  "hsl(38 92% 50%)",
+  "hsl(280 60% 55%)",
+  "hsl(0 72% 51%)",
+  "hsl(160 60% 45%)",
+  "hsl(215 15% 55%)",
+  "hsl(320 65% 55%)",
+];
+
 function formatCurrency(v: number | null) {
   if (v === null || v === undefined) return "—";
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+
+// Versão compacta para eixos/legendas de gráfico e cards de KPI (ex.: "R$ 30,4 bi").
+function formatCurrencyCompacto(v: number | null | undefined) {
+  if (!v) return "R$ 0";
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000_000) return `R$ ${(v / 1_000_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
+  if (abs >= 1_000_000) return `R$ ${(v / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (abs >= 1_000) return `R$ ${(v / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil`;
+  return formatCurrency(v);
 }
 
 function formatDate(d: string | null) {
@@ -103,7 +155,7 @@ function formatDateTime(d: string | null) {
 
 function situacaoBadgeVariant(situacao: string | null): "default" | "secondary" | "outline" | "destructive" {
   const s = (situacao || "").toLowerCase();
-  if (s.includes("registrad") || s.includes("deferid")) return "default";
+  if (s.includes("registrad") || s.includes("deferid") || s.includes("concedid")) return "default";
   if (s.includes("cancelad") || s.includes("indeferid")) return "destructive";
   if (s.includes("análise") || s.includes("analise")) return "secondary";
   return "outline";
@@ -114,9 +166,11 @@ export default function RadarDeOfertasPage() {
   const queryClient = useQueryClient();
 
   const [tipoFiltro, setTipoFiltro] = useState<string>("todos");
+  const [situacaoFiltro, setSituacaoFiltro] = useState<string>("todas");
   const [periodoFiltro, setPeriodoFiltro] = useState<string>("30");
   const [busca, setBusca] = useState("");
   const [detalheOferta, setDetalheOferta] = useState<OfertaRow | null>(null);
+  const [incluirHistoricoCsv, setIncluirHistoricoCsv] = useState(false);
 
   const { data: ultimoSync } = useQuery({
     queryKey: ["cvm-ofertas-sync-log-latest"],
@@ -134,13 +188,17 @@ export default function RadarDeOfertasPage() {
   });
 
   const { data: ofertas = [], isLoading } = useQuery({
-    queryKey: ["radar-ofertas-cvm"],
+    queryKey: ["radar-ofertas-cvm", incluirHistoricoCsv],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("v_ofertas_publicas_cvm_enriquecida")
         .select("*")
         .order("data_referencia", { ascending: false, nullsFirst: false })
         .limit(5000);
+      if (!incluirHistoricoCsv) {
+        query = query.eq("source_dataset", "sre_api");
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as unknown as OfertaRow[];
     },
@@ -152,28 +210,84 @@ export default function RadarDeOfertasPage() {
     return Array.from(set).sort();
   }, [ofertas]);
 
+  const situacoesDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    ofertas.forEach((o) => o.situacao && set.add(o.situacao));
+    return Array.from(set).sort();
+  }, [ofertas]);
+
   const ofertasFiltradas = useMemo(() => {
     const cutoff = periodoFiltro === "all" ? null : Date.now() - Number(periodoFiltro) * 86_400_000;
     const buscaLower = busca.trim().toLowerCase();
 
     return ofertas.filter((o) => {
       if (tipoFiltro !== "todos" && o.tipo_ativo !== tipoFiltro) return false;
+      if (situacaoFiltro !== "todas" && o.situacao !== situacaoFiltro) return false;
       if (cutoff !== null) {
         const ref = o.data_referencia ? new Date(o.data_referencia + "T00:00:00").getTime() : null;
         if (ref === null || ref < cutoff) return false;
       }
       if (buscaLower) {
-        const haystack = `${o.nome_emissor ?? ""} ${o.cnpj_emissor ?? ""} ${o.numero_registro_cvm ?? ""}`.toLowerCase();
+        const haystack =
+          `${o.nome_emissor ?? ""} ${o.cnpj_emissor ?? ""} ${o.numero_registro_cvm ?? ""} ${o.coordenador_lider ?? ""}`.toLowerCase();
         if (!haystack.includes(buscaLower)) return false;
       }
       return true;
     });
-  }, [ofertas, tipoFiltro, periodoFiltro, busca]);
+  }, [ofertas, tipoFiltro, situacaoFiltro, periodoFiltro, busca]);
 
   const novosEmissores = useMemo(
     () => ofertasFiltradas.filter((o) => !o.emissor_ja_cadastrado).length,
     [ofertasFiltradas],
   );
+
+  const volumeTotal = useMemo(
+    () => ofertasFiltradas.reduce((acc, o) => acc + (o.valor_total ?? 0), 0),
+    [ofertasFiltradas],
+  );
+
+  // Distribuição por tipo de ativo (contagem + volume), ordenada por volume desc,
+  // limitada aos 8 maiores para caber no gráfico (o restante agrupado em "Outros").
+  const distribuicaoPorTipo = useMemo(() => {
+    const map = new Map<string, { tipo: string; quantidade: number; volume: number }>();
+    ofertasFiltradas.forEach((o) => {
+      const key = o.tipo_ativo || "Não informado";
+      const atual = map.get(key) ?? { tipo: key, quantidade: 0, volume: 0 };
+      atual.quantidade += 1;
+      atual.volume += o.valor_total ?? 0;
+      map.set(key, atual);
+    });
+    const lista = Array.from(map.values()).sort((a, b) => b.volume - a.volume);
+    if (lista.length <= 8) return lista;
+    const top = lista.slice(0, 7);
+    const outros = lista
+      .slice(7)
+      .reduce(
+        (acc, cur) => ({
+          tipo: "Outros",
+          quantidade: acc.quantidade + cur.quantidade,
+          volume: acc.volume + cur.volume,
+        }),
+        { tipo: "Outros", quantidade: 0, volume: 0 },
+      );
+    return [...top, outros];
+  }, [ofertasFiltradas]);
+
+  // Ranking dos coordenadores líderes por volume (top 8) — só faz sentido para
+  // linhas com coordenador_lider preenchido (fonte sre_api).
+  const topCoordenadores = useMemo(() => {
+    const map = new Map<string, { nome: string; quantidade: number; volume: number }>();
+    ofertasFiltradas.forEach((o) => {
+      if (!o.coordenador_lider) return;
+      const atual = map.get(o.coordenador_lider) ?? { nome: o.coordenador_lider, quantidade: 0, volume: 0 };
+      atual.quantidade += 1;
+      atual.volume += o.valor_total ?? 0;
+      map.set(o.coordenador_lider, atual);
+    });
+    return Array.from(map.values())
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 8);
+  }, [ofertasFiltradas]);
 
   const sincronizarAgora = useMutation({
     mutationFn: async () => {
@@ -350,7 +464,13 @@ export default function RadarDeOfertasPage() {
       </div>
 
       {/* Cards de resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <Card className="bg-card border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Volume total (filtro atual)</p>
+            <p className="text-2xl font-semibold text-foreground mt-1">{formatCurrencyCompacto(volumeTotal)}</p>
+          </CardContent>
+        </Card>
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Ofertas no filtro atual</p>
@@ -383,6 +503,82 @@ export default function RadarDeOfertasPage() {
         </Card>
       </div>
 
+      {/* Gráficos: distribuição por tipo de ativo e ranking de coordenadores líderes */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <Card className="bg-card border-border">
+          <CardHeader className="p-4 pb-0">
+            <CardTitle className="text-sm font-medium">Distribuição por tipo de ativo (volume)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            {distribuicaoPorTipo.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-8 text-center">Sem dados para os filtros atuais.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={distribuicaoPorTipo} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tickFormatter={(v) => formatCurrencyCompacto(v)} tick={{ fontSize: 10 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="tipo"
+                    width={140}
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v: string) => (v.length > 24 ? `${v.slice(0, 24)}…` : v)}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name) =>
+                      name === "volume" ? [formatCurrencyCompacto(value), "Volume"] : [value, "Quantidade"]
+                    }
+                    labelFormatter={(label) => label}
+                    contentStyle={{ fontSize: 12 }}
+                  />
+                  <Bar dataKey="volume" radius={[0, 4, 4, 0]}>
+                    {distribuicaoPorTipo.map((_, idx) => (
+                      <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardHeader className="p-4 pb-0">
+            <CardTitle className="text-sm font-medium">Top coordenadores líderes (volume)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            {topCoordenadores.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-8 text-center">
+                Nenhum coordenador líder identificado para os filtros atuais.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {topCoordenadores.map((c, idx) => {
+                  const maxVolume = topCoordenadores[0]?.volume || 1;
+                  const pct = Math.max(4, Math.round((c.volume / maxVolume) * 100));
+                  return (
+                    <div key={c.nome} className="text-xs">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="font-medium text-foreground truncate pr-2">{c.nome}</span>
+                        <span className="text-muted-foreground shrink-0">
+                          {formatCurrencyCompacto(c.volume)} · {c.quantidade} ofertas
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Filtros */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative">
@@ -390,7 +586,7 @@ export default function RadarDeOfertasPage() {
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar emissor, CNPJ ou registro..."
+            placeholder="Buscar emissor, CNPJ, registro ou coordenador..."
             className="h-8 text-xs pl-8 pr-3 rounded-md border border-input bg-background w-64"
           />
         </div>
@@ -407,6 +603,19 @@ export default function RadarDeOfertasPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={situacaoFiltro} onValueChange={setSituacaoFiltro}>
+          <SelectTrigger className="h-8 text-xs w-44">
+            <SelectValue placeholder="Situação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as situações</SelectItem>
+            {situacoesDisponiveis.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={periodoFiltro} onValueChange={setPeriodoFiltro}>
           <SelectTrigger className="h-8 text-xs w-44">
             <SelectValue placeholder="Período" />
@@ -419,6 +628,10 @@ export default function RadarDeOfertasPage() {
             ))}
           </SelectContent>
         </Select>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
+          <Switch checked={incluirHistoricoCsv} onCheckedChange={setIncluirHistoricoCsv} />
+          Incluir histórico CSV (dados limitados)
+        </label>
       </div>
 
       {/* Tabela */}
@@ -436,8 +649,7 @@ export default function RadarDeOfertasPage() {
                 <TableRow>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Emissor</TableHead>
-                  <TableHead>Nº Registro CVM</TableHead>
-                  <TableHead>Modalidade</TableHead>
+                  <TableHead>Coordenador líder</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Data ref.</TableHead>
                   <TableHead className="text-right">Valor total</TableHead>
@@ -447,7 +659,7 @@ export default function RadarDeOfertasPage() {
               <TableBody>
                 {ofertasFiltradas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
                       Nenhuma oferta encontrada para os filtros selecionados.
                     </TableCell>
                   </TableRow>
@@ -469,8 +681,7 @@ export default function RadarDeOfertasPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs">{oferta.numero_registro_cvm || "—"}</TableCell>
-                    <TableCell className="text-xs">{oferta.modalidade || "—"}</TableCell>
+                    <TableCell className="text-xs">{oferta.coordenador_lider || "—"}</TableCell>
                     <TableCell className="text-xs">
                       <Badge variant={situacaoBadgeVariant(oferta.situacao)} className="text-[9px]">
                         {oferta.situacao || "—"}
@@ -536,8 +747,10 @@ export default function RadarDeOfertasPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Modalidade</p>
-                  <p className="font-medium">{detalheOferta.modalidade || "—"}</p>
+                  <p className="text-muted-foreground">Modalidade / tipo de requerimento</p>
+                  <p className="font-medium">
+                    {detalheOferta.modalidade || detalheOferta.nome_tipo_requerimento || "—"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Situação</p>
@@ -556,6 +769,29 @@ export default function RadarDeOfertasPage() {
                   <p className="font-medium">{formatCurrency(detalheOferta.valor_total)}</p>
                 </div>
                 <div>
+                  <p className="text-muted-foreground">Coordenador líder</p>
+                  <p className="font-medium">{detalheOferta.coordenador_lider || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Gestora</p>
+                  <p className="font-medium">
+                    {detalheOferta.gestora ||
+                      (TIPOS_COM_ENRIQUECIMENTO_GESTORA.includes(detalheOferta.tipo_ativo)
+                        ? "Pendente (enriquecimento em andamento)"
+                        : "—")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Público-alvo</p>
+                  <p className="font-medium">{detalheOferta.publico_alvo || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Nº requerimento / processo CVM</p>
+                  <p className="font-medium">
+                    {detalheOferta.id_requerimento_cvm || "—"} / {detalheOferta.numero_processo_cvm || "—"}
+                  </p>
+                </div>
+                <div>
                   <p className="text-muted-foreground">Emissor na plataforma</p>
                   <p className="font-medium">
                     {detalheOferta.emissor_ja_cadastrado
@@ -566,18 +802,26 @@ export default function RadarDeOfertasPage() {
               </div>
 
               {/* Todos os campos brutos vindos do CSV da CVM — inclui qualquer coluna
-                  que a Edge Function ainda não normalizou, para nunca esconder dado disponível. */}
-              <div>
-                <p className="text-xs font-medium text-foreground mb-2">Todos os campos disponíveis (fonte CVM)</p>
-                <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto">
-                  {Object.entries(detalheOferta.raw_data || {}).map(([campo, valor]) => (
-                    <div key={campo} className="flex justify-between gap-4 px-3 py-1.5 text-[11px]">
-                      <span className="text-muted-foreground shrink-0">{campo}</span>
-                      <span className="text-right break-all">{valor || "—"}</span>
-                    </div>
-                  ))}
+                  que a Edge Function ainda não normalizou, para nunca esconder dado disponível.
+                  Para ofertas da fonte sre_api, raw_data é intencionalmente vazio (os campos
+                  já vêm normalizados acima), então mostramos uma nota em vez de uma caixa vazia. */}
+              {Object.keys(detalheOferta.raw_data || {}).length > 0 ? (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-2">Todos os campos disponíveis (fonte CVM)</p>
+                  <div className="border border-border rounded-md divide-y divide-border max-h-64 overflow-y-auto">
+                    {Object.entries(detalheOferta.raw_data || {}).map(([campo, valor]) => (
+                      <div key={campo} className="flex justify-between gap-4 px-3 py-1.5 text-[11px]">
+                        <span className="text-muted-foreground shrink-0">{campo}</span>
+                        <span className="text-right break-all">{valor || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Todos os campos disponíveis para esta oferta já estão normalizados acima (fonte: API da CVM).
+                </p>
+              )}
 
               <a
                 href={CVM_DATASET_URL}
