@@ -2967,32 +2967,48 @@ export type Database = {
       }
       v_ofertas_publicas_cvm_enriquecida: {
         Row: {
+          administrador: string | null
+          agente_fiduciario: string | null
           analise_id_existente: string | null
           analise_status_existente: string | null
+          avaliador_risco: string | null
+          cnpj_coordenador_lider: string | null
           cnpj_emissor: string | null
           coordenador_lider: string | null
+          custodiante: string | null
           data_encerramento: string | null
           data_referencia: string | null
+          detalhe_oferta: Json | null
+          documentos_publicados: Json | null
           emissor_conhecido_nome: string | null
           emissor_ja_cadastrado: boolean | null
           emissor_ja_conhecido: boolean | null
           empresa_id_existente: string | null
           empresa_nome_cadastrado: string | null
           empresa_rating_atual: string | null
+          escriturador: string | null
           first_seen_at: string | null
+          gestora: string | null
           hash_linha: string | null
+          historico_status: Json | null
           id: number | null
+          id_requerimento_cvm: string | null
           last_seen_at: string | null
           modalidade: string | null
           nome_emissor: string | null
+          nome_tipo_requerimento: string | null
           numero_emissao: string | null
+          numero_processo_cvm: string | null
           numero_registro_cvm: string | null
           numero_serie: string | null
+          publico_alvo: string | null
           raw_data: Json | null
+          regime_distribuicao: string | null
           situacao: string | null
           source_dataset: string | null
           taxa_emissao: string | null
           tipo_ativo: string | null
+          tipo_lastro: string | null
           valor_total: number | null
         }
         Relationships: []
