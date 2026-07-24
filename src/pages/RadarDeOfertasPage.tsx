@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, ExternalLink, Search, FileSearch } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { statusBadgeClass } from "@/utils/analiseStatus";
 
 // ----------------------------------------------------------------------------
 // Radar de Ofertas
@@ -260,16 +261,14 @@ export default function RadarDeOfertasPage() {
     const lista = Array.from(map.values()).sort((a, b) => b.volume - a.volume);
     if (lista.length <= 8) return lista;
     const top = lista.slice(0, 7);
-    const outros = lista
-      .slice(7)
-      .reduce(
-        (acc, cur) => ({
-          tipo: "Outros",
-          quantidade: acc.quantidade + cur.quantidade,
-          volume: acc.volume + cur.volume,
-        }),
-        { tipo: "Outros", quantidade: 0, volume: 0 },
-      );
+    const outros = lista.slice(7).reduce(
+      (acc, cur) => ({
+        tipo: "Outros",
+        quantidade: acc.quantidade + cur.quantidade,
+        volume: acc.volume + cur.volume,
+      }),
+      { tipo: "Outros", quantidade: 0, volume: 0 },
+    );
     return [...top, outros];
   }, [ofertasFiltradas]);
 
@@ -651,6 +650,8 @@ export default function RadarDeOfertasPage() {
                   <TableHead>Emissor</TableHead>
                   <TableHead>Coordenador líder</TableHead>
                   <TableHead>Situação</TableHead>
+                  <TableHead>Rating</TableHead>
+                  <TableHead>Status análise</TableHead>
                   <TableHead>Data ref.</TableHead>
                   <TableHead className="text-right">Valor total</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -659,7 +660,7 @@ export default function RadarDeOfertasPage() {
               <TableBody>
                 {ofertasFiltradas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-8">
                       Nenhuma oferta encontrada para os filtros selecionados.
                     </TableCell>
                   </TableRow>
@@ -686,6 +687,26 @@ export default function RadarDeOfertasPage() {
                       <Badge variant={situacaoBadgeVariant(oferta.situacao)} className="text-[9px]">
                         {oferta.situacao || "—"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {oferta.empresa_rating_atual ? (
+                        <Badge variant="outline" className="text-[9px]">
+                          {oferta.empresa_rating_atual}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {oferta.analise_status_existente ? (
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-medium ${statusBadgeClass(oferta.analise_status_existente)}`}
+                        >
+                          {oferta.analise_status_existente}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Não analisada</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs">{formatDate(oferta.data_referencia)}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(oferta.valor_total)}</TableCell>
@@ -798,6 +819,14 @@ export default function RadarDeOfertasPage() {
                       ? `${detalheOferta.empresa_nome_cadastrado} (rating ${detalheOferta.empresa_rating_atual || "—"})`
                       : "Ainda não cadastrado"}
                   </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Rating (plataforma)</p>
+                  <p className="font-medium">{detalheOferta.empresa_rating_atual || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status da análise (plataforma)</p>
+                  <p className="font-medium">{detalheOferta.analise_status_existente || "Não analisada"}</p>
                 </div>
               </div>
 
