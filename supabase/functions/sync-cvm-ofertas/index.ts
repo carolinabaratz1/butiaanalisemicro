@@ -42,16 +42,28 @@ const LISTAGEM_PAGE_SIZE = 150;
 // invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
 // de recursos numa invocação só.
 const MAX_PAGES_PER_INVOCATION = 3; // reduzido para evitar WORKER_RESOURCE_LIMIT em produção
-// ~4.900 ofertas de FIDC/FIAGRO-FIDC no total. Com processamento sequencial
-// (1 a 1 + delay) isso exigiria ~80+ invocações, estourando o loop de 30
-// chamadas que o front-end já tem. Por isso usamos um pool com concorrência
-// limitada (ENRICH_CONCURRENCY) em vez de fila estritamente sequencial —
-// ainda é um limite deliberado (não dispara tudo de uma vez), só que várias
-// chamadas em paralelo por lote em vez de uma atrás da outra.
-const ENRICH_BATCH_SIZE = 60;
+// Agora são 3 chamadas HTTP por oferta na fase de enriquecimento (infOferta +
+// documentosPublicados + historicoStatus), aplicado a TODOS os tipos de ativo
+// (não só FIDC). Reduzimos batch e concorrência proporcionalmente para não
+// estourar memória/tempo por invocação — o front-end já resume em loop.
+const ENRICH_BATCH_SIZE = 20;
 const ENRICH_CONCURRENCY = 2;
 const FETCH_TIMEOUT_MS = 20_000;
 const INVOCATION_SOFT_DEADLINE_MS = 40_000;
+
+// Mapa exato campoNome (como vem da CVM, com acentuação) → coluna dedicada.
+// Qualquer campo fora deste mapa vai inteiro para detalhe_oferta (jsonb).
+// "Gestor" continua sendo tratado à parte e vai para a coluna `gestora`
+// (mantido do comportamento anterior — não mexer).
+const CAMPO_TO_COLUMN: Record<string, string> = {
+  "Escriturador": "escriturador",
+  "Custodiante": "custodiante",
+  "Administrador": "administrador",
+  "Avaliador de risco": "avaliador_risco",
+  "Agente fiduciário": "agente_fiduciario",
+  "Tipo de lastro": "tipo_lastro",
+  "Regime de distribuição": "regime_distribuicao",
+};
 
 type SyncBody = {
   log_id?: string;
