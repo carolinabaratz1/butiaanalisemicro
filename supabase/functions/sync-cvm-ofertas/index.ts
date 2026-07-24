@@ -194,11 +194,22 @@ async function buscarPaginaDetalhado(pagina: number) {
   };
 }
 
-async function buscarGestorInfOferta(idRequerimento: string): Promise<string> {
+async function buscarInfOferta(idRequerimento: string): Promise<Array<{ campoNome?: string; valor?: string }>> {
   const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/infOferta/${idRequerimento}`, { method: "GET" });
   const campos = (await res.json()) as Array<{ campoNome?: string; valor?: string }>;
-  const gestor = Array.isArray(campos) ? campos.find((c) => c.campoNome === "Gestor") : null;
-  return gestor?.valor?.trim() || "";
+  return Array.isArray(campos) ? campos : [];
+}
+
+async function buscarDocumentosPublicados(idRequerimento: string): Promise<unknown[]> {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/documentosPublicados/${idRequerimento}`, { method: "GET" });
+  const arr = await res.json();
+  return Array.isArray(arr) ? arr : [];
+}
+
+async function buscarHistoricoStatus(idRequerimento: string): Promise<unknown[]> {
+  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/historicoStatus/${idRequerimento}`, { method: "GET" });
+  const arr = await res.json();
+  return Array.isArray(arr) ? arr : [];
 }
 
 // deno-lint-ignore no-explicit-any
