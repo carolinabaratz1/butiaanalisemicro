@@ -218,21 +218,26 @@ async function fetchWithRetry(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-async function buscarPaginaDetalhado(pagina: number) {
-  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/detalhado`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      periodoCriacaoProcesso: { de: LISTAGEM_PERIODO_DE, ate: todayBr() },
-      opa: false,
-      tipoOferta: "OFERTA_REGULAR",
-      modalidade: "TODAS",
-      direcaoOrdenacao: "DESC",
-      colunaOrdenacao: "data",
-      pagina,
-      tamanhoPagina: String(LISTAGEM_PAGE_SIZE),
-    }),
-  });
+async function buscarPaginaDetalhado(pagina: number, janela: { de: string; ate: string }) {
+  const res = await fetchWithRetry(
+    `${SRE_BASE}/pesquisar/detalhado`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        periodoCriacaoProcesso: { de: janela.de, ate: janela.ate },
+        opa: false,
+        tipoOferta: "OFERTA_REGULAR",
+        modalidade: "TODAS",
+        direcaoOrdenacao: "DESC",
+        colunaOrdenacao: "data",
+        pagina,
+        tamanhoPagina: String(LISTAGEM_PAGE_SIZE),
+      }),
+    },
+    4,
+    FETCH_TIMEOUT_MS_SEARCH,
+  );
   return (await res.json()) as {
     totalRegistros: number;
     totalPaginas: number;
