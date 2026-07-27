@@ -432,7 +432,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     .eq("id", logId);
 
   if (cursor < pendentes.length || processedThisInvocation === 0) {
-    return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: false };
+    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: false };
   }
 
   const { data: restante, error: remainingError } = await supabase
@@ -443,7 +443,100 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     .limit(1);
   if (remainingError) throw remainingError;
 
-  return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: !restante || restante.length === 0 };
+  const done = !restante || restante.length === 0;
+  return { totals: runningTotals, nextFileIndex: done ? 3 : 2, nextRowOffset: 0, allDone: done };
+}
+
+// -----------------------------------------------------------------------------
+// Fase 1: revisita de status para ofertas não-terminais.
+// Situações terminais (Encerrada, Caducado, Revogada, Expirado, Cancelado) NUNCA
+// mudam — não revisitamos. As demais (Registro Concedido, Aguardando
+// Bookbuilding, Oferta Suspensa, Em cumprimento de exigências) podem transitar,
+// então buscamos /infOferta + /historicoStatus para atualizar situacao,
+// data_encerramento e a timeline. Ordenamos por last_seen_at ASC para que rows
+// mais antigas sejam revisitadas primeiro (round-robin natural).
+// -----------------------------------------------------------------------------
+// deno-lint-ignore no-explicit-any
+async function rodarFaseRevisita(supabase: any, logId: string, totals: SyncTotals, deadlineAt: number) {
+  const { data: pendentes, error: selectError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id, id_requerimento_cvm, situacao, last_seen_at")
+    .in("situacao", NON_TERMINAL_SITUACOES)
+    .not("id_requerimento_cvm", "is", null)
+    .order("last_seen_at", { ascending: true, nullsFirst: true })
+    .limit(REVISIT_BATCH_SIZE);
+  if (selectError) throw selectError;
+
+  let runningTotals = { ...totals };
+
+  if (!pendentes || pendentes.length === 0) {
+    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: false };
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pendentes.length && Date.now() < deadlineAt) {
+      const row = pendentes[cursor];
+      cursor++;
+      try {
+        const [infoRes, histRes] = await Promise.allSettled([
+          buscarInfOferta(row.id_requerimento_cvm),
+          buscarHistoricoStatus(row.id_requerimento_cvm),
+        ]);
+        // deno-lint-ignore no-explicit-any
+        const update: Record<string, any> = { last_seen_at: new Date().toISOString() };
+
+        if (infoRes.status === "fulfilled") {
+          for (const c of infoRes.value) {
+            const nome = c.campoNome?.trim();
+            const valor = c.valor?.trim() ?? "";
+            if (!nome) continue;
+            if (nome === "Situação" || nome === "Situacao") {
+              update.situacao = valor || null;
+            } else if (nome === "Data de encerramento") {
+              const d = parseBrDate(valor);
+              if (d) update.data_encerramento = d;
+            }
+          }
+        }
+        if (histRes.status === "fulfilled") {
+          update.historico_status = histRes.value;
+          // Fallback: derive situação a partir do último item do histórico se
+          // /infOferta não trouxer o campo Situação.
+          if (!update.situacao && Array.isArray(histRes.value) && histRes.value.length > 0) {
+            const ultimo = histRes.value[histRes.value.length - 1] as Record<string, unknown>;
+            const situ = ultimo?.["situacao"] ?? ultimo?.["statusOferta"] ?? ultimo?.["status"];
+            if (situ) update.situacao = String(situ);
+          }
+        }
+
+        await supabase.from("ofertas_publicas_cvm").update(update).eq("id", row.id);
+        runningTotals.totalAtualizadas += 1;
+      } catch (err) {
+        console.warn(`sync-cvm-ofertas: revisita falhou id=${row.id_requerimento_cvm}`, err);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(REVISIT_CONCURRENCY, pendentes.length) }, () => worker()));
+
+  await supabase
+    .from("cvm_ofertas_sync_log")
+    .update({ total_atualizadas: runningTotals.totalAtualizadas })
+    .eq("id", logId);
+
+  // Se ainda existem pendentes que não caberiam na próxima consulta de mesmo
+  // tamanho (ou seja, ainda há mais para revisitar depois desses), continue na
+  // fase 1. Caso contrário, avança para enrich.
+  const { count, error: countError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id", { count: "exact", head: true })
+    .in("situacao", NON_TERMINAL_SITUACOES)
+    .not("id_requerimento_cvm", "is", null)
+    .lt("last_seen_at", new Date(Date.now() - 60 * 60 * 1000).toISOString()); // não revisitar novamente dentro de 1h
+  if (countError) throw countError;
+
+  const aindaTem = (count ?? 0) > 0;
+  return { totals: runningTotals, nextFileIndex: aindaTem ? 1 : 2, nextRowOffset: 0, allDone: false };
 }
 
 function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
