@@ -354,7 +354,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
   let runningTotals = { ...totals };
 
   if (!pendentes || pendentes.length === 0) {
-    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: true };
+    return { totals: runningTotals, nextFileIndex: 3, nextRowOffset: 0, allDone: true };
   }
 
   let cursor = 0;
