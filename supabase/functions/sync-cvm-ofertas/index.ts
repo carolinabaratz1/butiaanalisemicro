@@ -35,21 +35,37 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const SRE_BASE = "https://web.cvm.gov.br/sre-publico-cvm/rest/sitePublico";
-const LISTAGEM_PERIODO_DE = "01/01/1990";
+const LISTAGEM_FALLBACK_DE = "01/01/1990"; // primeira carga (base vazia)
+const LISTAGEM_JANELA_DIAS = 30; // janela incremental para bases já populadas
 const LISTAGEM_PAGE_SIZE = 150;
-// Conservador de propósito: já vimos a Edge Function anterior estourar
-// WORKER_RESOURCE_LIMIT ao tentar processar tudo de uma vez. Preferimos mais
-// invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
-// de recursos numa invocação só.
-const MAX_PAGES_PER_INVOCATION = 3; // reduzido para evitar WORKER_RESOURCE_LIMIT em produção
-// Agora são 3 chamadas HTTP por oferta na fase de enriquecimento (infOferta +
-// documentosPublicados + historicoStatus), aplicado a TODOS os tipos de ativo
-// (não só FIDC). Reduzimos batch e concorrência proporcionalmente para não
-// estourar memória/tempo por invocação — o front-end já resume em loop.
-const ENRICH_BATCH_SIZE = 20;
+const MAX_PAGES_PER_INVOCATION = 3;
+const ENRICH_BATCH_SIZE = 40;
 const ENRICH_CONCURRENCY = 2;
-const FETCH_TIMEOUT_MS = 20_000;
+const REVISIT_BATCH_SIZE = 40;
+const REVISIT_CONCURRENCY = 2;
+const FETCH_TIMEOUT_MS_SEARCH = 45_000; // /pesquisar/detalhado tende a demorar
+const FETCH_TIMEOUT_MS_DETAIL = 20_000; // /infOferta, /documentosPublicados, /historicoStatus
 const INVOCATION_SOFT_DEADLINE_MS = 40_000;
+
+// Situações terminais NÃO são revisitadas (nunca mudam de status).
+// Situações fora dessa lista (Registro Concedido, Aguardando Bookbuilding,
+// Oferta Suspensa, Em cumprimento de exigências) são revisitadas via /infOferta
+// para capturar transição para Encerrada. Linhas com situacao null e/ou
+// id_requerimento_cvm null (legadas do CSV) ficam de fora — não há como
+// consultar.
+const TERMINAL_SITUACOES = new Set<string>([
+  "Oferta Encerrada",
+  "Registro Caducado",
+  "Oferta Revogada",
+  "Requerimento Expirado",
+  "Cancelado",
+]);
+const NON_TERMINAL_SITUACOES = [
+  "Registro Concedido",
+  "Aguardando Bookbuilding",
+  "Oferta Suspensa",
+  "Em cumprimento de exigências",
+];
 
 // Mapa exato campoNome (como vem da CVM, com acentuação) → coluna dedicada.
 // Qualquer campo fora deste mapa vai inteiro para detalhe_oferta (jsonb).
