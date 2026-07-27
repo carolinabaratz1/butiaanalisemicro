@@ -156,11 +156,40 @@ function todayBr(): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function isoToBr(iso: string): string {
+  // aceita "YYYY-MM-DD" ou "YYYY-MM-DDT..."
+  const s = iso.slice(0, 10);
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// Janela incremental de listagem: se a base já tem ofertas, buscamos apenas
+// (max(data_referencia) - LISTAGEM_JANELA_DIAS) até hoje. Se a base está vazia,
+// fallback completo desde 1990. A janela de N dias antes do máximo é para
+// capturar ofertas cadastradas com data retroativa após a última sincronização.
+// deno-lint-ignore no-explicit-any
+async function getListingWindow(supabase: any): Promise<{ de: string; ate: string; incremental: boolean }> {
+  const { data, error } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("data_referencia")
+    .not("data_referencia", "is", null)
+    .order("data_referencia", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const ate = todayBr();
+  if (error || !data?.data_referencia) {
+    return { de: LISTAGEM_FALLBACK_DE, ate, incremental: false };
+  }
+  const max = new Date(String(data.data_referencia));
+  max.setUTCDate(max.getUTCDate() - LISTAGEM_JANELA_DIAS);
+  return { de: isoToBr(max.toISOString()), ate, incremental: true };
+}
+
 async function fetchWithRetry(
   url: string,
   init: RequestInit | undefined,
   maxAttempts = 4,
-  timeoutMs = FETCH_TIMEOUT_MS,
+  timeoutMs = FETCH_TIMEOUT_MS_DETAIL,
 ): Promise<Response> {
   const retryable = [429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
   let lastError: unknown;
