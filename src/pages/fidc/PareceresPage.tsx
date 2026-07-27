@@ -12,7 +12,7 @@ import { RecBadge } from "@/components/fidc/RecBadge";
 import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Lock } from "lucide-react";
 
 type RecEnum = "manter" | "acompanhar" | "reduzir" | "zerar";
 const REC_LABEL: Record<RecEnum, "Manter" | "Acompanhar" | "Reduzir" | "Zerar"> = {
@@ -41,7 +41,8 @@ const toMonthDate = (ym: string) => (ym ? `${ym}-01` : "");
 
 export default function PareceresPage() {
   const qc = useQueryClient();
-  const { currentUser } = useAuth();
+  const { currentUser, permissions } = useAuth();
+  const canWrite = permissions.canWrite;
   const { fidcs, isLoading: fidcLoading, latestReportFor, prevReportFor } = useFidcMonitorData();
 
   // ----- Pareceres existentes -----
@@ -146,11 +147,13 @@ export default function PareceresPage() {
   }, [currentOp?.id, selectedFidcId, month]);
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) => {
+    if (!canWrite) return;
     setForm((p) => ({ ...p, [k]: v }));
     setDirty(true);
   };
 
   async function handleSave() {
+    if (!canWrite) return; // defesa extra no client; RLS (fidc_can_write_opinion) já protege no banco
     if (!selectedFidcId || !month) return;
     setSaving(true);
     try {
@@ -181,6 +184,7 @@ export default function PareceresPage() {
   }
 
   function handleReset() {
+    if (!canWrite) return;
     if (currentOp) {
       setForm({
         recommendation: (currentOp.recommendation ?? "manter") as RecEnum,
@@ -301,6 +305,14 @@ export default function PareceresPage() {
                   </div>
                 </div>
 
+                {!canWrite && (
+                  <div className="mt-3 flex items-center gap-2 rounded-sm border border-border bg-muted/20 px-3 py-2 text-[11.5px] text-muted-foreground">
+                    <Lock className="h-3.5 w-3.5 shrink-0" />
+                    Seu perfil tem acesso somente leitura a Pareceres de Crédito. Apenas Gestor,
+                    Analista e Coordenação/Especialista podem editar ou salvar.
+                  </div>
+                )}
+
                 {/* Métricas do informe mensal */}
                 {report ? (
                   <div className="mt-4 rounded-sm border border-border bg-card">
@@ -362,7 +374,8 @@ export default function PareceresPage() {
                     <select
                       value={form.recommendation}
                       onChange={(e) => setField("recommendation", e.target.value as RecEnum)}
-                      className="w-full bg-card border border-border rounded-sm px-2.5 py-1.5 text-[12.5px] outline-none focus:border-primary"
+                      disabled={!canWrite}
+                      className="w-full bg-card border border-border rounded-sm px-2.5 py-1.5 text-[12.5px] outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {REC_OPTIONS.map((r) => (
                         <option key={r} value={r}>{REC_LABEL[r]}</option>
@@ -378,43 +391,53 @@ export default function PareceresPage() {
                     />
                   </label>
                   <Field label="Resumo executivo" value={form.summary}
-                    onChange={(v) => setField("summary", v)} textarea className="md:col-span-2" />
+                    onChange={(v) => setField("summary", v)} textarea className="md:col-span-2" disabled={!canWrite} />
                   <Field label="Motivo da recomendação" value={form.recommendation_reason}
-                    onChange={(v) => setField("recommendation_reason", v)} textarea className="md:col-span-2" />
+                    onChange={(v) => setField("recommendation_reason", v)} textarea className="md:col-span-2" disabled={!canWrite} />
                   <Field label="Pontos positivos" value={form.positive_points}
-                    onChange={(v) => setField("positive_points", v)} textarea />
+                    onChange={(v) => setField("positive_points", v)} textarea disabled={!canWrite} />
                   <Field label="Pontos de atenção" value={form.attention_points}
-                    onChange={(v) => setField("attention_points", v)} textarea />
+                    onChange={(v) => setField("attention_points", v)} textarea disabled={!canWrite} />
                   <Field label="Riscos principais" value={form.main_risks}
-                    onChange={(v) => setField("main_risks", v)} textarea />
+                    onChange={(v) => setField("main_risks", v)} textarea disabled={!canWrite} />
                   <Field label="Evolução recente" value={form.recent_evolution}
-                    onChange={(v) => setField("recent_evolution", v)} textarea />
+                    onChange={(v) => setField("recent_evolution", v)} textarea disabled={!canWrite} />
                 </div>
 
-                <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
-                  <div className="text-[11px] text-muted-foreground">
+                {canWrite && (
+                  <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
+                    <div className="text-[11px] text-muted-foreground">
+                      {currentOp
+                        ? `Última atualização: ${new Date(currentOp.updated_at).toLocaleString("pt-BR")}`
+                        : "Parecer ainda não salvo para este mês."}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleReset}
+                        disabled={!dirty || saving}
+                        className="px-3 py-1.5 text-[12px] border border-border rounded-sm hover:bg-accent disabled:opacity-50"
+                      >
+                        Descartar alterações
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-3 py-1.5 text-[12px] bg-primary text-primary-foreground rounded-sm font-medium hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+                      >
+                        {saving && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {currentOp ? "Salvar alterações" : "Criar parecer"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!canWrite && (
+                  <div className="mt-5 text-[11px] text-muted-foreground">
                     {currentOp
                       ? `Última atualização: ${new Date(currentOp.updated_at).toLocaleString("pt-BR")}`
-                      : "Parecer ainda não salvo para este mês."}
+                      : "Nenhum parecer registrado para este mês."}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleReset}
-                      disabled={!dirty || saving}
-                      className="px-3 py-1.5 text-[12px] border border-border rounded-sm hover:bg-accent disabled:opacity-50"
-                    >
-                      Descartar alterações
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="px-3 py-1.5 text-[12px] bg-primary text-primary-foreground rounded-sm font-medium hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
-                    >
-                      {saving && <Loader2 className="h-3 w-3 animate-spin" />}
-                      {currentOp ? "Salvar alterações" : "Criar parecer"}
-                    </button>
-                  </div>
-                </div>
+                )}
               </>
             )}
           </section>
@@ -424,18 +447,18 @@ export default function PareceresPage() {
   );
 }
 
-function Field({ label, value, onChange, textarea, className = "" }: {
+function Field({ label, value, onChange, textarea, className = "", disabled = false }: {
   label: string; value: string; onChange: (v: string) => void;
-  textarea?: boolean; className?: string;
+  textarea?: boolean; className?: string; disabled?: boolean;
 }) {
-  const base = "w-full bg-card border border-border rounded-sm px-2.5 py-1.5 text-[12.5px] outline-none focus:border-primary";
+  const base = "w-full bg-card border border-border rounded-sm px-2.5 py-1.5 text-[12.5px] outline-none focus:border-primary disabled:opacity-60 disabled:cursor-not-allowed";
   return (
     <label className={`block ${className}`}>
       <div className="section-title mb-1">{label}</div>
       {textarea ? (
-        <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className={`${base} resize-y leading-relaxed`} />
+        <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} disabled={disabled} className={`${base} resize-y leading-relaxed`} />
       ) : (
-        <input value={value} onChange={(e) => onChange(e.target.value)} className={base} />
+        <input value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} className={base} />
       )}
     </label>
   );
