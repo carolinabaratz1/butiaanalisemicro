@@ -265,13 +265,14 @@ async function buscarHistoricoStatus(idRequerimento: string): Promise<unknown[]>
 
 // deno-lint-ignore no-explicit-any
 async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: number, totals: SyncTotals, deadlineAt: number) {
+  const janela = await getListingWindow(supabase);
   let pagina = Math.max(1, paginaInicial);
   let runningTotals = { ...totals };
   let totalPaginas = 1;
   let paginasProcessadasNestaInvocacao = 0;
 
   do {
-    const resultado = await buscarPaginaDetalhado(pagina);
+    const resultado = await buscarPaginaDetalhado(pagina, janela);
     totalPaginas = resultado.totalPaginas || 1;
 
     const linhas = (resultado.registros || []).map((r) => {
