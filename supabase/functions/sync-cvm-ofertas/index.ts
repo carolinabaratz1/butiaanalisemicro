@@ -35,21 +35,37 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const SRE_BASE = "https://web.cvm.gov.br/sre-publico-cvm/rest/sitePublico";
-const LISTAGEM_PERIODO_DE = "01/01/1990";
+const LISTAGEM_FALLBACK_DE = "01/01/1990"; // primeira carga (base vazia)
+const LISTAGEM_JANELA_DIAS = 30; // janela incremental para bases já populadas
 const LISTAGEM_PAGE_SIZE = 150;
-// Conservador de propósito: já vimos a Edge Function anterior estourar
-// WORKER_RESOURCE_LIMIT ao tentar processar tudo de uma vez. Preferimos mais
-// invocações resumíveis (o front-end já faz o loop) a arriscar timeout/limite
-// de recursos numa invocação só.
-const MAX_PAGES_PER_INVOCATION = 3; // reduzido para evitar WORKER_RESOURCE_LIMIT em produção
-// Agora são 3 chamadas HTTP por oferta na fase de enriquecimento (infOferta +
-// documentosPublicados + historicoStatus), aplicado a TODOS os tipos de ativo
-// (não só FIDC). Reduzimos batch e concorrência proporcionalmente para não
-// estourar memória/tempo por invocação — o front-end já resume em loop.
-const ENRICH_BATCH_SIZE = 20;
+const MAX_PAGES_PER_INVOCATION = 3;
+const ENRICH_BATCH_SIZE = 40;
 const ENRICH_CONCURRENCY = 2;
-const FETCH_TIMEOUT_MS = 20_000;
+const REVISIT_BATCH_SIZE = 40;
+const REVISIT_CONCURRENCY = 2;
+const FETCH_TIMEOUT_MS_SEARCH = 45_000; // /pesquisar/detalhado tende a demorar
+const FETCH_TIMEOUT_MS_DETAIL = 20_000; // /infOferta, /documentosPublicados, /historicoStatus
 const INVOCATION_SOFT_DEADLINE_MS = 40_000;
+
+// Situações terminais NÃO são revisitadas (nunca mudam de status).
+// Situações fora dessa lista (Registro Concedido, Aguardando Bookbuilding,
+// Oferta Suspensa, Em cumprimento de exigências) são revisitadas via /infOferta
+// para capturar transição para Encerrada. Linhas com situacao null e/ou
+// id_requerimento_cvm null (legadas do CSV) ficam de fora — não há como
+// consultar.
+const TERMINAL_SITUACOES = new Set<string>([
+  "Oferta Encerrada",
+  "Registro Caducado",
+  "Oferta Revogada",
+  "Requerimento Expirado",
+  "Cancelado",
+]);
+const NON_TERMINAL_SITUACOES = [
+  "Registro Concedido",
+  "Aguardando Bookbuilding",
+  "Oferta Suspensa",
+  "Em cumprimento de exigências",
+];
 
 // Mapa exato campoNome (como vem da CVM, com acentuação) → coluna dedicada.
 // Qualquer campo fora deste mapa vai inteiro para detalhe_oferta (jsonb).
@@ -67,7 +83,8 @@ const CAMPO_TO_COLUMN: Record<string, string> = {
 
 type SyncBody = {
   log_id?: string;
-  file_index?: number; // 0 = listagem, 1 = enriquecimento (Gestora), 2 = concluído
+  // 0 = listagem incremental, 1 = revisita de não-terminais, 2 = enriquecimento, 3 = concluído
+  file_index?: number;
   row_offset?: number; // durante a fase 0, é o número da próxima página a buscar
   totals?: Partial<SyncTotals>;
 };
@@ -139,11 +156,40 @@ function todayBr(): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function isoToBr(iso: string): string {
+  // aceita "YYYY-MM-DD" ou "YYYY-MM-DDT..."
+  const s = iso.slice(0, 10);
+  const [y, m, d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// Janela incremental de listagem: se a base já tem ofertas, buscamos apenas
+// (max(data_referencia) - LISTAGEM_JANELA_DIAS) até hoje. Se a base está vazia,
+// fallback completo desde 1990. A janela de N dias antes do máximo é para
+// capturar ofertas cadastradas com data retroativa após a última sincronização.
+// deno-lint-ignore no-explicit-any
+async function getListingWindow(supabase: any): Promise<{ de: string; ate: string; incremental: boolean }> {
+  const { data, error } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("data_referencia")
+    .not("data_referencia", "is", null)
+    .order("data_referencia", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const ate = todayBr();
+  if (error || !data?.data_referencia) {
+    return { de: LISTAGEM_FALLBACK_DE, ate, incremental: false };
+  }
+  const max = new Date(String(data.data_referencia));
+  max.setUTCDate(max.getUTCDate() - LISTAGEM_JANELA_DIAS);
+  return { de: isoToBr(max.toISOString()), ate, incremental: true };
+}
+
 async function fetchWithRetry(
   url: string,
   init: RequestInit | undefined,
   maxAttempts = 4,
-  timeoutMs = FETCH_TIMEOUT_MS,
+  timeoutMs = FETCH_TIMEOUT_MS_DETAIL,
 ): Promise<Response> {
   const retryable = [429, 500, 502, 503, 504, 520, 521, 522, 523, 524];
   let lastError: unknown;
@@ -172,21 +218,26 @@ async function fetchWithRetry(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-async function buscarPaginaDetalhado(pagina: number) {
-  const res = await fetchWithRetry(`${SRE_BASE}/pesquisar/detalhado`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      periodoCriacaoProcesso: { de: LISTAGEM_PERIODO_DE, ate: todayBr() },
-      opa: false,
-      tipoOferta: "OFERTA_REGULAR",
-      modalidade: "TODAS",
-      direcaoOrdenacao: "DESC",
-      colunaOrdenacao: "data",
-      pagina,
-      tamanhoPagina: String(LISTAGEM_PAGE_SIZE),
-    }),
-  });
+async function buscarPaginaDetalhado(pagina: number, janela: { de: string; ate: string }) {
+  const res = await fetchWithRetry(
+    `${SRE_BASE}/pesquisar/detalhado`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        periodoCriacaoProcesso: { de: janela.de, ate: janela.ate },
+        opa: false,
+        tipoOferta: "OFERTA_REGULAR",
+        modalidade: "TODAS",
+        direcaoOrdenacao: "DESC",
+        colunaOrdenacao: "data",
+        pagina,
+        tamanhoPagina: String(LISTAGEM_PAGE_SIZE),
+      }),
+    },
+    4,
+    FETCH_TIMEOUT_MS_SEARCH,
+  );
   return (await res.json()) as {
     totalRegistros: number;
     totalPaginas: number;
@@ -214,13 +265,14 @@ async function buscarHistoricoStatus(idRequerimento: string): Promise<unknown[]>
 
 // deno-lint-ignore no-explicit-any
 async function rodarFaseListagem(supabase: any, logId: string, paginaInicial: number, totals: SyncTotals, deadlineAt: number) {
+  const janela = await getListingWindow(supabase);
   let pagina = Math.max(1, paginaInicial);
   let runningTotals = { ...totals };
   let totalPaginas = 1;
   let paginasProcessadasNestaInvocacao = 0;
 
   do {
-    const resultado = await buscarPaginaDetalhado(pagina);
+    const resultado = await buscarPaginaDetalhado(pagina, janela);
     totalPaginas = resultado.totalPaginas || 1;
 
     const linhas = (resultado.registros || []).map((r) => {
@@ -302,7 +354,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
   let runningTotals = { ...totals };
 
   if (!pendentes || pendentes.length === 0) {
-    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: true };
+    return { totals: runningTotals, nextFileIndex: 3, nextRowOffset: 0, allDone: true };
   }
 
   let cursor = 0;
@@ -380,7 +432,7 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     .eq("id", logId);
 
   if (cursor < pendentes.length || processedThisInvocation === 0) {
-    return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: false };
+    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: false };
   }
 
   const { data: restante, error: remainingError } = await supabase
@@ -391,7 +443,100 @@ async function rodarFaseEnriquecimento(supabase: any, logId: string, totals: Syn
     .limit(1);
   if (remainingError) throw remainingError;
 
-  return { totals: runningTotals, nextFileIndex: 1, nextRowOffset: 0, allDone: !restante || restante.length === 0 };
+  const done = !restante || restante.length === 0;
+  return { totals: runningTotals, nextFileIndex: done ? 3 : 2, nextRowOffset: 0, allDone: done };
+}
+
+// -----------------------------------------------------------------------------
+// Fase 1: revisita de status para ofertas não-terminais.
+// Situações terminais (Encerrada, Caducado, Revogada, Expirado, Cancelado) NUNCA
+// mudam — não revisitamos. As demais (Registro Concedido, Aguardando
+// Bookbuilding, Oferta Suspensa, Em cumprimento de exigências) podem transitar,
+// então buscamos /infOferta + /historicoStatus para atualizar situacao,
+// data_encerramento e a timeline. Ordenamos por last_seen_at ASC para que rows
+// mais antigas sejam revisitadas primeiro (round-robin natural).
+// -----------------------------------------------------------------------------
+// deno-lint-ignore no-explicit-any
+async function rodarFaseRevisita(supabase: any, logId: string, totals: SyncTotals, deadlineAt: number) {
+  const { data: pendentes, error: selectError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id, id_requerimento_cvm, situacao, last_seen_at")
+    .in("situacao", NON_TERMINAL_SITUACOES)
+    .not("id_requerimento_cvm", "is", null)
+    .order("last_seen_at", { ascending: true, nullsFirst: true })
+    .limit(REVISIT_BATCH_SIZE);
+  if (selectError) throw selectError;
+
+  let runningTotals = { ...totals };
+
+  if (!pendentes || pendentes.length === 0) {
+    return { totals: runningTotals, nextFileIndex: 2, nextRowOffset: 0, allDone: false };
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < pendentes.length && Date.now() < deadlineAt) {
+      const row = pendentes[cursor];
+      cursor++;
+      try {
+        const [infoRes, histRes] = await Promise.allSettled([
+          buscarInfOferta(row.id_requerimento_cvm),
+          buscarHistoricoStatus(row.id_requerimento_cvm),
+        ]);
+        // deno-lint-ignore no-explicit-any
+        const update: Record<string, any> = { last_seen_at: new Date().toISOString() };
+
+        if (infoRes.status === "fulfilled") {
+          for (const c of infoRes.value) {
+            const nome = c.campoNome?.trim();
+            const valor = c.valor?.trim() ?? "";
+            if (!nome) continue;
+            if (nome === "Situação" || nome === "Situacao") {
+              update.situacao = valor || null;
+            } else if (nome === "Data de encerramento") {
+              const d = parseBrDate(valor);
+              if (d) update.data_encerramento = d;
+            }
+          }
+        }
+        if (histRes.status === "fulfilled") {
+          update.historico_status = histRes.value;
+          // Fallback: derive situação a partir do último item do histórico se
+          // /infOferta não trouxer o campo Situação.
+          if (!update.situacao && Array.isArray(histRes.value) && histRes.value.length > 0) {
+            const ultimo = histRes.value[histRes.value.length - 1] as Record<string, unknown>;
+            const situ = ultimo?.["situacao"] ?? ultimo?.["statusOferta"] ?? ultimo?.["status"];
+            if (situ) update.situacao = String(situ);
+          }
+        }
+
+        await supabase.from("ofertas_publicas_cvm").update(update).eq("id", row.id);
+        runningTotals.totalAtualizadas += 1;
+      } catch (err) {
+        console.warn(`sync-cvm-ofertas: revisita falhou id=${row.id_requerimento_cvm}`, err);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(REVISIT_CONCURRENCY, pendentes.length) }, () => worker()));
+
+  await supabase
+    .from("cvm_ofertas_sync_log")
+    .update({ total_atualizadas: runningTotals.totalAtualizadas })
+    .eq("id", logId);
+
+  // Se ainda existem pendentes que não caberiam na próxima consulta de mesmo
+  // tamanho (ou seja, ainda há mais para revisitar depois desses), continue na
+  // fase 1. Caso contrário, avança para enrich.
+  const { count, error: countError } = await supabase
+    .from("ofertas_publicas_cvm")
+    .select("id", { count: "exact", head: true })
+    .in("situacao", NON_TERMINAL_SITUACOES)
+    .not("id_requerimento_cvm", "is", null)
+    .lt("last_seen_at", new Date(Date.now() - 60 * 60 * 1000).toISOString()); // não revisitar novamente dentro de 1h
+  if (countError) throw countError;
+
+  const aindaTem = (count ?? 0) > 0;
+  return { totals: runningTotals, nextFileIndex: aindaTem ? 1 : 2, nextRowOffset: 0, allDone: false };
 }
 
 function normalizeTotals(totals?: Partial<SyncTotals>): SyncTotals {
@@ -438,19 +583,35 @@ Deno.serve(async (req: Request) => {
       logId = logRow.id;
     }
 
-    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 2));
+    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 3));
     const rowOffset = Math.max(0, Number(body.row_offset ?? 0));
     const totals = normalizeTotals(body.totals);
     const deadlineAt = Date.now() + INVOCATION_SOFT_DEADLINE_MS;
 
-    const resultado =
-      fileIndex >= 1
-        ? await rodarFaseEnriquecimento(supabase, logId, totals, deadlineAt)
-        : await rodarFaseListagem(supabase, logId, rowOffset || 1, totals, deadlineAt);
+    // Dispatch: 0=listagem, 1=revisita, 2=enriquecimento, 3=done
+    let resultado: {
+      totals: SyncTotals;
+      nextFileIndex: number;
+      nextRowOffset: number;
+      allDone: boolean;
+    };
+    if (fileIndex >= 2) {
+      resultado = await rodarFaseEnriquecimento(supabase, logId, totals, deadlineAt);
+    } else if (fileIndex === 1) {
+      resultado = await rodarFaseRevisita(supabase, logId, totals, deadlineAt);
+    } else {
+      resultado = await rodarFaseListagem(supabase, logId, rowOffset || 1, totals, deadlineAt);
+    }
 
-    const tudoConcluido = resultado.nextFileIndex >= 2 || resultado.allDone;
+    // Regra (a) do plano: assim que a listagem termina (nextFileIndex >= 1), o
+    // log é marcado como "sucesso" e não fica preso em "em_andamento" enquanto
+    // revisita/enrich rodam em rodadas subsequentes. Também marcamos sucesso
+    // quando toda a pipeline está concluída (allDone).
+    const listagemConcluidaNestaRodada = fileIndex === 0 && resultado.nextFileIndex >= 1;
+    const tudoConcluido = resultado.allDone || resultado.nextFileIndex >= 3;
+    const marcarSucesso = tudoConcluido || listagemConcluidaNestaRodada;
 
-    if (tudoConcluido) {
+    if (marcarSucesso) {
       await supabase
         .from("cvm_ofertas_sync_log")
         .update({
@@ -466,7 +627,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       started: true,
       log_id: logId,
-      status: tudoConcluido ? "sucesso" : "em_andamento",
+      status: marcarSucesso ? "sucesso" : "em_andamento",
       total_linhas_processadas: resultado.totals.totalProcessadas,
       total_inseridas: resultado.totals.totalInseridas,
       total_atualizadas: resultado.totals.totalAtualizadas,
