@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BRL, PCT, monthLabel } from "@/lib/fidc/format";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Edit3, FileText } from "lucide-react";
+import { Edit3, FileText, Lock } from "lucide-react";
 
 type RecEnum = "manter" | "acompanhar" | "reduzir" | "zerar";
 const REC_LABEL: Record<RecEnum, string> = {
@@ -44,7 +44,8 @@ export function CreditOpinionPanel({
   latestReport: Record<string, unknown> | null;
 }) {
   const qc = useQueryClient();
-  const { currentUser } = useAuth();
+  const { currentUser, permissions } = useAuth();
+  const canWrite = permissions.canWrite;
   const refMonth = latestReport?.reference_month ? String(latestReport.reference_month).slice(0, 10) : null;
 
   const { data: opinion, isLoading } = useQuery({
@@ -105,6 +106,7 @@ export function CreditOpinionPanel({
   }
 
   async function save() {
+    if (!canWrite) return; // defesa extra no client; RLS (fidc_can_write_opinion) já protege no banco
     if (!refMonth) return;
     const payload = {
       fidc_id: fidcId,
@@ -147,14 +149,22 @@ export function CreditOpinionPanel({
           </div>
         </div>
         <div className="flex items-center gap-2" data-print="hide">
-          <Button variant="outline" size="sm" className="h-7 text-[11.5px]"
-            onClick={() => setForm((f) => ({ ...f, summary: buildTemplate() }))}>
-            <FileText className="h-3.5 w-3.5 mr-1.5" /> Usar dados do informe
-          </Button>
-          <Button variant={editing ? "default" : "outline"} size="sm" className="h-7 text-[11.5px]"
-            onClick={() => editing ? save() : setEditing(true)}>
-            <Edit3 className="h-3.5 w-3.5 mr-1.5" /> {editing ? "Salvar" : "Editar Parecer"}
-          </Button>
+          {canWrite ? (
+            <>
+              <Button variant="outline" size="sm" className="h-7 text-[11.5px]"
+                onClick={() => setForm((f) => ({ ...f, summary: buildTemplate() }))}>
+                <FileText className="h-3.5 w-3.5 mr-1.5" /> Usar dados do informe
+              </Button>
+              <Button variant={editing ? "default" : "outline"} size="sm" className="h-7 text-[11.5px]"
+                onClick={() => editing ? save() : setEditing(true)}>
+                <Edit3 className="h-3.5 w-3.5 mr-1.5" /> {editing ? "Salvar" : "Editar Parecer"}
+              </Button>
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Lock className="h-3.5 w-3.5" /> Somente leitura
+            </span>
+          )}
           <Link to={`/fidc-monitor/pareceres`} className="text-[11.5px] text-primary hover:underline">
             Abrir página de pareceres →
           </Link>
@@ -167,7 +177,7 @@ export function CreditOpinionPanel({
         <div className="px-4 pb-4 space-y-3 text-[12.5px]">
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-muted-foreground">Recomendação:</span>
-            {editing ? (
+            {editing && canWrite ? (
               <select
                 value={form.recommendation}
                 onChange={(e) => setForm({ ...form, recommendation: e.target.value as RecEnum })}
@@ -183,17 +193,17 @@ export function CreditOpinionPanel({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="Resumo executivo" value={form.summary} edit={editing}
+            <Field label="Resumo executivo" value={form.summary} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, summary: v })} full />
-            <Field label="Motivo da recomendação" value={form.recommendation_reason} edit={editing}
+            <Field label="Motivo da recomendação" value={form.recommendation_reason} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, recommendation_reason: v })} full />
-            <Field label="Pontos positivos" value={form.positive_points} edit={editing}
+            <Field label="Pontos positivos" value={form.positive_points} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, positive_points: v })} />
-            <Field label="Pontos de atenção" value={form.attention_points} edit={editing}
+            <Field label="Pontos de atenção" value={form.attention_points} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, attention_points: v })} />
-            <Field label="Riscos principais" value={form.main_risks} edit={editing}
+            <Field label="Riscos principais" value={form.main_risks} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, main_risks: v })} />
-            <Field label="Evolução recente" value={form.recent_evolution} edit={editing}
+            <Field label="Evolução recente" value={form.recent_evolution} edit={editing && canWrite}
               onChange={(v) => setForm({ ...form, recent_evolution: v })} />
           </div>
         </div>
