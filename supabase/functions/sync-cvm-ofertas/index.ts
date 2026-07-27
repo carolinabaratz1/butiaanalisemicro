@@ -83,7 +83,8 @@ const CAMPO_TO_COLUMN: Record<string, string> = {
 
 type SyncBody = {
   log_id?: string;
-  file_index?: number; // 0 = listagem, 1 = enriquecimento (Gestora), 2 = concluído
+  // 0 = listagem incremental, 1 = revisita de não-terminais, 2 = enriquecimento, 3 = concluído
+  file_index?: number;
   row_offset?: number; // durante a fase 0, é o número da próxima página a buscar
   totals?: Partial<SyncTotals>;
 };
