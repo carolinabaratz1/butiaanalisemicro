@@ -336,49 +336,71 @@ export default function RadarDeOfertasPage() {
         mensagem_erro?: string;
       };
 
-      let payload: {
-        log_id?: string;
-        file_index?: number;
-        row_offset?: number;
-        totals?: {
-          totalProcessadas: number;
-          totalInseridas: number;
-          totalAtualizadas: number;
-        };
-      } = {};
+      // Foreground: uma única invocação. A Edge Function marca o log como
+      // "sucesso" assim que a Fase 0 (listagem incremental de 30 dias) termina,
+      // então a UI recebe feedback rapidamente. Revisita + enrich rodam em
+      // rodadas subsequentes disparadas em background (até 20 encadeadas).
+      const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: {} });
+      if (error) throw error;
+      const primeira = data as SyncResponse;
+      queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
 
-      for (let step = 0; step < 80; step++) {
-        const { data, error } = await supabase.functions.invoke("sync-cvm-ofertas", { body: payload });
-        if (error) throw error;
-        const result = data as SyncResponse;
-
-        queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
-
-        if (result.done || result.status === "sucesso") return result;
-        if (result.status === "erro" || result.status === "parcial") return result;
-        if (!result.log_id) throw new Error("Sincronização sem identificador de log");
-
-        payload = {
-          log_id: result.log_id,
-          file_index: result.next_file_index ?? 0,
-          row_offset: result.next_row_offset ?? 0,
-          totals: {
-            totalProcessadas: result.total_linhas_processadas ?? 0,
-            totalInseridas: result.total_inseridas ?? 0,
-            totalAtualizadas: result.total_atualizadas ?? 0,
-          },
-        };
+      // Se ainda há revisita/enrich pendentes, dispara loop background sem
+      // bloquear o usuário. Ignora erros silenciosamente — a próxima
+      // sincronização (manual ou cron) retomará de onde parou.
+      if (primeira.done !== true && primeira.log_id && (primeira.next_file_index ?? 0) < 3) {
+        (async () => {
+          let payload: Record<string, unknown> = {
+            log_id: primeira.log_id,
+            file_index: primeira.next_file_index ?? 1,
+            row_offset: primeira.next_row_offset ?? 0,
+            totals: {
+              totalProcessadas: primeira.total_linhas_processadas ?? 0,
+              totalInseridas: primeira.total_inseridas ?? 0,
+              totalAtualizadas: primeira.total_atualizadas ?? 0,
+            },
+          };
+          for (let round = 0; round < 20; round++) {
+            try {
+              const { data: bgData, error: bgError } = await supabase.functions.invoke(
+                "sync-cvm-ofertas",
+                { body: payload },
+              );
+              if (bgError) break;
+              const bg = bgData as SyncResponse;
+              queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
+              queryClient.invalidateQueries({ queryKey: ["radar-ofertas-cvm"] });
+              if (bg.done || (bg.next_file_index ?? 3) >= 3) break;
+              payload = {
+                log_id: bg.log_id ?? primeira.log_id,
+                file_index: bg.next_file_index ?? 2,
+                row_offset: bg.next_row_offset ?? 0,
+                totals: {
+                  totalProcessadas: bg.total_linhas_processadas ?? 0,
+                  totalInseridas: bg.total_inseridas ?? 0,
+                  totalAtualizadas: bg.total_atualizadas ?? 0,
+                },
+              };
+            } catch {
+              break;
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["radar-ofertas-cvm"] });
+        })();
       }
 
-      throw new Error("Sincronização não terminou dentro do limite de etapas");
+      return primeira;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["cvm-ofertas-sync-log-latest"] });
       queryClient.invalidateQueries({ queryKey: ["radar-ofertas-cvm"] });
 
       if (data?.status === "sucesso") {
+        const pendente = (data.next_file_index ?? 3) < 3;
         toast.success(
-          `Sincronização concluída: ${data.total_inseridas ?? 0} novas, ${data.total_atualizadas ?? 0} atualizadas`,
+          pendente
+            ? `Listagem concluída: ${data.total_inseridas ?? 0} novas, ${data.total_atualizadas ?? 0} atualizadas. Enriquecimento continua em segundo plano.`
+            : `Sincronização concluída: ${data.total_inseridas ?? 0} novas, ${data.total_atualizadas ?? 0} atualizadas`,
         );
       } else if (data?.status === "parcial") {
         toast.warning(
@@ -387,7 +409,7 @@ export default function RadarDeOfertasPage() {
       } else if (data?.status === "erro") {
         toast.error(data.mensagem_erro || "Erro durante a sincronização");
       } else {
-        toast.success("Sincronização concluída");
+        toast.success("Sincronização iniciada");
       }
     },
     onError: (err: any) => toast.error(err?.message || "Erro ao iniciar sincronização"),
