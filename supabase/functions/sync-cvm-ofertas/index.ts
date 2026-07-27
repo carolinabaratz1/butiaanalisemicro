@@ -583,19 +583,35 @@ Deno.serve(async (req: Request) => {
       logId = logRow.id;
     }
 
-    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 2));
+    const fileIndex = Math.max(0, Math.min(Number(body.file_index ?? 0), 3));
     const rowOffset = Math.max(0, Number(body.row_offset ?? 0));
     const totals = normalizeTotals(body.totals);
     const deadlineAt = Date.now() + INVOCATION_SOFT_DEADLINE_MS;
 
-    const resultado =
-      fileIndex >= 1
-        ? await rodarFaseEnriquecimento(supabase, logId, totals, deadlineAt)
-        : await rodarFaseListagem(supabase, logId, rowOffset || 1, totals, deadlineAt);
+    // Dispatch: 0=listagem, 1=revisita, 2=enriquecimento, 3=done
+    let resultado: {
+      totals: SyncTotals;
+      nextFileIndex: number;
+      nextRowOffset: number;
+      allDone: boolean;
+    };
+    if (fileIndex >= 2) {
+      resultado = await rodarFaseEnriquecimento(supabase, logId, totals, deadlineAt);
+    } else if (fileIndex === 1) {
+      resultado = await rodarFaseRevisita(supabase, logId, totals, deadlineAt);
+    } else {
+      resultado = await rodarFaseListagem(supabase, logId, rowOffset || 1, totals, deadlineAt);
+    }
 
-    const tudoConcluido = resultado.nextFileIndex >= 2 || resultado.allDone;
+    // Regra (a) do plano: assim que a listagem termina (nextFileIndex >= 1), o
+    // log é marcado como "sucesso" e não fica preso em "em_andamento" enquanto
+    // revisita/enrich rodam em rodadas subsequentes. Também marcamos sucesso
+    // quando toda a pipeline está concluída (allDone).
+    const listagemConcluidaNestaRodada = fileIndex === 0 && resultado.nextFileIndex >= 1;
+    const tudoConcluido = resultado.allDone || resultado.nextFileIndex >= 3;
+    const marcarSucesso = tudoConcluido || listagemConcluidaNestaRodada;
 
-    if (tudoConcluido) {
+    if (marcarSucesso) {
       await supabase
         .from("cvm_ofertas_sync_log")
         .update({
@@ -611,7 +627,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       started: true,
       log_id: logId,
-      status: tudoConcluido ? "sucesso" : "em_andamento",
+      status: marcarSucesso ? "sucesso" : "em_andamento",
       total_linhas_processadas: resultado.totals.totalProcessadas,
       total_inseridas: resultado.totals.totalInseridas,
       total_atualizadas: resultado.totals.totalAtualizadas,
