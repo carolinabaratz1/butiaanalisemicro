@@ -98,6 +98,7 @@ function classifyTab(lower: string): string | null {
   if (/_tab_x[_.]?2[_.]/.test(lower)) return "X2";
   if (/_tab_x[_.]?3[_.]/.test(lower)) return "X3";
   if (/_tab_x[_.]?4[_.]/.test(lower)) return "X4";
+  if (/_tab_x[_.]?7[_.]/.test(lower)) return "X7";
   if (/_tab_vii[_.]/.test(lower)) return "VII";
   if (/_tab_vi[_.]/.test(lower)) return "VI";
   if (/_tab_v[_.]/.test(lower)) return "V";
@@ -545,6 +546,7 @@ Deno.serve(async (req) => {
 
     // === Derivações cross-file (TAB V + TAB VI) ===
     // overdue_value, delinquency_30_plus, ..., 120_plus, prepaid_value
+    // maturity_*_value (prazo de vencimento, lado "a" das mesmas tabelas) — K1/K2
     const derive = (buf: FidcBuffer, name: string, parts: string[], sourceFiles: string[]) => {
       let total = 0; let anyFound = false; let anyMissingCol = false;
       const rawValues: Record<string, unknown> = {};
@@ -571,7 +573,7 @@ Deno.serve(async (req) => {
       // Totais por fonte
       derive(buf, "overdue_value_tab_v_vi", ["tab_v_overdue_total", "tab_vi_overdue_total"], ["TAB_V", "TAB_VI"]);
       derive(buf, "prepaid_value", ["tab_v_prepaid_total", "tab_vi_prepaid_total"], ["TAB_V", "TAB_VI"]);
-      // buckets consolidados (V + VI)
+      // buckets consolidados (V + VI) — inadimplência (lado "b")
       const bks = ["30","60","90","120","150","180","360","720","1080","1080p"];
       for (const b of bks) {
         derive(buf, `delinquency_${b}_value`, [`tab_v_overdue_${b}`, `tab_vi_overdue_${b}`], ["TAB_V","TAB_VI"]);
@@ -581,6 +583,12 @@ Deno.serve(async (req) => {
       derive(buf, "delinquency_60_plus_value",  bks.slice(2).map((b) => `delinquency_${b}_value`), ["derived"]);
       derive(buf, "delinquency_90_plus_value",  bks.slice(3).map((b) => `delinquency_${b}_value`), ["derived"]);
       derive(buf, "delinquency_120_plus_value", bks.slice(4).map((b) => `delinquency_${b}_value`), ["derived"]);
+
+      // K1/K2 — buckets consolidados (V + VI) de prazo de vencimento (lado "a")
+      derive(buf, "maturity_total_value", ["tab_v_maturity_total", "tab_vi_maturity_total"], ["TAB_V", "TAB_VI"]);
+      for (const b of bks) {
+        derive(buf, `maturity_${b}_value`, [`tab_v_maturity_${b}`, `tab_vi_maturity_${b}`], ["TAB_V", "TAB_VI"]);
+      }
 
       // === Atraso headline: prioriza TAB I, com fallback p/ TAB V+VI ===
       const numFrom = (k: string): number | null => {
@@ -847,6 +855,20 @@ Deno.serve(async (req) => {
         acquisitionWithRisk: value("acquisition_with_risk_value"),
         acquisitionWithoutRisk: value("acquisition_without_risk_value"),
         investors: value("investors_count"),
+        // K1/K2 — prazo de vencimento (TAB V.a + VI.a) e garantias (TAB X.7)
+        maturityTotal: value("maturity_total_value"),
+        maturity30: value("maturity_30_value"),
+        maturity60: value("maturity_60_value"),
+        maturity90: value("maturity_90_value"),
+        maturity120: value("maturity_120_value"),
+        maturity150: value("maturity_150_value"),
+        maturity180: value("maturity_180_value"),
+        maturity360: value("maturity_360_value"),
+        maturity720: value("maturity_720_value"),
+        maturity1080: value("maturity_1080_value"),
+        maturity1080p: value("maturity_1080p_value"),
+        guarantees: value("guarantees_value"),
+        guaranteesPct: value("guarantees_pct"),
         sumClassesPL, plDiff: diff, plDiffPct: diffPct,
         subordination: (buf as FidcBuffer & { subordination?: Record<string, unknown> }).subordination ?? null,
         missingMetrics: missing,
