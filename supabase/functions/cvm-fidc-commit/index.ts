@@ -49,6 +49,15 @@ type Item = {
   delinquencyUnbucketedValue?: number | null;
   overdueToCreditRightsRatio?: number | null;
   pddToOverdueRatio?: number | null;
+  // Prazo de vencimento (TAB V.a + VI.a) — K1/K2
+  maturityTotal?: number | null;
+  maturity30?: number | null; maturity60?: number | null; maturity90?: number | null;
+  maturity120?: number | null; maturity150?: number | null; maturity180?: number | null;
+  maturity360?: number | null; maturity720?: number | null;
+  maturity1080?: number | null; maturity1080p?: number | null;
+  // Garantias (TAB X.7) — K1/K2
+  guarantees?: number | null;
+  guaranteesPct?: number | null;
   // Aquisições / negócios
   repurchase: number | null;
   acquisitionWithRisk?: number | null; acquisitionWithoutRisk?: number | null;
@@ -150,6 +159,21 @@ Deno.serve(async (req) => {
           delinquency_unbucketed_value: it.delinquencyUnbucketedValue ?? null,
           overdue_to_credit_rights_ratio: it.overdueToCreditRightsRatio ?? null,
           pdd_to_overdue_ratio: it.pddToOverdueRatio ?? null,
+          // Prazo de vencimento (TAB V.a + VI.a) — K1/K2
+          maturity_total_value: it.maturityTotal ?? null,
+          maturity_30_value: it.maturity30 ?? null,
+          maturity_60_value: it.maturity60 ?? null,
+          maturity_90_value: it.maturity90 ?? null,
+          maturity_120_value: it.maturity120 ?? null,
+          maturity_150_value: it.maturity150 ?? null,
+          maturity_180_value: it.maturity180 ?? null,
+          maturity_360_value: it.maturity360 ?? null,
+          maturity_720_value: it.maturity720 ?? null,
+          maturity_1080_value: it.maturity1080 ?? null,
+          maturity_over_1080_value: it.maturity1080p ?? null,
+          // Garantias (TAB X.7) — K1/K2
+          guarantees_value: it.guarantees ?? null,
+          guarantees_pct: it.guaranteesPct ?? null,
           repurchase_value: it.repurchase,
           acquisition_with_risk_value: it.acquisitionWithRisk ?? null,
           acquisition_without_risk_value: it.acquisitionWithoutRisk ?? null,
