@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { QUOTA_CLASSES, PORTFOLIOS, POSITIONS, fidcById } from "@/lib/fidc/mock-data";
+import { QUOTA_CLASSES, fidcById } from "@/lib/fidc/mock-data";
 import { formatCNPJ, dateBR } from "@/lib/fidc/format";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import {
@@ -30,7 +30,9 @@ import {
 } from "@/lib/fidc/master-data-api";
 import { toast } from "sonner";
 
-const TABS = ["FIDCs", "Cotas / ISINs", "Ratings", "Mapeamento de Carteiras", "Importação"] as const;
+// J1: removida a aba "Mapeamento de Carteiras" (era 100% mock — a funcionalidade real já
+// existe em Monitor por Carteira e na Lâmina do FIDC, lendo `posicoes` de verdade).
+const TABS = ["FIDCs", "Cotas / ISINs", "Ratings", "Importação"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function FidcCadastroPage() {
@@ -59,7 +61,6 @@ export default function FidcCadastroPage() {
         {tab === "FIDCs" && <FidcRegistry />}
         {tab === "Cotas / ISINs" && <QuotaRegistry />}
         {tab === "Ratings" && <RatingHistoryMock />}
-        {tab === "Mapeamento de Carteiras" && <MappingMock />}
         {tab === "Importação" && <ImportTab />}
       </div>
     </div>
@@ -266,40 +267,6 @@ function RatingHistoryMock() {
                 <td className="px-3 py-2 text-primary text-[11px]">relatório-{c.fidcId}-{k}.pdf</td>
               </tr>
             ));
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function MappingMock() {
-  return (
-    <div className="bg-card border border-border overflow-x-auto">
-      <div className="px-4 pt-3 pb-2 text-[11px] text-muted-foreground italic">
-        Mapeamento amostral — futuras posições em FIDC virão de posicoes filtrado por trading_desk_share_source.
-      </div>
-      <table className="w-full text-[12px]">
-        <thead className="bg-surface-2 text-muted-foreground">
-          <tr className="hairline-b">
-            <Th>Carteira</Th><Th>FIDC</Th><Th>CNPJ</Th><Th>ISIN</Th><Th>Cota</Th><Th>Status</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {POSITIONS.map((pos, i) => {
-            const f = fidcById(pos.fidcId)!;
-            const port = PORTFOLIOS.find((p) => p.id === pos.portfolioId)!;
-            const c = QUOTA_CLASSES.find((q) => q.id === pos.quotaClassId)!;
-            return (
-              <tr key={i} className="hairline-b hover:bg-surface-2/40">
-                <td className="px-3 py-2 font-medium">{port.name}</td>
-                <td className="px-3 py-2">{f.name}</td>
-                <td className="px-3 py-2 num text-muted-foreground">{formatCNPJ(f.cnpj)}</td>
-                <td className="px-3 py-2 num">{pos.isin}</td>
-                <td className="px-3 py-2">{c.className}</td>
-                <td className="px-3 py-2"><span className="text-[10.5px] uppercase tracking-wider text-risk-normal">Ativa</span></td>
-              </tr>
-            );
           })}
         </tbody>
       </table>
