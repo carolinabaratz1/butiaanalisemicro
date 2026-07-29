@@ -2,6 +2,7 @@
 // - fidcs (cadastro mestre) → useFidcMonitorData
 // - fidc_monthly_reports (informe mensal, última versão) → métricas exibidas
 // - credit_opinions (parecer por FIDC/mês) → load + upsert
+// - credit_opinions_history (versões anteriores, arquivadas por trigger) → timeline read-only
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,7 +13,7 @@ import { RecBadge } from "@/components/fidc/RecBadge";
 import { useFidcMonitorData } from "@/hooks/useFidcMonitorData";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2, Plus, Lock } from "lucide-react";
+import { Loader2, Plus, Lock, History, ChevronDown, ChevronUp } from "lucide-react";
 
 type RecEnum = "manter" | "acompanhar" | "reduzir" | "zerar";
 const REC_LABEL: Record<RecEnum, "Manter" | "Acompanhar" | "Reduzir" | "Zerar"> = {
@@ -33,6 +34,25 @@ type OpinionRow = {
   recent_evolution: string | null;
   author_id: string | null;
   updated_at: string;
+};
+
+type OpinionHistoryRow = {
+  id: string;
+  opinion_id: string;
+  fidc_id: string;
+  reference_month: string;
+  recommendation: RecEnum;
+  summary: string | null;
+  recommendation_reason: string | null;
+  positive_points: string | null;
+  attention_points: string | null;
+  main_risks: string | null;
+  recent_evolution: string | null;
+  author_id: string | null;
+  version_created_at: string;
+  version_updated_at: string;
+  archived_at: string;
+  archived_by: string | null;
 };
 
 const toMonthInput = (iso: string | null | undefined) =>
@@ -58,6 +78,22 @@ export default function PareceresPage() {
       return (data ?? []) as OpinionRow[];
     },
   });
+
+  // Mapa id -> nome, pra exibir autor no histórico (busca só uma vez, tabela pequena)
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["profiles", "nomes"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles").select("id, nome");
+      if (error) throw error;
+      return (data ?? []) as { id: string; nome: string }[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const nomeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of profiles) map.set(p.id, p.nome);
+    return map;
+  }, [profiles]);
 
   // Mês padrão = mês do parecer mais recente (qualquer FIDC) ou mês do informe mais recente
   const defaultMonth = useMemo(() => {
@@ -105,6 +141,23 @@ export default function PareceresPage() {
   const report = selectedFidcId ? latestReportFor(selectedFidcId) : null;
   const prev = selectedFidcId ? prevReportFor(selectedFidcId) : null;
 
+  // ----- Histórico de versões do parecer atualmente selecionado -----
+  const { data: history = [], isLoading: historyLoading } = useQuery({
+    queryKey: ["credit_opinions_history", currentOp?.id ?? null],
+    queryFn: async () => {
+      if (!currentOp?.id) return [];
+      const { data, error } = await supabase
+        .from("credit_opinions_history")
+        .select("*")
+        .eq("opinion_id", currentOp.id)
+        .order("archived_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as OpinionHistoryRow[];
+    },
+    enabled: !!currentOp?.id,
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   // ----- Form state -----
   type FormState = {
     recommendation: RecEnum;
@@ -143,6 +196,7 @@ export default function PareceresPage() {
       setForm(emptyForm);
     }
     setDirty(false);
+    setHistoryOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOp?.id, selectedFidcId, month]);
 
@@ -176,6 +230,10 @@ export default function PareceresPage() {
       toast.success("Parecer salvo.");
       setDirty(false);
       qc.invalidateQueries({ queryKey: ["credit_opinions", "all"] });
+      // Se era uma edição (não criação), a versão anterior acabou de ser arquivada pelo trigger.
+      if (currentOp?.id) {
+        qc.invalidateQueries({ queryKey: ["credit_opinions_history", currentOp.id] });
+      }
     } catch (e) {
       toast.error(`Falha ao salvar: ${e instanceof Error ? e.message : "erro"}`);
     } finally {
@@ -436,6 +494,64 @@ export default function PareceresPage() {
                     {currentOp
                       ? `Última atualização: ${new Date(currentOp.updated_at).toLocaleString("pt-BR")}`
                       : "Nenhum parecer registrado para este mês."}
+                  </div>
+                )}
+
+                {/* Histórico de versões (F2) — só existe se o parecer atual já foi editado alguma vez */}
+                {currentOp && (
+                  <div className="mt-4 rounded-sm border border-border bg-card">
+                    <button
+                      onClick={() => setHistoryOpen((v) => !v)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-[11.5px] font-medium hover:bg-accent/40"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <History className="h-3.5 w-3.5" />
+                        Histórico de versões
+                        {!historyLoading && (
+                          <span className="text-muted-foreground font-normal">
+                            ({history.length} {history.length === 1 ? "versão anterior" : "versões anteriores"})
+                          </span>
+                        )}
+                      </span>
+                      {historyOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+
+                    {historyOpen && (
+                      <div className="hairline-t">
+                        {historyLoading ? (
+                          <div className="p-4 text-center text-[11.5px] text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin inline mr-1.5" /> Carregando histórico…
+                          </div>
+                        ) : history.length === 0 ? (
+                          <div className="p-4 text-center text-[11.5px] text-muted-foreground italic">
+                            Este parecer ainda não foi editado — nenhuma versão anterior registrada.
+                          </div>
+                        ) : (
+                          <ul>
+                            {history.map((h) => (
+                              <li key={h.id} className="px-3 py-2.5 hairline-b last:border-b-0">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-2 text-[11.5px]">
+                                    <RecBadge rec={REC_LABEL[h.recommendation]} />
+                                    <span className="text-muted-foreground">
+                                      {nomeById.get(h.author_id ?? "") ?? "Autor desconhecido"}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10.5px] text-muted-foreground">
+                                    Vigente até {new Date(h.archived_at).toLocaleString("pt-BR")}
+                                  </div>
+                                </div>
+                                {h.summary && (
+                                  <div className="text-[11.5px] text-foreground/80 mt-1.5 whitespace-pre-wrap">
+                                    {h.summary}
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
