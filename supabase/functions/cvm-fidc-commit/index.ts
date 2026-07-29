@@ -130,6 +130,23 @@ Deno.serve(async (req) => {
           value: s.value, pct: it.segmentTotal && it.segmentTotal > 0 ? s.value / it.segmentTotal : null,
         }));
 
+        // K1/K2 — maturidade (TAB V.a + VI.a): grava nas colunas de faixa que JÁ EXISTIAM
+        // na tabela (usadas pelo upload manual), não em nomes novos — correção de um erro
+        // anterior em que uma migration criou colunas duplicadas com nomenclatura diferente.
+        const maturityBreakdown = {
+          "0_30": it.maturity30 ?? null,
+          "31_60": it.maturity60 ?? null,
+          "61_90": it.maturity90 ?? null,
+          "91_120": it.maturity120 ?? null,
+          "121_150": it.maturity150 ?? null,
+          "151_180": it.maturity180 ?? null,
+          "181_360": it.maturity360 ?? null,
+          "361_720": it.maturity720 ?? null,
+          "721_1080": it.maturity1080 ?? null,
+          "over_1080": it.maturity1080p ?? null,
+        };
+        const hasAnyMaturity = Object.values(maturityBreakdown).some((v) => v != null);
+
         const baseRow: Record<string, unknown> = {
           fidc_id: it.fidcId,
           reference_month: it.referenceMonth,
@@ -159,18 +176,19 @@ Deno.serve(async (req) => {
           delinquency_unbucketed_value: it.delinquencyUnbucketedValue ?? null,
           overdue_to_credit_rights_ratio: it.overdueToCreditRightsRatio ?? null,
           pdd_to_overdue_ratio: it.pddToOverdueRatio ?? null,
-          // Prazo de vencimento (TAB V.a + VI.a) — K1/K2
+          // Prazo de vencimento (TAB V.a + VI.a) — K1/K2, colunas de faixa pré-existentes
           maturity_total_value: it.maturityTotal ?? null,
-          maturity_30_value: it.maturity30 ?? null,
-          maturity_60_value: it.maturity60 ?? null,
-          maturity_90_value: it.maturity90 ?? null,
-          maturity_120_value: it.maturity120 ?? null,
-          maturity_150_value: it.maturity150 ?? null,
-          maturity_180_value: it.maturity180 ?? null,
-          maturity_360_value: it.maturity360 ?? null,
-          maturity_720_value: it.maturity720 ?? null,
-          maturity_1080_value: it.maturity1080 ?? null,
+          maturity_0_30_value: it.maturity30 ?? null,
+          maturity_31_60_value: it.maturity60 ?? null,
+          maturity_61_90_value: it.maturity90 ?? null,
+          maturity_91_120_value: it.maturity120 ?? null,
+          maturity_121_150_value: it.maturity150 ?? null,
+          maturity_151_180_value: it.maturity180 ?? null,
+          maturity_181_360_value: it.maturity360 ?? null,
+          maturity_361_720_value: it.maturity720 ?? null,
+          maturity_721_1080_value: it.maturity1080 ?? null,
           maturity_over_1080_value: it.maturity1080p ?? null,
+          maturity_breakdown: hasAnyMaturity ? maturityBreakdown : null,
           // Garantias (TAB X.7) — K1/K2
           guarantees_value: it.guarantees ?? null,
           guarantees_pct: it.guaranteesPct ?? null,
