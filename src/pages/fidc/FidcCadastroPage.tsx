@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { QUOTA_CLASSES, fidcById } from "@/lib/fidc/mock-data";
 import { formatCNPJ, dateBR } from "@/lib/fidc/format";
+import { supabase } from "@/integrations/supabase/client";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import {
   Lock, Upload, CheckCircle2, AlertTriangle, XCircle, FileSpreadsheet, Plus,
-  ChevronRight, Loader2, History, Pencil, Trash2,
+  ChevronRight, Loader2, ExternalLink, Pencil, Trash2,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
@@ -32,6 +32,8 @@ import { toast } from "sonner";
 
 // J1: removida a aba "Mapeamento de Carteiras" (era 100% mock — a funcionalidade real já
 // existe em Monitor por Carteira e na Lâmina do FIDC, lendo `posicoes` de verdade).
+// J2: aba "Ratings" agora lê `fidc_rating_history` de verdade (populada pela importação em
+// massa do Cadastro Mestre, ver master-data-api.ts::commitMasterDataImport), em vez do mock.
 const TABS = ["FIDCs", "Cotas / ISINs", "Ratings", "Importação"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -60,7 +62,7 @@ export default function FidcCadastroPage() {
       <div className="px-6 py-4">
         {tab === "FIDCs" && <FidcRegistry />}
         {tab === "Cotas / ISINs" && <QuotaRegistry />}
-        {tab === "Ratings" && <RatingHistoryMock />}
+        {tab === "Ratings" && <RatingHistory />}
         {tab === "Importação" && <ImportTab />}
       </div>
     </div>
@@ -241,35 +243,88 @@ function DeleteQuotaButton({ id, isin }: { id: string; isin: string }) {
   );
 }
 
-function RatingHistoryMock() {
+/* ========================= RATINGS (J2 — fidc_rating_history real) ========================= */
+type RatingHistoryRow = {
+  id: string;
+  fidc_id: string;
+  fidc_quota_class_id: string | null;
+  rating_agency: string | null;
+  rating: string | null;
+  rating_outlook: string | null;
+  rating_date: string | null;
+  report_date: string | null;
+  report_url: string | null;
+  notes: string | null;
+  created_at: string;
+  fidcs?: { name: string | null } | null;
+  fidc_quota_classes?: { isin: string | null; class_name: string | null } | null;
+};
+
+function RatingHistory() {
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: ["fidc-rating-history-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fidc_rating_history")
+        .select("*, fidcs(name), fidc_quota_classes(isin, class_name)")
+        .order("rating_date", { ascending: false, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as RatingHistoryRow[];
+    },
+  });
+
   return (
-    <div className="bg-card border border-border overflow-x-auto">
-      <div className="px-4 pt-3 pb-2 text-[11px] text-muted-foreground italic">
-        Histórico de rating amostral — será conectado a fidc_rating_history quando houver dados.
+    <div className="space-y-2">
+      <div className="text-[11.5px] text-muted-foreground">
+        {rows.length} registro(s) de rating — histórico gravado a cada importação em massa do
+        Cadastro Mestre com a coluna de rating preenchida (append-only, nunca sobrescrito).
       </div>
-      <table className="w-full text-[12px]">
-        <thead className="bg-surface-2 text-muted-foreground">
-          <tr className="hairline-b">
-            <Th>FIDC</Th><Th>Cota / ISIN</Th><Th>Agência</Th><Th>Rating</Th><Th>Perspectiva</Th><Th>Data rating</Th><Th>Relatório</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {QUOTA_CLASSES.flatMap((c, i) => {
-            const f = fidcById(c.fidcId)!;
-            return [0, 1].map((k) => (
-              <tr key={`${c.id}-${k}`} className="hairline-b hover:bg-surface-2/40">
-                <td className="px-3 py-2">{f.name}</td>
-                <td className="px-3 py-2"><span className="text-[11px]">{c.className}</span> <span className="text-muted-foreground num">{c.isin}</span></td>
-                <td className="px-3 py-2">{f.ratingAgency}</td>
-                <td className="px-3 py-2 font-semibold">{c.rating}</td>
-                <td className="px-3 py-2 text-muted-foreground">{(i + k) % 4 === 0 ? "Negativa" : (i + k) % 3 === 0 ? "Positiva" : "Estável"}</td>
-                <td className="px-3 py-2 num">{k === 0 ? "15/05/2025" : "12/02/2025"}</td>
-                <td className="px-3 py-2 text-primary text-[11px]">relatório-{c.fidcId}-{k}.pdf</td>
+      <div className="bg-card border border-border overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead className="bg-surface-2 text-muted-foreground">
+            <tr className="hairline-b">
+              <Th>FIDC</Th><Th>Cota / ISIN</Th><Th>Agência</Th><Th>Rating</Th><Th>Perspectiva</Th>
+              <Th>Data rating</Th><Th>Data relatório</Th><Th>Relatório</Th><Th>Observações</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                <Loader2 className="h-4 w-4 animate-spin inline mr-2" />Carregando…
+              </td></tr>
+            )}
+            {!isLoading && rows.length === 0 && (
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground text-[11.5px]">
+                Nenhum rating registrado ainda. O histórico é gravado automaticamente ao importar
+                a planilha do Cadastro Mestre (aba "Importação") com a coluna de rating preenchida.
+              </td></tr>
+            )}
+            {rows.map((r) => (
+              <tr key={r.id} className="hairline-b hover:bg-surface-2/40">
+                <td className="px-3 py-2 font-medium">{v(r.fidcs?.name)}</td>
+                <td className="px-3 py-2">
+                  <span className="text-[11px]">{v(r.fidc_quota_classes?.class_name)}</span>{" "}
+                  <span className="text-muted-foreground num">{v(r.fidc_quota_classes?.isin)}</span>
+                </td>
+                <td className="px-3 py-2">{v(r.rating_agency)}</td>
+                <td className="px-3 py-2 font-semibold">{v(r.rating)}</td>
+                <td className="px-3 py-2 text-muted-foreground">{v(r.rating_outlook)}</td>
+                <td className="px-3 py-2 num">{r.rating_date ? dateBR(r.rating_date) : "—"}</td>
+                <td className="px-3 py-2 num">{r.report_date ? dateBR(r.report_date) : "—"}</td>
+                <td className="px-3 py-2">
+                  {r.report_url ? (
+                    <a href={r.report_url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 text-primary text-[11px] hover:underline">
+                      Abrir <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : "—"}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground text-[11px]">{v(r.notes)}</td>
               </tr>
-            ));
-          })}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -340,6 +395,7 @@ function ImportTab() {
       toast.success(`Importação concluída · ${res.createdFidcs + res.updatedFidcs} FIDCs${delMsg} · ${res.createdQuotas + res.updatedQuotas} cotas`);
       qc.invalidateQueries({ queryKey: ["fidcs-all"] });
       qc.invalidateQueries({ queryKey: ["quotas-all"] });
+      qc.invalidateQueries({ queryKey: ["fidc-rating-history-all"] });
       setStep("done");
     } catch (e) {
       toast.error(`Falha ao gravar: ${e instanceof Error ? e.message : "erro"}`);
