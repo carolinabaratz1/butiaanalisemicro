@@ -1,16 +1,23 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useFidcMonitorData, FIDC_PORTFOLIOS } from "@/hooks/useFidcMonitorData";
 import { BRL, PCT, formatCNPJ } from "@/lib/fidc/format";
 import { MetricCard } from "@/components/fidc/MetricCard";
 import { PageHeader } from "@/components/fidc/PageHeader";
 import { NoDataChip, NoDataInline } from "@/components/fidc/NoDataChip";
+import { RecBadge } from "@/components/fidc/RecBadge";
 import { Search, Loader2, CheckCircle2, AlertTriangle, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CvmImportDialog } from "@/components/fidc/CvmImportDialog";
 
 type PosStatus = "mapped" | "unmapped";
+
+const REC_LABEL: Record<string, "Manter" | "Acompanhar" | "Reduzir" | "Zerar"> = {
+  manter: "Manter", acompanhar: "Acompanhar", reduzir: "Reduzir", zerar: "Zerar",
+};
 
 export default function MonitorPage() {
   const [sp, setSp] = useSearchParams();
@@ -20,8 +27,26 @@ export default function MonitorPage() {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
   const [cvmOpen, setCvmOpen] = useState(false);
 
-  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor, fidcsWithReportCount } = useFidcMonitorData();
+  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
+
+  // B1: Recomendação — última recomendação registrada por FIDC (qualquer mês), vinda de
+  // credit_opinions (mesma tabela usada em Pareceres/Lâmina).
+  const { data: latestRecByFidc = new Map<string, string>() } = useQuery({
+    queryKey: ["credit-opinions-latest-rec-by-fidc"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credit_opinions")
+        .select("fidc_id, recommendation, reference_month")
+        .order("reference_month", { ascending: false });
+      if (error) throw error;
+      const m = new Map<string, string>();
+      for (const row of (data ?? []) as { fidc_id: string; recommendation: string }[]) {
+        if (!m.has(row.fidc_id)) m.set(row.fidc_id, row.recommendation);
+      }
+      return m;
+    },
+  });
 
   const rows = useMemo(() => {
     if (!summary) return [];
@@ -54,6 +79,7 @@ export default function MonitorPage() {
         pddDC: dc > 0 ? pdd / dc : null,
         recompraDC: dc > 0 ? repurchase / dc : null,
         subordPct: navNow > 0 ? subord / navNow : null,
+        recommendation: p.fidcId ? latestRecByFidc.get(p.fidcId) ?? null : null,
       };
     }).filter((r) => {
       if (statusFilter !== "all" && r.posStatus !== statusFilter) return false;
@@ -76,8 +102,11 @@ export default function MonitorPage() {
       if (va > vb) return sort.dir === "asc" ? 1 : -1;
       return 0;
     });
-  }, [summary, statusFilter, q, sort, latestReportFor, prevReportFor]);
+  }, [summary, statusFilter, q, sort, latestReportFor, prevReportFor, latestRecByFidc]);
 
+  // C1: contagem de informes SEMPRE escopada à carteira selecionada (mesma lógica já usada
+  // no card "FIDCs c/ informe" abaixo) — antes o cabeçalho usava uma contagem global
+  // (fidcsWithReportCount) com um Math.min() como remendo; agora usa só isso.
   const reportCoverage = useMemo(() => {
     if (!summary) return { withReport: 0, lastRef: null as string | null };
     const fidcIds = Array.from(new Set(summary.positions.map((p) => p.fidcId).filter(Boolean) as string[]));
@@ -130,7 +159,7 @@ export default function MonitorPage() {
         right={
           <div className="flex items-center gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 bg-muted/40 text-muted-foreground">
-              <AlertTriangle className="h-3 w-3" /> Informes mensais: {Math.min(fidcsWithReportCount, summary.fidcCount)}/{summary.fidcCount}
+              <AlertTriangle className="h-3 w-3" /> Informes mensais: {reportCoverage.withReport}/{summary.fidcCount}
             </span>
             <Button size="sm" variant="outline" onClick={() => setCvmOpen(true)} className="h-7 text-[11px]">
               <Database className="h-3 w-3 mr-1" /> Importar Informes via CVM
@@ -232,7 +261,11 @@ export default function MonitorPage() {
                   <Td right mono>{r.pddDC != null ? PCT(r.pddDC) : <NoDataChip />}</Td>
                   <Td right mono>{r.recompraDC != null ? PCT(r.recompraDC) : <NoDataChip />}</Td>
                   <Td right mono>{r.subordPct != null ? PCT(r.subordPct) : <NoDataChip />}</Td>
-                  <Td><NoDataInline /></Td>
+                  <Td>
+                    {r.recommendation
+                      ? <RecBadge rec={REC_LABEL[r.recommendation] ?? "Manter"} />
+                      : <NoDataInline reason="Sem parecer registrado" />}
+                  </Td>
                 </tr>
               );
             })}
