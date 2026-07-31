@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveReport, classifyReportStatus, type ReportSourceStatus } from "@/lib/fidc/source-resolver";
+import { evalMetric, computeAtrasoDc, computePddDc } from "@/lib/fidc/metrics";
 
 // Os 3 fundos Butiá que investem em FIDCs.
 // O `source` precisa bater EXATAMENTE com posicoes.trading_desk_share_source.
@@ -139,6 +140,7 @@ export function useFidcMonitorData() {
 
   const datesPerPortfolioQ = useQuery({
     queryKey: ["fidc-monitor-dates-per-portfolio", sources.join("|")],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const entries = await Promise.all(
         FIDC_PORTFOLIOS.map(async (p) => {
@@ -170,6 +172,7 @@ export function useFidcMonitorData() {
   // 2) Cadastro mestre (FIDCs + cotas/ISINs)
   const fidcsQ = useQuery({
     queryKey: ["fidcs-all-monitor"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.from("fidcs").select("*");
       if (error) throw error;
@@ -179,6 +182,7 @@ export function useFidcMonitorData() {
 
   const quotasQ = useQuery({
     queryKey: ["quotas-all-monitor"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.from("fidc_quota_classes").select("*");
       if (error) throw error;
@@ -186,45 +190,62 @@ export function useFidcMonitorData() {
     },
   });
 
-  // 3) Posições de cada carteira na SUA data mais recente
+  // 3) Posições de cada carteira na SUA data mais recente (H1: paralelizado entre carteiras —
+  // antes era um for sequencial, uma carteira de cada vez).
   const posQ = useQuery({
     queryKey: ["fidc-monitor-positions-per-portfolio", latestPerPortfolio],
     enabled: Object.values(latestPerPortfolio).some(Boolean),
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const all: PosicaoRow[] = [];
-      for (const p of FIDC_PORTFOLIOS) {
-        const dt = latestPerPortfolio[p.id];
-        if (!dt) continue;
-        let from = 0;
-        const step = 1000;
-        while (true) {
-          const { data, error } = await supabase
-            .from("posicoes")
-            .select("id, trading_desk_share_source, val_date, product_class, product, amount, isin, financial_price")
-            .eq("trading_desk_share_source", p.source)
-            .eq("val_date", dt)
-            .range(from, from + step - 1);
-          if (error) throw error;
-          const rows = (data ?? []) as PosicaoRow[];
-          all.push(...rows);
-          if (rows.length < step) break;
-          from += step;
-        }
-      }
-      return all;
+      const perPortfolio = await Promise.all(
+        FIDC_PORTFOLIOS.map(async (p) => {
+          const dt = latestPerPortfolio[p.id];
+          if (!dt) return [] as PosicaoRow[];
+          const rows: PosicaoRow[] = [];
+          let from = 0;
+          const step = 1000;
+          while (true) {
+            const { data, error } = await supabase
+              .from("posicoes")
+              .select("id, trading_desk_share_source, val_date, product_class, product, amount, isin, financial_price")
+              .eq("trading_desk_share_source", p.source)
+              .eq("val_date", dt)
+              .range(from, from + step - 1);
+            if (error) throw error;
+            const page = (data ?? []) as PosicaoRow[];
+            rows.push(...page);
+            if (page.length < step) break;
+            from += step;
+          }
+          return rows;
+        }),
+      );
+      return perPortfolio.flat();
     },
   });
 
 
-  // 4) Informes mensais (última versão por FIDC + versão anterior por FIDC para variações)
+  // 4) Informes mensais (última versão por FIDC + versão anterior por FIDC para variações).
+  // H2: limitado aos últimos 24 meses (antes buscava o histórico inteiro sem filtro de data).
+  // Mantém margem generosa de propósito: o Monitor de Alertas (G) navega mês a mês por todo o
+  // histórico disponível, então cortar demais quebraria aquela feature — 24 meses cobre bem
+  // mais que o uso típico de "mês atual vs. anterior" sem impactar o G na prática.
+  const reportsCutoffIso = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 24);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  }, []);
+
   const reportsQ = useQuery({
-    queryKey: ["fidc-monthly-reports-all-monitor-v2"],
+    queryKey: ["fidc-monthly-reports-all-monitor-v2", reportsCutoffIso],
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("fidc_monthly_reports")
         .select(
           "id, fidc_id, reference_month, nav_value, quota_value, credit_rights_value, overdue_value, pdd_value, cash_value, repurchase_value, subordinated_value, quota_total_nav_value, quota_validation_difference_percentage, quota_validation_status, subordinated_calculation_status, investors_count, is_current_version, main_segment, main_segment_pct, total_assets, total_liabilities, avg_nav_value, cash_strict_value, total_subscription_value, total_redemption_value, total_amortization_value, net_investor_flow_value, gross_investor_flow_value, source, source_file_name, source_url, version",
         )
+        .gte("reference_month", reportsCutoffIso)
         .order("reference_month", { ascending: false })
         .order("version", { ascending: false });
       if (error) throw error;
@@ -233,6 +254,11 @@ export function useFidcMonitorData() {
   });
 
   const isLoading = datesPerPortfolioQ.isLoading || fidcsQ.isLoading || quotasQ.isLoading || posQ.isLoading || reportsQ.isLoading;
+  // H4: antes nenhuma tela observava erro de query — uma falha de rede/permissão aparecia
+  // como "sem dados" (silencioso), como se a carteira estivesse genuinamente vazia. Agora
+  // fica explícito para quem consome o hook decidir como avisar o usuário.
+  const isError = datesPerPortfolioQ.isError || fidcsQ.isError || quotasQ.isError || posQ.isError || reportsQ.isError;
+  const error = datesPerPortfolioQ.error || fidcsQ.error || quotasQ.error || posQ.error || reportsQ.error || null;
   const fidcs = fidcsQ.data ?? [];
   const quotas = quotasQ.data ?? [];
   const positions = posQ.data ?? [];
@@ -462,6 +488,7 @@ export function useFidcMonitorData() {
     monitoredFidcIds.forEach((fid) => {
       const f = fidcById.get(fid);
       const fname = f?.name ?? "—";
+      const sector = f?.sector ?? null;
       const latest = reportsByFidc.get(fid)?.[0] ?? null;
       const prev = reportsByFidc.get(fid)?.[1] ?? null;
       const refDate = latest?.reference_month ?? null;
@@ -493,25 +520,26 @@ export function useFidcMonitorData() {
         });
       }
 
-      // PDD / Direitos creditórios
-      const dc = Number(latest.credit_rights_value ?? 0);
-      const pdd = Math.abs(Number(latest.pdd_value ?? 0));
-      if (dc > 0 && pdd / dc > 0.05) {
+      // PDD / DC bruto (A1: módulo central, thresholds por setor, fórmula corrigida DC+PDD)
+      const pddDc = computePddDc(latest.pdd_value, latest.credit_rights_value);
+      const pddStatus = evalMetric("pdd_dc", pddDc, sector);
+      if (pddDc != null && (pddStatus === "warning" || pddStatus === "critical")) {
         alerts.push({
-          id: `a${i++}`, severity: pdd / dc > 0.1 ? "critical" : "warning", kind: "pdd_alto",
+          id: `a${i++}`, severity: pddStatus, kind: "pdd_alto",
           portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
-          message: `PDD/DC em ${((pdd / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          message: `PDD/DC em ${(pddDc * 100).toFixed(2)}% no FIDC ${fname}${sector ? ` (setor: ${sector})` : ""}.`,
           valDate: refDate,
         });
       }
 
-      // Atraso / Direitos creditórios
-      const overdue = Number(latest.overdue_value ?? 0);
-      if (dc > 0 && overdue / dc > 0.1) {
+      // Atraso / DC bruto (A1: módulo central, thresholds por setor, fórmula corrigida DC+PDD)
+      const atrasoDc = computeAtrasoDc(latest.overdue_value, latest.credit_rights_value, latest.pdd_value);
+      const atrasoStatus = evalMetric("atraso_dc", atrasoDc, sector);
+      if (atrasoDc != null && (atrasoStatus === "warning" || atrasoStatus === "critical")) {
         alerts.push({
-          id: `a${i++}`, severity: overdue / dc > 0.2 ? "critical" : "warning", kind: "atraso_alto",
+          id: `a${i++}`, severity: atrasoStatus, kind: "atraso_alto",
           portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
-          message: `Inadimplência/DC em ${((overdue / dc) * 100).toFixed(2)}% no FIDC ${fname}.`,
+          message: `Inadimplência/DC em ${(atrasoDc * 100).toFixed(2)}% no FIDC ${fname}${sector ? ` (setor: ${sector})` : ""}.`,
           valDate: refDate,
         });
       }
@@ -521,9 +549,10 @@ export function useFidcMonitorData() {
         const navPrev = Number(prev.nav_value ?? 0);
         if (navPrev > 0) {
           const v = (navNow - navPrev) / navPrev;
-          if (v < -0.1) {
+          const plStatus = evalMetric("var_pl", v, sector);
+          if (plStatus === "warning" || plStatus === "critical") {
             alerts.push({
-              id: `a${i++}`, severity: v < -0.2 ? "critical" : "warning", kind: "queda_pl",
+              id: `a${i++}`, severity: plStatus, kind: "queda_pl",
               portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
               message: `PL do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
               valDate: refDate,
@@ -534,9 +563,10 @@ export function useFidcMonitorData() {
         const qPrev = Number(prev.quota_value ?? 0);
         if (qPrev > 0) {
           const v = (qNow - qPrev) / qPrev;
-          if (v < -0.02) {
+          const cotaStatus = evalMetric("var_cota", v, sector);
+          if (cotaStatus === "warning" || cotaStatus === "critical") {
             alerts.push({
-              id: `a${i++}`, severity: v < -0.05 ? "critical" : "warning", kind: "queda_cota",
+              id: `a${i++}`, severity: cotaStatus, kind: "queda_cota",
               portfolioName: null, isin: null, fidcId: fid, fidcName: fname,
               message: `Cota do FIDC ${fname} caiu ${(v * 100).toFixed(2)}% vs. mês anterior.`,
               valDate: refDate,
@@ -553,6 +583,8 @@ export function useFidcMonitorData() {
 
   return {
     isLoading,
+    isError,
+    error,
     latestValDate,
     latestPerPortfolio,
     fidcs,
@@ -568,5 +600,7 @@ export function useFidcMonitorData() {
     resolveReportFor,
     reportSourceStatusFor,
     fidcsWithReportCount,
+    // Exposto para o Monitor de Alertas (G) navegar por mês de referência.
+    reportsByFidc,
   };
 }
