@@ -27,7 +27,7 @@ export default function MonitorPage() {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "value", dir: "desc" });
   const [cvmOpen, setCvmOpen] = useState(false);
 
-  const { isLoading, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor } = useFidcMonitorData();
+  const { isLoading, isError, error, portfolioSummaries, latestValDate, latestReportFor, prevReportFor, reportSourceStatusFor } = useFidcMonitorData();
   const summary = portfolioSummaries.find((s) => s.portfolio.id === portfolioId) ?? portfolioSummaries[0];
 
   // B1: Recomendação — última recomendação registrada por FIDC (qualquer mês), vinda de
@@ -131,6 +131,18 @@ export default function MonitorPage() {
 
   function toggleSort(key: string) {
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
+  }
+
+  if (isError) {
+    return (
+      <div className="px-6 py-12 text-center text-[12px]">
+        <AlertTriangle className="h-5 w-5 text-risk-critical inline-block mb-2" />
+        <div className="text-risk-critical font-medium">Falha ao carregar dados do Monitor.</div>
+        <div className="text-muted-foreground mt-1">
+          {error instanceof Error ? error.message : "Erro desconhecido"} — tente recarregar a página; se persistir, verifique sua permissão de acesso.
+        </div>
+      </div>
+    );
   }
 
   if (isLoading) {
